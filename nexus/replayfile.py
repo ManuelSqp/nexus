@@ -211,6 +211,16 @@ def extract(export_dir: Path, vrf_name: str = "") -> dict:
     }
 
 
+def _plain(table):
+    """Dictionary-encoded string columns (newer vrfkit exports) as plain strings: pyarrow's string filters
+    (match_substring, starts_with, equal) have no kernel for dictionary columns."""
+    import pyarrow as pa
+    for i, field in enumerate(table.schema):
+        if pa.types.is_dictionary(field.type):
+            table = table.set_column(i, field.name, table.column(i).cast(field.type.value_type))
+    return table
+
+
 def _casts(export_dir: Path, subjects: set[str]) -> list[list]:
     """Ability casts as [time_ms, subject, slot] (replay time, deduplicated), from fields.parquet.
 
@@ -228,7 +238,7 @@ def _casts(export_dir: Path, subjects: set[str]) -> list[list]:
                             "value_i64", "value_f64", "value_str") if c in pq.read_schema(f).names]
         if not {"time_ms", "group_path", "field_name"} <= set(cols):
             return []
-        t = pq.read_table(f, columns=cols)
+        t = _plain(pq.read_table(f, columns=cols))
         t = t.filter(pc.match_substring(t["group_path"], CAST_GROUP))
         t = t.filter(pc.starts_with(t["field_name"], "AbilityCastsThisRound["))
         rows = t.to_pylist()
@@ -353,7 +363,7 @@ def _effects(export_dir: Path) -> list[list]:
             import pyarrow.parquet as pq
             fp = Path(export_dir) / "fields.parquet"
             if fp.is_file() and {"actor_net_guid", "field_name", "value_str", "time_ms"} <= set(pq.read_schema(fp).names):
-                tb = pq.read_table(fp, columns=["actor_net_guid", "field_name", "value_str", "time_ms"])
+                tb = _plain(pq.read_table(fp, columns=["actor_net_guid", "field_name", "value_str", "time_ms"]))
                 tb = tb.filter(pc.equal(tb["field_name"], "ReplicatedMovement"))
                 tb = tb.filter(pc.is_in(tb["actor_net_guid"], value_set=pa.array(sorted(proj), type=tb.schema.field("actor_net_guid").type)))
                 for r in tb.to_pylist():
@@ -377,7 +387,8 @@ def _effects(export_dir: Path) -> list[list]:
         leaf = cp.rsplit("/", 1)[-1].split(".", 1)[0]
         out.append([t0, t1, m.group(1) if m else "", SLOT_LETTER.get(slot.group(1).lower(), "") if slot else "",
                     effect_type(cp), leaf.split("_", 1)[0].lower(), round(float(x)), round(float(y))])
-    return sorted(out)
+    # an effect still open at the end of the replay has no close time (None): it sorts after closed ones
+    return sorted(out, key=lambda e: (e[0], e[1] is None, e[1] or 0, *e[2:]))
 
 
 def round_effects(data: dict, match: Match, offsets: dict[int, int], agent_names: dict[str, str] | None = None,
@@ -520,6 +531,36 @@ def load(replays_dir: Path, match_id: str, work_dir: Path | None = None, vrfkit:
         with gzip.open(p, "rt", encoding="utf-8") as f:
             return json.load(f)
     return None
+
+
+READER = 2        # 4.42.1: bump when reading changes in a way worth re-reading the kept .vrf files for
+
+
+def reread_all(replays_dir: Path, work_dir: Path, vrfkit: str, lock=None) -> dict:
+    """Read every kept .vrf again (after a fix in the reader). Once per READER version: a marker file
+    .reader-<READER> in the replays folder says it's done. -> {"ok": n, "failed": n, "skipped": bool}."""
+    d = Path(replays_dir)
+    marker = d / f".reader-{READER}"
+    if marker.exists() or not d.is_dir():
+        return {"ok": 0, "failed": 0, "skipped": True}
+    ok = failed = 0
+    for mid in stored(d):
+        vrf = vrf_file(d, mid)
+        if not vrf.is_file():
+            continue
+        try:
+            if lock is not None:
+                with lock:
+                    ingest(vrf, d, work_dir, vrfkit)
+            else:
+                ingest(vrf, d, work_dir, vrfkit)
+            ok += 1
+        except Exception as e:                       # one bad file doesn't stop the rest
+            log_.warning("replay %s not read again: %s", mid, e)
+            failed += 1
+    marker.write_text(f"{ok} read again, {failed} failed\n")
+    log_.info("replay files read again (reader %s): %s ok, %s failed", READER, ok, failed)
+    return {"ok": ok, "failed": failed, "skipped": False}
 
 
 def stored(replays_dir: Path) -> list[str]:

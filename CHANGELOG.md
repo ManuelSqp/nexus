@@ -4,6 +4,15 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.42.1
+- **Replay upload "Error 500" fixed**: some replays have an ability effect (a smoke, a wall …) still active when the
+  recording ends; it has no end time, and sorting the effects crashed the import. Those replays now import.
+- **Ability casts read again**: newer vrfkit versions store some text columns in a compressed form the cast filter
+  couldn't handle ("ability casts not read" in the log), so every replay came in without ability casts (utility
+  timing). Fixed; the replay files already on the server are read again once, in the background, after the update.
+- An unexpected problem while reading a replay now says so in a sentence on the upload page instead of "Error 500";
+  the details are in the server log.
+
 ## 4.42.0
 - Player overview: every playstyle label is shown again (no "+1"); they wrap onto a second line when needed, and the
   labels have their own row shared by all cards, so the playstyle bars below still start on the same line in every

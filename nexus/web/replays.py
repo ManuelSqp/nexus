@@ -8,6 +8,7 @@ Settings › Replay files › Positions is "Replay file".
 """
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from pathlib import Path
@@ -16,6 +17,8 @@ from flask import abort, g, jsonify, render_template, request
 
 from .. import pipeline, replayfile
 from .uploads import CHUNK_BYTES, UploadError
+
+log_ = logging.getLogger(__name__)
 
 _ingest_lock = threading.Lock()      # vrfkit is quick, but one at a time keeps memory use predictable
 
@@ -47,11 +50,26 @@ def ingest_upload(store, uploads, uid: int, upload_id: str) -> dict:
                                      replayfile.vrfkit_path(store.get("vrfkit_path")))
     except replayfile.ReplayError as e:
         raise UploadError(str(e), 422)
+    except Exception as e:                       # 4.42.1: a readable answer instead of "Error 500"; the log has it all
+        log_.exception("replay %s could not be read", upload_id)
+        raise UploadError(f"This replay file couldn't be read ({type(e).__name__}). The server log has the details.", 422)
     finally:
         Path(dest).unlink(missing_ok=True)       # moved into data/replays on success
 
 
 def register(app, store, uploads, get_profile) -> None:
+    def reread() -> None:
+        """Once after an update that fixed reading (replayfile.READER): read the kept .vrf files again, in the
+        scheduler's thread. Skipped when vrfkit isn't there (the marker isn't written then, so it runs later)."""
+        if (replays_dir(store) / f".reader-{replayfile.READER}").exists():
+            return                                       # done (the usual case: nothing to run)
+        vk = replayfile.vrfkit_path(store.get("vrfkit_path"))
+        if replayfile.check_vrfkit(vk):
+            return
+        replayfile.reread_all(replays_dir(store), store.data_dir / "cache" / "vrf_work", vk, lock=_ingest_lock)
+    app.extensions["nexus"].setdefault("ticks", []).append(reread)
+    app.extensions["nexus"]["replays_reread"] = reread      # for tests
+
     @app.post("/api/replays")
     def replay_upload_begin():
         """Start a replay upload (JSON only, like /api/uploads); the pieces go to PUT /api/uploads/<id>."""
