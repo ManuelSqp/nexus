@@ -9,7 +9,7 @@
 /* 4.41: the cards of a row share their rows (subgrid), so every section starts on the same line in every card */
 .ogrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px 12px}
 .ocard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;
-  grid-row:span 8;grid-template-rows:subgrid;row-gap:14px;align-content:start;min-width:0}
+  grid-row:span 9;grid-template-rows:subgrid;row-gap:14px;align-content:start;min-width:0}
 .ocard > *{min-width:0}
 .ocard > .osect{border-top:1px solid var(--line);padding-top:10px}
 .ocard > .ohead{padding-bottom:0}
@@ -17,13 +17,15 @@
 .ostats{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .oline{display:flex;gap:6px;align-items:center;flex-wrap:nowrap;overflow:hidden;white-space:nowrap;min-height:22px}
 .oempty{color:var(--muted);font-size:12.5px}
-.ocard .nogames{grid-row:span 7}
+.ocard .nogames{grid-row:span 8}
 .legend4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px;font-size:11.5px;color:var(--muted)}
 .legend4 span{display:flex;flex-direction:column;line-height:1.3;min-width:0}
 .legend4 span.zero{opacity:.4}
 .legend4 em{font-style:normal;color:var(--text);font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:650}
 .legend4 b{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:4px;vertical-align:0}
-.chip.more{background:var(--panel3);color:var(--muted)}
+.ochips{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;align-content:flex-start;min-height:22px}
+.ocard > .odims{margin-top:-6px}
+.odims .dims{margin-top:0}
 .osec{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
 .alist{display:flex;flex-direction:column;gap:4px}
 .arow{display:grid;grid-template-columns:24px 1fr auto auto;gap:8px;align-items:center;font-size:13px}
@@ -117,9 +119,10 @@ table.duos tr.early td{opacity:.55}
       </div>
       <div class="osect">
         <div class="osec">Playstyle</div>
-        <div class="oline">{% if p.style.labels %}{% for l in p.style.labels[:2] %}<span class="chip style" tabindex="0" data-tip="{{ l.why }} · {{ l.confidence }}, {{ l.rounds }} rounds">{{ l.label }}{% if l.confidence == 'early sign' %}<span class="early" aria-label="early sign">*</span>{% endif %}</span>{% endfor %}
-          {% if p.style.labels|length > 2 %}<span class="chip more" tabindex="0" data-tip="{% for l in p.style.labels[2:] %}{{ l.label }}{{ ', ' if not loop.last }}{% endfor %}">+{{ p.style.labels|length - 2 }}</span>{% endif %}
+        <div class="ochips">{% if p.style.labels %}{% for l in p.style.labels %}<span class="chip style" tabindex="0" data-tip="{{ l.why }} · {{ l.confidence }}, {{ l.rounds }} rounds">{{ l.label }}{% if l.confidence == 'early sign' %}<span class="early" aria-label="early sign">*</span>{% endif %}</span>{% endfor %}
           {% elif not p.style.full_games %}<span class="oempty">Needs games with round data.</span>{% else %}<span class="oempty">no clear label yet</span>{% endif %}</div>
+      </div>
+      <div class="odims">
         <div class="dims">
           {% for k, lbl in (('opening', 'Opening duels'), ('kills', 'Kills'), ('assists', 'Assists'), ('survive', 'Survival')) %}
           <span>{{ lbl }}</span><span class="dbar"><i style="width:{{ ((p.style.dims[k] or 0) * 100)|round(1) }}%"></i></span><span class="muted small">{{ pct(p.style.dims[k] or 0) }}</span>

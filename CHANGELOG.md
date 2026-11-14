@@ -4,6 +4,11 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.42.0
+- Player overview: every playstyle label is shown again (no "+1"); they wrap onto a second line when needed, and the
+  labels have their own row shared by all cards, so the playstyle bars below still start on the same line in every
+  card.
+
 ## 4.41.0
 - **Player overview easier to compare**: the lineup cards now line up section by section, every *Agent roles*,
   *Playstyle*, *Thrives in* … starts on the same line in every card of a row, whatever is above it. The agent-role

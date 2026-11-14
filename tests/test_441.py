@@ -16,8 +16,8 @@ class MP:
 
 
 def test_template_shape():
-    assert "grid-template-rows:subgrid" in TPL and "grid-row:span 8" in TPL
-    assert "p.style.labels[:2]" in TPL and 'class="chip more"' in TPL          # one line of playstyle chips
+    assert "grid-template-rows:subgrid" in TPL and "grid-row:span 9" in TPL
+    assert "p.style.labels[:2]" not in TPL and 'class="ochips"' in TPL         # 4.42: every chip, in their own shared row
     assert "{% for r in ['Duelist', 'Initiator', 'Controller', 'Sentinel'] %}" in TPL.split('class="legend4"')[1][:200]
 
 
