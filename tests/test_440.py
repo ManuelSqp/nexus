@@ -87,3 +87,17 @@ def test_links_and_german(app, monkeypatch):  # noqa: F811 (fixture)
     store.update_user(store.user_by_name("manuel").id, prefs=json.dumps({"lang": "de"}))
     page = c.get(f"/profiles/{pid}/replays").data.decode()
     assert "Replay-Dateien hochladen" in page and "Letzte Matches ohne Replay" in page
+
+
+def test_unexpected_read_error_is_readable(app, monkeypatch):  # noqa: F811 (fixture)
+    """4.42.1: an unexpected error while reading a replay answers with a sentence (422), not "Error 500"."""
+    def boom(*a, **k):
+        raise TypeError("'<' not supported between instances of 'int' and 'NoneType'")
+    monkeypatch.setattr(replayfile, "ingest", boom)
+    c = setup_admin(app)
+    pid = add_profile(c)
+    r = _upload(c, OTHER.encode(), pid)
+    assert r.status_code == 422 and "couldn't be read (TypeError)" in r.get_json()["error"]
+    tick = app.extensions["nexus"]["replays_reread"]
+    assert tick in app.extensions["nexus"]["ticks"]
+    tick()                                                 # no vrfkit here: does nothing, no error

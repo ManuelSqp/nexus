@@ -431,3 +431,55 @@ def test_placed_utility_in_the_playback(tmp_path, match, map_info):
     assert trap["t0"] == 0 and trap["r"] == 0 and trap["slot"] == "C"
     assert replayfile.effect_type("Projectile_Phoenix_Q_FlameWall_ThroughWall_C") == "wall"
     assert not replayfile.is_effect("/Game/Characters/Wushu/Gun_Wushu_X.Gun_Wushu_X_C")
+
+
+def test_dictionary_columns_and_open_effects(tmp_path):
+    """4.42.1: newer vrfkit writes dictionary-encoded string columns (the cast filter had no kernel for them), and
+    an effect still open at the end of the replay (no close time) crashed the sort."""
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    rows = _cast_rows("aaa", 0, 1, 3.5, 40000) + _cast_rows("aaa", 0, 2, 20.0, 40000, idx=1)
+    t = pa.Table.from_pylist(rows)
+    for name in ("group_path", "field_name", "value_str"):
+        i = t.schema.get_field_index(name)
+        t = t.set_column(i, name, t.column(i).dictionary_encode())
+    assert pa.types.is_dictionary(t.schema.field("group_path").type)
+    pq.write_table(t, tmp_path / "fields.parquet")
+    assert replayfile._casts(tmp_path, {"aaa"}) == [[43540, "aaa", 1], [60040, "aaa", 2]]
+    smoke = "/Game/Characters/Sarge/Abilities/E/Zone_Sarge_E_Smoke.Zone_Sarge_E_Smoke_C"
+    acts = []
+    for g, t0, t1 in ((1, 5000, 9000), (2, 5000, None), (3, 5000, 7000), (4, 2000, None)):
+        acts.append({"actor_net_guid": g, "event": "open", "time_ms": t0, "class_path": smoke, "spawn_x": 100.0, "spawn_y": 200.0})
+        if t1:
+            acts.append({"actor_net_guid": g, "event": "close", "time_ms": t1, "class_path": smoke, "spawn_x": None, "spawn_y": None})
+    at = pa.Table.from_pylist(acts)
+    i = at.schema.get_field_index("class_path")
+    pq.write_table(at.set_column(i, "class_path", at.column(i).dictionary_encode()), tmp_path / "actors.parquet")
+    assert replayfile.is_effect(smoke)
+    eff = replayfile._effects(tmp_path)
+    assert [(e[0], e[1]) for e in eff] == [(2000, None), (5000, 7000), (5000, 9000), (5000, None)]
+
+
+def test_kept_replays_are_read_again_once(tmp_path, monkeypatch):
+    """4.42.1: after a reader fix, the kept .vrf files are read again once (a marker file says it's done)."""
+    d = tmp_path / "replays"
+    d.mkdir()
+    ids = ["02b3659c-735e-432a-8f55-91425f8934df", "12b3659c-735e-432a-8f55-91425f8934df", "22b3659c-735e-432a-8f55-91425f8934df"]
+    for i in ids:
+        (d / f"{i}.vrf").write_bytes(b"x")
+    (d / f"{ids[2]}.json.gz").write_bytes(b"x")
+    (d / f"{ids[2]}.vrf").unlink()                       # no .vrf kept: nothing to read again
+    seen = []
+
+    def fake_ingest(vrf, rdir, work, vrfkit, keep_vrf=True):
+        seen.append(vrf.stem)
+        if vrf.stem == ids[1]:
+            raise replayfile.ReplayError("broken")
+        return {}
+    monkeypatch.setattr(replayfile, "ingest", fake_ingest)
+    import threading
+    res = replayfile.reread_all(d, tmp_path / "work", "vrfkit", lock=threading.Lock())
+    assert res == {"ok": 1, "failed": 1, "skipped": False} and sorted(seen) == ids[:2]
+    assert (d / f".reader-{replayfile.READER}").is_file()
+    assert replayfile.reread_all(d, tmp_path / "work", "vrfkit")["skipped"] and len(seen) == 2
+    assert ".reader-2" not in "".join(replayfile.stored(d))
