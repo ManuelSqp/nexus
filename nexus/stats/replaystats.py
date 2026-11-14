@@ -145,8 +145,10 @@ def for_match(replays_dir: Path, cache_dir: Path, match_id: str, registry: MapRe
         return None
     if f.exists():
         try:
+            src = replayfile.data_file(Path(replays_dir), match_id)
+            fresh = not src.exists() or f.stat().st_mtime >= src.stat().st_mtime   # 4.43: the replay was read again
             d = json.loads(f.read_text())
-            if d.get("v") == VERSION:
+            if d.get("v") == VERSION and fresh:
                 return d
         except (OSError, ValueError):
             pass

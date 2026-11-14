@@ -15,8 +15,11 @@
 .rf-bar{grid-column:1 / -1;height:4px;border-radius:2px;background:var(--panel3);overflow:hidden}
 .rf-bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
 .rf-item.err .rf-bar{display:none}.rf-item.ok .rf-bar i{background:var(--win)}
+.rf-item.wait .rf-bar i{background:var(--amber)}
 .rf-list > a.btn{justify-self:center;margin-top:4px}
 .rf-warn{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:var(--radius);padding:10px 14px;margin-bottom:14px;font-size:13.5px}
+.rf-wait{border-left:4px solid var(--amber)}.rf-wait table{width:100%;font-size:13.5px}.rf-wait td{padding:5px 8px 5px 0}
+.rf-item.wait{border-left:4px solid var(--amber)}
 .rf-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;margin-top:18px}
 .rf-grid .card{margin:0}
 .rf-grid table{width:100%;font-size:13.5px}
@@ -30,14 +33,23 @@
 
 {% if problem %}<div class="rf-warn"><b>Replay files can't be read on this server right now.</b> <span>{{ problem }}</span></div>{% endif %}
 
+{% if waiting %}<section class="card rf-wait">
+  <h2>Waiting for vrfkit</h2>
+  <p class="small muted" style="margin-top:0"><span>These files are from a patch vrfkit can't read yet.</span> <span>They're kept on the server and read automatically once vrfkit supports their patch: you don't need to keep them on your PC.</span></p>
+  <table>{% for w in waiting %}<tr><td translate="no">{{ w.name }}</td><td><span>Patch</span> <b translate="no">{{ w.patch }}</b></td>
+    <td class="small muted">{{ w.added|epoch }}</td><td class="small" style="color:var(--red)">{{ w.error }}</td></tr>{% endfor %}</table>
+</section>{% endif %}
+
 <section class="rf-drop" id="rf-drop">
   <h2>Upload replay files</h2>
   <p><span>Drop one or more .vrf files here, or pick them.</span> <span>Valorant keeps them in VALORANT › Saved › Demos and deletes them with the next patch; on the server they stay.</span>
-    <span>Any mode with a replay (Unrated, Competitive, Swiftplay, Premier), your matches or your teammates'.</span> <span>Up to {{ max_mb }} MB per file.</span></p>
+    <span>Any mode with a replay (Unrated, Competitive, Swiftplay, Premier), your matches or your teammates'.</span> <span>Up to {{ max_mb }} MB per file.</span> <span>Replays of a brand-new patch are kept until vrfkit can read them.</span></p>
   <input type="file" id="rf-file" accept=".vrf" multiple>
   <button type="button" class="btn primary" id="rf-pick">Choose replay files</button>
   <div class="rf-list" id="rf-list" aria-live="polite"></div>
 </section>
+
+{% if update.checked %}<p class="small muted" style="margin:8px 2px 0"><span>vrfkit updates itself once a day:</span> <span>{{ update.result }}</span> ({{ update.checked|epoch }}){% if update.error %} · <span style="color:var(--red)">{{ update.error }}</span>{% endif %}</p>{% endif %}
 
 <div class="rf-grid">
   <section class="card">
@@ -95,6 +107,7 @@
     r = await fetch(`${STORE}${encodeURIComponent(u.id)}/store?pid=${PID}`, {method: 'POST'});
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error || `Error ${r.status}`);
+    if (r.status === 202) d.pending = true;
     return d;
   }
   function add(files) {
@@ -104,6 +117,11 @@
       queue = queue.then(async () => {                      // one after another: the server reads one at a time anyway
         try {
           const d = await upload(file, ui);
+          if (d.pending) {
+            ui.el.classList.add('wait'); ui.bar.style.width = '100%'; stored++;
+            ui.st.textContent = `${T('Kept on the server')} · ${T('Patch')} ${d.patch}: ${T("vrfkit can't read it yet, it's read automatically once it can")}`;
+            return;
+          }
           ui.el.classList.add('ok'); ui.bar.style.width = '100%'; stored++;
           const what = d.mine ? (d.map ? `${T('One of your matches')}: ${d.map}` : T('One of your matches'))
                               : T('A match that isn\'t in your match list (kept for that match)');
@@ -113,7 +131,7 @@
         }
       });
     }
-    queue = queue.then(() => { if (stored && !list.querySelector('.rf-item:not(.ok):not(.err)')) {
+    queue = queue.then(() => { if (stored && !list.querySelector('.rf-item:not(.ok):not(.err):not(.wait)')) {
       const b = document.createElement('a'); b.className = 'btn sm'; b.href = location.pathname; b.textContent = T('Refresh the lists');
       if (!list.querySelector('a.btn')) list.appendChild(b);
     } });

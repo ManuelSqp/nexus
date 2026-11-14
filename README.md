@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.42.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.43.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -620,7 +620,24 @@ the jump buttons.
 
   That puts it in `~/.cargo/bin/vrfkit`, where Nexus finds it by itself (or set the path in *Settings › Replay
   files*, or `NEXUS_VRFKIT`). *Test* there checks it. After a VALORANT patch, replays of the new build may need a
-  newer vrfkit: run the same command with a newer commit (and `--force`).
+  newer vrfkit: run the same command with a newer commit (and `--force`), or let it update itself (next point).
+- **vrfkit updates itself** (4.43, without Docker): a systemd timer runs `nexus vrfkit-update` once a day. When
+  vrfkit has a new commit on GitHub it builds it into a separate folder, tests it (it has to start and read the
+  newest replay kept on the server) and only then replaces the old one, which stays as `vrfkit.prev`. A failed
+  build or test changes nothing. The result shows on the *Server* page and the *Replay files* page.
+
+  ```bash
+  sudo cp deploy/nexus-vrfkit-update.service deploy/nexus-vrfkit-update.timer /etc/systemd/system/
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now nexus-vrfkit-update.timer
+  sudo systemctl start nexus-vrfkit-update            # once now; then: journalctl -u nexus-vrfkit-update -n 20
+  ```
+
+  Back to the previous one: `.venv/bin/nexus vrfkit-update --rollback --data data`. Only check:
+  `.venv/bin/nexus vrfkit-update --dry-run --data data`.
+- **Replays of a brand-new patch** (4.43): when vrfkit can't read a replay's patch yet, the upload is kept on the
+  server (*Replay files › Waiting for vrfkit*) instead of being refused, and read by itself within 5 minutes of
+  vrfkit being updated. No need to keep the files on your PC until then.
 - **How many are there**: the *Server* page (admins) lists the stored replay files: count, size, uploads in the
   last 7 / 30 days, the last upload, how many were lined up with the match data and have ability casts, per map,
   and whether vrfkit works.

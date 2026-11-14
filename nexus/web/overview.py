@@ -185,6 +185,10 @@ def replays(data_dir: Path, vrfkit: str = "") -> dict:
         return {"count": len(ids), "vrf": vrf, "data": data, "size": human(size), "bytes": size, "newest": newest,
                 "week": week, "month": month, "lined_up": lined_up, "casts": casts, "maps": maps.most_common(8)}
     out = dict(_cached(f"replays:{data_dir}", 120, measure))
+    from .. import replayfile as _rf
+    from .. import vrfkit_update as _vu
+    out["waiting"] = _rf.pending(Path(data_dir) / "replays")          # 4.43: kept until vrfkit reads their patch
+    out["update"] = _vu.state(Path(data_dir))
     def probe():
         from .. import replayfile
         return replayfile.check_vrfkit(replayfile.vrfkit_path(vrfkit))

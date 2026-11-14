@@ -31,6 +31,28 @@ def _anchor(args) -> pipeline.Anchor | None:
     return None
 
 
+def cmd_vrfkit_update(cfg: Config, args) -> None:
+    """4.43: update vrfkit when there's a new version (tested on a kept replay first); see nexus/vrfkit_update.py."""
+    import logging
+
+    from . import vrfkit_update as vu
+    from .store import Store
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    data = Path(args.data).resolve()
+    setting = Store(data).get("vrfkit_path") or ""
+    if args.rollback:
+        try:
+            print(f"vrfkit rolled back: {vu.rollback(data, setting)}")
+        except vu.UpdateError as e:
+            raise SystemExit(str(e))
+        return
+    st = vu.run(data, setting, force=args.force, dry_run=args.dry_run)
+    print(f"vrfkit: {st.get('result')}" + (f" ({st['error']})" if st.get("error") else "")
+          + (f" · tested: {st['tested']}" if st.get("tested") and st.get("updated") == st.get("checked") else ""))
+    if st.get("error"):
+        raise SystemExit(1)
+
+
 # ---------------------------------------------------------------------------
 # commands
 # ---------------------------------------------------------------------------
@@ -201,11 +223,18 @@ def main(argv: list[str] | None = None) -> None:
     n.add_argument("--player")
     n.add_argument("--force", action="store_true")
 
+    v = sub.add_parser("vrfkit-update", help="update vrfkit when there's a new version (tested first)")
+    v.add_argument("--data", default="data", help="the data folder of the web app")
+    v.add_argument("--force", action="store_true", help="build and test even when it's up to date")
+    v.add_argument("--dry-run", action="store_true", help="only check whether there's a new version")
+    v.add_argument("--rollback", action="store_true", help="go back to the vrfkit before the last update")
+
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     try:
         {"web": cmd_web, "history": cmd_history, "coach": cmd_coach, "sync": cmd_sync,
-         "calibrate-minimap": cmd_calibrate, "notes-template": cmd_notes}[args.cmd](cfg, args)
+         "calibrate-minimap": cmd_calibrate, "notes-template": cmd_notes,
+         "vrfkit-update": cmd_vrfkit_update}[args.cmd](cfg, args)
     except HenrikError as e:
         raise SystemExit(f"HenrikDev API: {e}")
     except OllamaError as e:

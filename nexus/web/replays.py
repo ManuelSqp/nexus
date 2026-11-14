@@ -15,7 +15,7 @@ from pathlib import Path
 
 from flask import abort, g, jsonify, render_template, request
 
-from .. import pipeline, replayfile
+from .. import pipeline, replayfile, vrfkit_update
 from .uploads import CHUNK_BYTES, UploadError
 
 log_ = logging.getLogger(__name__)
@@ -39,15 +39,26 @@ def begin_upload(store, uploads, uid: int, data) -> dict:
     return {"id": uploads.begin(uid, name, data["size"]).id, "chunk": CHUNK_BYTES}
 
 
+class PendingReplay(UploadError):
+    """The file was kept: vrfkit can't read this patch yet (see replayfile.keep_pending)."""
+    def __init__(self, meta: dict):
+        super().__init__(f"Kept on the server: vrfkit can't read replays of patch {meta['patch']} yet. "
+                         "It's read automatically once it can.", 422)
+        self.meta = meta
+
+
 def ingest_upload(store, uploads, uid: int, upload_id: str) -> dict:
     """A finished .vrf upload -> stored replay data. Returns replayfile.summary(); raises UploadError."""
     work = store.data_dir / "cache" / "vrf_work"
     work.mkdir(parents=True, exist_ok=True)
-    dest, _ = uploads.finish(uid, upload_id, work)
+    dest, name = uploads.finish(uid, upload_id, work)
+    vk = replayfile.vrfkit_path(store.get("vrfkit_path"))
     try:
         with _ingest_lock:
-            return replayfile.ingest(dest, replays_dir(store), work,
-                                     replayfile.vrfkit_path(store.get("vrfkit_path")))
+            return replayfile.ingest(dest, replays_dir(store), work, vk)
+    except replayfile.UnsupportedBuild as e:     # 4.43: a brand-new patch: keep the file, read it once vrfkit can
+        meta = replayfile.keep_pending(dest, replays_dir(store), e, name=str(name or ""), uid=uid, vrfkit=vk)
+        raise PendingReplay(meta)
     except replayfile.ReplayError as e:
         raise UploadError(str(e), 422)
     except Exception as e:                       # 4.42.1: a readable answer instead of "Error 500"; the log has it all
@@ -68,6 +79,15 @@ def register(app, store, uploads, get_profile) -> None:
             return
         replayfile.reread_all(replays_dir(store), store.data_dir / "cache" / "vrf_work", vk, lock=_ingest_lock)
     app.extensions["nexus"].setdefault("ticks", []).append(reread)
+
+    def retry() -> None:
+        """Every 5 minutes: kept files of a patch vrfkit couldn't read are tried again once vrfkit changed."""
+        if not replayfile.pending(replays_dir(store)):
+            return
+        replayfile.retry_pending(replays_dir(store), store.data_dir / "cache" / "vrf_work",
+                                 replayfile.vrfkit_path(store.get("vrfkit_path")), lock=_ingest_lock)
+    app.extensions["nexus"]["ticks"].append(retry)
+    app.extensions["nexus"]["replays_retry"] = retry         # for tests
     app.extensions["nexus"]["replays_reread"] = reread      # for tests
 
     @app.post("/api/replays")
@@ -94,7 +114,10 @@ def register(app, store, uploads, get_profile) -> None:
     def replay_store(upload_id: str):
         """A finished upload is a replay of whichever match it is: no coaching run needed. -> the summary, the map
         if the match is known, and whether it's one of this player's matches (?pid=)."""
-        info = ingest_upload(store, uploads, g.user.id, upload_id)
+        try:
+            info = ingest_upload(store, uploads, g.user.id, upload_id)
+        except PendingReplay as e:
+            return jsonify(ok=True, pending=True, patch=e.meta["patch"], name=e.meta["name"]), 202
         mine = None
         pid = request.args.get("pid", type=int)
         if pid:
@@ -117,9 +140,10 @@ def register(app, store, uploads, get_profile) -> None:
         with_replay = [r for r in rows if (r.get("match_id") or "").lower() in have]
         recent_missing = [r for r in rows[:RECENT] if (r.get("match_id") or "").lower() not in have]
         problem = replayfile.check_vrfkit(replayfile.vrfkit_path(store.get("vrfkit_path") or ""))
+        waiting = replayfile.pending(d)
         return render_template("replay_files.html", p=p, active_pid=pid, can_edit=can_edit, with_replay=with_replay,
                                missing=recent_missing, total=len(have), others=len(have) - len(with_replay),
-                               problem=problem, max_mb=replayfile.MAX_VRF_BYTES // 1024 ** 2, recent=RECENT)
+                               problem=problem, waiting=waiting, update=vrfkit_update.state(store.data_dir), max_mb=replayfile.MAX_VRF_BYTES // 1024 ** 2, recent=RECENT)
 
 
 RECENT = 15                         # the Replay files page lists your last this-many matches without a replay

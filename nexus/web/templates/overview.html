@@ -110,6 +110,8 @@
       <dt>.vrf kept</dt><dd>{{ r.vrf }} of {{ r.count }}<span class="muted small"> (needed to read a replay again, e.g. for ability casts)</span></dd>
       <dt>Used so far</dt><dd>{{ r.lined_up }} lined up with the match data{% if r.lined_up %} · {{ r.casts }} with ability casts{% endif %}</dd>
       <dt>vrfkit</dt><dd>{% if r.vrfkit_error %}<span style="color:var(--red)">{{ r.vrfkit_error }}</span>{% else %}<span style="color:var(--win)">✓ works</span>{% endif %}</dd>
+      <dt>Waiting for vrfkit</dt><dd>{% if r.waiting %}<b>{{ r.waiting|length }}</b> <span class="muted small">(<span>patch</span> {% for p in r.waiting|map(attribute='patch')|unique %}<span translate="no">{{ p }}</span>{{ ', ' if not loop.last }}{% endfor %})</span>{% else %}–{% endif %}</dd>
+      <dt>vrfkit update</dt><dd>{% if r.update.checked %}<span>{{ r.update.result }}</span> <span class="muted small">· {{ r.update.checked|epoch }}{% if r.update.commit %} · <span translate="no">{{ r.update.commit[:7] }}</span>{% endif %}</span>{% if r.update.error %}<br><span style="color:var(--red)" class="small">{{ r.update.error }}</span>{% endif %}{% else %}<span class="muted small">not set up (README, section Replay files)</span>{% endif %}</dd>
     </dl>
     {% if r.maps %}<div class="row small muted" style="gap:12px;flex-wrap:wrap">{% for m, n in r.maps %}<span>{{ m }}: {{ n }}</span>{% endfor %}</div>{% endif %}
     <p class="small muted" style="margin:8px 0 0">One file per match serves every player in it. "Used so far" counts the replays a stats page or coaching run has already lined up; the rest are read the first time they're needed.</p>
