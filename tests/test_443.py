@@ -212,7 +212,7 @@ def test_cli_and_units():
     root = Path(__file__).parent.parent / "deploy"
     svc = (root / "nexus-vrfkit-update.service").read_text()
     assert "nexus vrfkit-update --data" in svc and "Type=oneshot" in svc and "ProtectHome" not in svc
-    assert "OnCalendar=" in (root / "nexus-vrfkit-update.timer").read_text()
+    assert "OnCalendar=*-*-* 00/3:00:00" in (root / "nexus-vrfkit-update.timer").read_text()   # every 3 hours (4.43.2)
 
 
 def test_cli_command_runs(tmp_path, monkeypatch, capsys):

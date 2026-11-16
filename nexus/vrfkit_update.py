@@ -1,4 +1,4 @@
-"""vrfkit updates itself (4.43): `nexus vrfkit-update`, run once a day by deploy/nexus-vrfkit-update.timer.
+"""vrfkit updates itself (4.43): `nexus vrfkit-update`, run every 3 hours by deploy/nexus-vrfkit-update.timer.
 
 vrfkit reads the game's replay files and needs an update after most VALORANT patches (a new build). This checks
 vrfkit's main branch on GitHub; when there's a new commit it

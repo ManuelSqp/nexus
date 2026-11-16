@@ -1,10 +1,11 @@
-# Once a day (at a random time between 4 and 6 in the morning), and 10 minutes after a boot that missed it.
+# Every 3 hours (00, 03, 06 … up to 30 minutes later, at random), and after a boot that missed one.
+# A check that finds nothing new is one quick look at GitHub; it only builds when vrfkit has a new version.
 [Unit]
-Description=Nexus - check for a new vrfkit once a day
+Description=Nexus - check for a new vrfkit every 3 hours
 
 [Timer]
-OnCalendar=*-*-* 04:00:00
-RandomizedDelaySec=2h
+OnCalendar=*-*-* 00/3:00:00
+RandomizedDelaySec=30min
 Persistent=true
 
 [Install]
