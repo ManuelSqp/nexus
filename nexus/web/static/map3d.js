@@ -12,6 +12,7 @@
   const D2R = Math.PI / 180, EYE = 1.6, EYE_CROUCH = 1.15, STEP = 0.6, WALL_H = 3.6, R = 0.3;
   const SPEED = {run: 6.75, walk: 3.6, crouch: 2.4}, GRAV = 20, JUMP = 5.5;
   let gl = null, prog = null, loc = {}, mesh = null, M = null, grid = null, raf = 0, last = 0;
+  let layer = null;                  // 4.44: something drawn on top (the replay viewer, replay.js)
   const keys = new Set();
   const me = {x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: 0, ground: true, fly: false, crouch: false};
   const opt = {labels: false, radar: true, help: true};
@@ -121,6 +122,14 @@
   }
   const eyePos = () => [me.x, me.y + (me.fly ? EYE : me.crouch ? EYE_CROUCH : EYE), me.z];
   let VP = null;
+  function project(x, y, z) {        // world -> screen pixels (and the distance), or null behind the camera
+    if (!VP) return null;
+    const q = [0, 0, 0, 0];
+    for (let i = 0; i < 4; i++) q[i] = VP[i] * x + VP[4 + i] * y + VP[8 + i] * z + VP[12 + i];
+    if (q[3] <= 0.1) return null;
+    return {x: (q[0] / q[3] * 0.5 + 0.5) * canvas.width, y: (1 - (q[1] / q[3] * 0.5 + 0.5)) * canvas.height, d: q[3],
+            px: canvas.height / 2 / Math.tan(71 * D2R / 2) / q[3]};   // pixels per metre at that distance
+  }
   function draw() {
     const dpr = window.devicePixelRatio || 1, w = Math.round(canvas.clientWidth * dpr), h = Math.round(canvas.clientHeight * dpr);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; over.width = w; over.height = h; }
@@ -156,6 +165,7 @@
       }
       g.globalAlpha = 1;
     }
+    if (layer && layer.draw) layer.draw(g, project, w, h, dpr);
     radar.hidden = !opt.radar;
     if (opt.radar) drawRadar();
   }
@@ -181,6 +191,7 @@
         g.save(); g.translate(x, y); g.rotate(me.yaw); g.fillText(c.label, 0, 0); g.restore();
       }
     }
+    if (layer && layer.radar) layer.radar(g, (x, z) => [(x - me.x) * k, (z - me.z) * k], me.yaw, S);
     g.restore();
     g.fillStyle = 'rgba(255, 209, 102, .25)';
     g.beginPath(); g.moveTo(S / 2, S / 2); g.arc(S / 2, S / 2, S * 0.3, -Math.PI / 2 - 0.62, -Math.PI / 2 + 0.62); g.fill();
@@ -222,6 +233,7 @@
   function frame(now) {
     raf = requestAnimationFrame(frame);
     const dt = Math.min(0.05, (now - (last || now)) / 1000); last = now;
+    if (layer && layer.tick) layer.tick(dt);
     if (document.pointerLockElement === canvas) step(dt);
     else if (touch.on) step(dt, touchKeys());
     draw();
@@ -250,6 +262,7 @@
     mesh = buildMesh();
     [me.x, me.y, me.z] = d.start; me.vy = 0; me.ground = true; me.yaw = 0; me.pitch = 0;
     const fl = floorAt(me.x, me.z, me.y + 2); if (fl !== null) me.y = fl;
+    if (C.replay) { me.fly = true; if (layer && layer.ready) layer.ready(); }
     if (!raf) raf = requestAnimationFrame(frame);
   }
   // ---------------------------------------------------------------- input
@@ -339,5 +352,9 @@
   $('m3-full').addEventListener('click', () => { if (stage.requestFullscreen) stage.requestFullscreen().catch(() => {}); });
   const first = document.querySelector('[data-map]:not([disabled])');
   if (first) first.click();
-  window.nexusMap3D = {state: () => ({me, opt, loaded: !!M, cells: M ? M.cells.length : 0, mesh: mesh ? mesh.n : 0, touch: touch.on}), use, step: (dt, ks) => step(dt, new Set(ks)), draw, floorAt, touchKeys: () => [...touchKeys()]};   // for tests
+  window.nexusMap3D = {state: () => ({me, opt, loaded: !!M, cells: M ? M.cells.length : 0, mesh: mesh ? mesh.n : 0, touch: touch.on}), use, step: (dt, ks) => step(dt, new Set(ks)), draw, floorAt, touchKeys: () => [...touchKeys()],
+    // 4.44: the replay viewer draws on top and moves the camera
+    setLayer: l => { layer = l; if (M && l && l.ready) l.ready(); }, project,
+    view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; saveOpt(); }};
+  if (C.map) load(C.map);
 })();

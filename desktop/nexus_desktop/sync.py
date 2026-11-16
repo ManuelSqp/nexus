@@ -84,12 +84,21 @@ def recordings(s: Settings, api: Api, ffmpeg: str, log, now: float | None = None
             state["state"] = "done"
 
 
+RETRY_S = 3 * 86400        # a file the server couldn't read is tried again after this (a server fix may help)
+
+
 def replays(s: Settings, api: Api, log, now: float | None = None) -> None:
-    """New replay files from VALORANT's Demos folder to Nexus (4.9). Each file is sent once; one the server
-    can't read is not tried again until it changes."""
+    """Every replay file in VALORANT's Demos folder to Nexus, whatever the mode (4.9; 4.44: all of them, not
+    only new ones). Each file is sent once. One of a patch the server's vrfkit can't read yet is kept by the
+    server and read later ("waiting"); one it couldn't read for another reason is tried again after RETRY_S."""
     if not (s.send_replays and s.demos_dir):
         return
-    todo = [f for f in demos.find(Path(s.demos_dir), s.since, now) if demos.key(f) not in s.replays]
+    now = now or time.time()
+
+    def due(f) -> bool:
+        st = s.replays.get(demos.key(f))
+        return st is None or (st.get("state") == "skipped" and now - st.get("at", 0) > RETRY_S)
+    todo = [f for f in demos.find(Path(s.demos_dir), 0, now) if due(f)]
     if not todo:
         return
     have = api.replays_have(sorted({demos.match_id(f) for f in todo} - {""}))
@@ -103,11 +112,15 @@ def replays(s: Settings, api: Api, log, now: float | None = None) -> None:
         try:
             info = api.upload_replay(f)
         except ApiError as e:
-            if e.status in (400, 409, 413, 422):           # the server can't use this file: don't send it again
-                s.replays[k] = {"state": "skipped", "match_id": mid, "why": str(e)}
+            if e.status in (400, 409, 413, 422):           # the server can't use this file now: try again later
+                s.replays[k] = {"state": "skipped", "match_id": mid, "why": str(e), "at": now}
                 log(f"Replay: {f.name} skipped: {e}")
                 continue
             raise
+        if info.get("pending"):                            # kept on the server until vrfkit reads its patch
+            s.replays[k] = {"state": "done", "match_id": mid, "why": f"waiting for vrfkit (patch {info.get('patch', '?')})"}
+            log(f"Replay: {f.name} is on Nexus, read once vrfkit supports patch {info.get('patch', '?')}")
+            continue
         s.replays[k] = {"state": "done", "match_id": info.get("match_id", mid)}
         log(f"Replay: {info.get('players', '?')} players, {info.get('rounds', '?')} rounds are on Nexus now")
 

@@ -58,7 +58,7 @@
     <table>{% for r in with_replay[:30] %}
       <tr><td class="small muted">{{ r.started_at|localtime }}</td><td translate="no">{{ r.map }}</td><td translate="no">{{ r.agent }}</td>
         <td class="{{ 'res-w' if r.won == 1 else 'res-l' if r.won == 0 else '' }}" translate="no">{{ r.score }}</td>
-        <td class="r">{% if can_edit %}<a class="btn sm ghost" href="{{ url_for('coach', pid=p.id, match_id=r.match_id) }}">Coach this match</a>{% endif %}</td></tr>
+        <td class="r"><a class="btn sm" href="{{ url_for('replay_view', pid=p.id, match_id=r.match_id) }}">Watch in 3D</a>{% if can_edit %} <a class="btn sm ghost" href="{{ url_for('coach', pid=p.id, match_id=r.match_id) }}">Coach this match</a>{% endif %}</td></tr>
     {% endfor %}</table>
     {% if with_replay|length > 30 %}<p class="small muted">{{ with_replay|length - 30 }} more.</p>{% endif %}
     {% else %}<p class="muted small" style="margin:0">None yet.</p>{% endif %}

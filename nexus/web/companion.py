@@ -211,9 +211,12 @@ def register(app, store, uploads, check_login) -> None:
     @app.post("/api/companion/replays")
     def companion_replay():
         """A finished .vrf upload: read it and keep it for its match."""
-        from .replays import ingest_upload
+        from .replays import PendingReplay, ingest_upload
         b = request.get_json(silent=True) or {}
-        info = ingest_upload(store, uploads, g.user.id, str(b.get("upload_id") or ""))
+        try:
+            info = ingest_upload(store, uploads, g.user.id, str(b.get("upload_id") or ""))
+        except PendingReplay as e:                  # 4.44: a patch vrfkit can't read yet: kept, read later
+            return jsonify(ok=True, pending=True, patch=e.meta["patch"], name=e.meta["name"]), 202
         return jsonify(ok=True, **info)
 
     @app.post("/api/companion/players/<int:pid>/clips")

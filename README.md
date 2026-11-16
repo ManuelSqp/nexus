@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.43.2** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.44.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -228,6 +228,12 @@ by hand.
 coming out of main facing the site). Enemy models peek from the callouts in front of you, at their real direction and
 distance on that map, and the callout's name shows when one appears. The positions come from valorant-api.com's
 callouts, which have no walls or heights: each spot gets a piece of cover and everyone is at your height.
+
+**Replay in 3D:** *Watch in 3D* on a match (or on *Replay files*) plays the match's replay inside the rebuilt 3D map,
+round by round: every player with name and view direction, kills, the spike, smokes and other utility, from above,
+through one player's eyes, or flying freely. The team writes comments at a moment of a round (*Team review*); everyone
+who can open the match sees them. Below it, the **utility check**: per player casts per key (C, Q, E, X), rounds with
+utility, deaths without having used any, and when the first ability of a round comes.
 
 **Replay files:** *Performance › Matches › Replay files* uploads replay files (.vrf, from VALORANT › Saved › Demos) of any match, several at once, without a coaching run, and lists which of your recent matches still have none.
 
@@ -602,7 +608,9 @@ players' paths instead of estimating them between kills. No recording is needed 
 the jump buttons.
 
 - **Getting the file to Nexus**: upload it on the match's coach page (*Replay file* card), or let the Nexus app
-  for Windows send new replay files by itself (*This PC › Replay files*). One file serves every player of that
+  for Windows send every replay file in the Demos folder by itself, whatever the mode (*This PC › Replay files*;
+  since 4.44 also the ones that were there before the app, and a file that failed is tried again after 3 days).
+  One file serves every player of that
   match: it is stored per match, in `data/replays/<match id>.vrf` and `.json.gz`.
 - **The switch**: *Settings › Replay files › Positions*. **Replay file when there is one** (default) uses it and
   falls back to the VOD minimap when a match has none or the file doesn't fit the match data. **VOD minimap only**

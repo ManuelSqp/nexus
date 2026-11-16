@@ -43,10 +43,11 @@
     <p style="margin:0 0 8px"><span style="color:var(--win)">✓ The server has this match's replay file.</span>
       {% if replay_source == 'vod' %}<span class="muted">It isn't used right now: positions come from the VOD minimap (Settings › Replay files).</span>
       {% else %}<span class="muted">The coach and the report's replay see every player's position for the whole round; a VOD is then only needed for the jump buttons.</span>{% endif %}</p>
+    <p style="margin:0 0 8px"><a class="btn sm primary" href="{{ url_for('replay_view', pid=p.id, match_id=match_id) }}">Watch in 3D &amp; utility check</a></p>
   {% else %}
     <p class="hint" style="margin:0 0 8px">In the game: <b>Career › Match history</b> › this match › <b>download the replay</b>. Then upload the
       <code>.vrf</code> file from <code>%LOCALAPPDATA%\VALORANT\Saved\Demos</code>, or let the Nexus app send it by itself.
-      Only Competitive and Premier have replays, and the game deletes them at the next patch.
+      Replays exist for Unrated, Competitive, Swiftplay and Premier; the game deletes them at the next patch (the server keeps them).
       {% if replay_source == 'vod' %}<br><span class="muted">Replay files are switched off right now (Settings › Replay files): an uploaded file is kept for later.</span>{% endif %}</p>
   {% endif %}
   <div class="row" style="gap:8px">
