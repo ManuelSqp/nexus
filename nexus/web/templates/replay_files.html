@@ -25,6 +25,8 @@
 .rf-grid table{width:100%;font-size:13.5px}
 .rf-grid td{padding:6px 6px 6px 0;vertical-align:middle}
 .rf-grid td.r{text-align:right;white-space:nowrap}
+.rf-others{margin-top:14px}.rf-others table{width:100%;font-size:13.5px}.rf-others td{padding:6px 6px 6px 0;vertical-align:middle}
+.rf-others td.r{text-align:right;white-space:nowrap}
 .res-w{color:var(--win);font-weight:700}.res-l{color:var(--red);font-weight:700}
 </style>{% endblock %}
 {% block content %}
@@ -43,7 +45,7 @@
 <section class="rf-drop" id="rf-drop">
   <h2>Upload replay files</h2>
   <p><span>Drop one or more .vrf files here, or pick them.</span> <span>Valorant keeps them in VALORANT › Saved › Demos and deletes them with the next patch; on the server they stay.</span>
-    <span>Any mode with a replay (Unrated, Competitive, Swiftplay, Premier), your matches or your teammates'.</span> <span>Up to {{ max_mb }} MB per file.</span> <span>Replays of a brand-new patch are kept until vrfkit can read them.</span></p>
+    <span>Any mode with a replay (Unrated, Competitive, Swiftplay, Premier, Custom games), your matches or your teammates'.</span> <span>Up to {{ max_mb }} MB per file.</span> <span>Replays of a brand-new patch are kept until vrfkit can read them.</span></p>
   <input type="file" id="rf-file" accept=".vrf" multiple>
   <button type="button" class="btn primary" id="rf-pick">Choose replay files</button>
   <div class="rf-list" id="rf-list" aria-live="polite"></div>
@@ -75,6 +77,20 @@
     {% else %}<p class="muted small" style="margin:0">{% if with_replay %}Every recent match has one.{% else %}No matches loaded yet.{% endif %}</p>{% endif %}
   </section>
 </div>
+
+{% if other_replays %}<section class="card rf-others">
+  <h2>Custom games and other replays</h2>
+  <p class="small muted" style="margin-top:0"><span>Replays of matches that aren't in your match list: Custom games, and your teammates' matches.</span> <span>They don't count in your stats.</span></p>
+  <table>{% for o in other_replays %}
+    <tr><td class="small muted">{% if o.started_at %}{{ o.started_at|localtime }}{% endif %}</td>
+      {% if o.loading %}<td colspan="4" class="small muted">Match details are still loading</td>
+      {% else %}<td translate="no">{{ o.map }}</td><td class="small muted" translate="no">{{ o.mode }}</td>
+      <td translate="no">{{ o.agent if o.played else '' }}</td>
+      <td class="{{ 'res-w' if o.won == 1 else 'res-l' if o.won == 0 else '' }}" translate="no">{{ o.score }}</td>{% endif %}
+      <td class="r"><a class="btn sm" href="{{ url_for('replay_view', pid=p.id, match_id=o.match_id) }}">Watch in 3D</a>{% if can_edit and o.played %} <a class="btn sm ghost" href="{{ url_for('coach', pid=p.id, match_id=o.match_id) }}">Coach this match</a>{% endif %}</td></tr>
+  {% endfor %}</table>
+  {% if others_more %}<p class="small muted"><span>{{ others_more }} more.</span></p>{% endif %}
+</section>{% endif %}
 
 <script>
 (() => {
@@ -124,8 +140,13 @@
           }
           ui.el.classList.add('ok'); ui.bar.style.width = '100%'; stored++;
           const what = d.mine ? (d.map ? `${T('One of your matches')}: ${d.map}` : T('One of your matches'))
-                              : T('A match that isn\'t in your match list (kept for that match)');
+                     : d.map ? `${d.mode || T('Another match')}: ${d.map}`
+                     : T('A match that isn\'t in your match list (kept for that match)');
           ui.st.textContent = `${T('Stored')} · ${what} · ${d.rounds} ${T('rounds')}, ${d.players} ${T('players')}`;
+          if (d.watch) {
+            const a = document.createElement('a'); a.href = d.watch; a.textContent = T('Watch in 3D');
+            ui.st.append(' · ', a);
+          }
         } catch (e) {
           ui.el.classList.add('err'); ui.st.textContent = `${T('Failed')}: ${e.message}`;
         }

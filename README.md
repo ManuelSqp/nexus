@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.46.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.47.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -599,8 +599,8 @@ Record as **MP4 with H.264**, because browsers can't play every MKV.
 
 ### Replay files
 
-Since patch 11.06 VALORANT can download a replay of an **Unrated, Competitive, Swiftplay or Premier** match (not Custom
-games, Deathmatch or Team Deathmatch) (*Career › Match history* ›
+Since patch 11.06 VALORANT can download a replay of an **Unrated, Competitive, Swiftplay, Premier or Custom** match (not
+Deathmatch or Team Deathmatch) (*Career › Match history* ›
 the match › download the replay). It is saved as a `.vrf` file in `%LOCALAPPDATA%\VALORANT\Saved\Demos` and holds
 the server's own data: **every player's position all round long**, plus the round starts and every death. Nexus
 reads it with [vrfkit](https://github.com/yakisoba0728/vrfkit) (Apache-2.0), keeps a compact copy (10 positions per

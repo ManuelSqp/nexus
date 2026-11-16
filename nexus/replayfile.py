@@ -1,7 +1,7 @@
 """Positions from VALORANT's own replay files (.vrf), read with vrfkit (4.9).
 
-Since patch 11.06 the game can download a replay of an Unrated, Competitive, Swiftplay or Premier match
-(not Custom games, Deathmatch or Team Deathmatch) from the match history. It is saved as <match id>.vrf in %LOCALAPPDATA%\\VALORANT\\Saved\\Demos and holds what the
+Since patch 11.06 the game can download a replay of an Unrated, Competitive, Swiftplay, Premier or Custom match
+(not Deathmatch or Team Deathmatch) from the match history. It is saved as <match id>.vrf in %LOCALAPPDATA%\\VALORANT\\Saved\\Demos and holds what the
 server sent: every player's position about 128 times a second, where they looked, and the server's
 own timeline (round starts, deaths, plant, defuse). Nexus runs vrfkit
 (https://github.com/yakisoba0728/vrfkit, Apache-2.0) to turn the file into tables, keeps a compact

@@ -217,6 +217,12 @@ def register(app, store, uploads, check_login) -> None:
             info = ingest_upload(store, uploads, g.user.id, str(b.get("upload_id") or ""))
         except PendingReplay as e:                  # 4.44: a patch vrfkit can't read yet: kept, read later
             return jsonify(ok=True, pending=True, patch=e.meta["patch"], name=e.meta["name"]), 202
+        try:                                        # 4.47: match details right away (Customs aren't in the stats import)
+            from .replays import fetch_match
+            ps = store.profiles(g.user.id)
+            fetch_match(store, info["match_id"], ps[0].region if ps else "", force=True)
+        except Exception:
+            pass                                    # the Replay files page loads them later
         return jsonify(ok=True, **info)
 
     @app.post("/api/companion/players/<int:pid>/clips")

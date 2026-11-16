@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.47.0
+- **Custom games**: replays of Custom games work like any other replay: upload them (or let the Nexus app send them),
+  watch them in 3D with the utility check and the team review, and coach them. The match details (names, teams,
+  rounds, kills) are loaded from HenrikDev by match id, right after the upload, when the replay is opened, and every
+  few minutes for older files; a match HenrikDev doesn't know yet is tried again after 6 hours.
+- *Replay files* has a new list, **Custom games and other replays**: replays of matches that aren't in your match
+  list (Customs, teammates' matches) with map, mode, date and score, *Watch in 3D*, and *Coach this match* when you
+  played in it. Customs still don't count in your stats.
+- After an upload the result says which match it was (e.g. *Custom Game: Ascent*) and links straight to the 3D view.
+- German texts.
+
 ## 4.46.0
 - **Smokes are 3D**: real balls of smoke in the 3D scene, cloudy, lit from above, with a soft edge, in the agent's
   colour (Miks green, Clove pink-white, Omen purple, Viper green, Astra violet, Harbor blue, Brimstone orange …).
