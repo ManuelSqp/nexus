@@ -36,7 +36,7 @@ def cmd_vrfkit_update(cfg: Config, args) -> None:
     import logging
 
     from . import vrfkit_update as vu
-    from .store import Store
+    from .web.store import Store
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     data = Path(args.data).resolve()
     setting = Store(data).get("vrfkit_path") or ""
