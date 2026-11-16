@@ -26,7 +26,7 @@ STEP_FILL = 0.6            # gap filling only between cells this close in height
 PATH_GAP = 3.0             # consecutive samples further apart than this (m) aren't joined into a path
 SPREAD = 1                 # cells added around every path (a player is about 0.6 m wide)
 FILL = 4                   # cells: a gap this narrow between two walkable cells of the same height is filled
-VERSION = 1
+VERSION = 2                # 2 (4.45): gaps filled from the minimap
 
 PALETTES = {               # per map: base, then site / mid / attacker / defender tints (r, g, b 0..1)
     "Ascent": [(0.72, 0.64, 0.52), (0.80, 0.62, 0.42), (0.66, 0.70, 0.60), (0.75, 0.58, 0.50), (0.62, 0.62, 0.70)],
@@ -69,8 +69,10 @@ class Frame:
         return u / self.per_m, v / self.per_m
 
 
-def rebuild(mi, replays: list[dict], name: str = "") -> dict:
-    """The walkable grid of a map from replays (compact replay data, replayfile.py) and its callouts."""
+def rebuild(mi, replays: list[dict], name: str = "", walkable=None) -> dict:
+    """The walkable grid of a map from replays (compact replay data, replayfile.py) and its callouts.
+    walkable (4.45): the minimap as a mask (minimap_mask); where no replay has been, its walkable parts become floor
+    at the height of the nearest floor the replays know (flat at 0 without any replay)."""
     fr = Frame(mi)
     heights: dict[tuple[int, int], list[float]] = {}
     n = 0
@@ -111,8 +113,10 @@ def rebuild(mi, replays: list[dict], name: str = "") -> dict:
                             put(px + (mx - px) * f, pz + (mz - pz) * f, ph + (h - ph) * f)
                 pt, px, pz, ph = t, mx, mz, h
     levels = {c: _levels(hs) for c, hs in heights.items()}
-    _spread(levels)
-    _fill(levels)
+    if levels:
+        _spread(levels)
+        _fill(levels)
+    guessed = fill_from_minimap(levels, walkable, fr.per_m) if walkable is not None else set()
     # callouts at their floor
     callouts = []
     seen = set()
@@ -131,11 +135,11 @@ def rebuild(mi, replays: list[dict], name: str = "") -> dict:
         cx, cz = (i + 0.5) * CELL, (j + 0.5) * CELL
         kind = min(named, key=lambda a: (a[0] - cx) ** 2 + (a[1] - cz) ** 2)[2] if named else 0
         for h in lv:
-            cells.append([i, j, round(h, 2), kind])
+            cells.append([i, j, round(h, 2), kind, 1] if (i, j) in guessed else [i, j, round(h, 2), kind])
     start = _start(levels, callouts)
     return {"version": VERSION, "map": name or mi.name, "cell": CELL, "cells": cells, "callouts": callouts,
             "palette": PALETTES.get(name or mi.name, DEFAULT_PALETTE), "start": start, "samples": n,
-            "matches": len(replays), "per_m": fr.per_m}
+            "matches": len(replays), "per_m": fr.per_m, "guessed": len(guessed)}
 
 
 def _levels(hs: list[float]) -> list[float]:
@@ -236,3 +240,74 @@ def load_replays(replays_dir: Path, ids: list[str]) -> list[dict]:
         except (OSError, ValueError):
             continue
     return out
+
+
+# ---------------------------------------------------------------------------
+# 4.45: the rest of the map from the minimap
+# ---------------------------------------------------------------------------
+def minimap_mask(path):
+    """The minimap image (valorant-api.com) -> walkable pixels as a 2D bool array (rows = v, columns = u), or None.
+    Walkable = opaque and in the brighter of the two grey groups of the opaque pixels (the threshold is worked out
+    per image, Otsu): the floors are drawn light, walls and boxes darker, outside the map is transparent."""
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:                  # pragma: no cover - both are dependencies
+        return None
+    img = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
+    if img is None or img.ndim != 3:
+        return None
+    if img.shape[2] == 4:
+        opaque = img[:, :, 3] > 128
+        bgr = img[:, :, :3]
+    else:
+        bgr = img
+        opaque = np.ones(img.shape[:2], bool)
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    vals = gray[opaque]
+    if vals.size < 100:
+        return None
+    t, _ = cv2.threshold(vals.reshape(-1, 1), 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    mask = opaque & (gray > t)
+    mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)) > 0   # specks away
+    return mask if mask.mean() > 0.02 else None
+
+
+def fill_from_minimap(levels: dict, mask, per_m: float) -> set:
+    """Add a floor to every walkable minimap cell no replay has covered. Its height spreads out from the cells the
+    replays know (nearest first, over walkable cells only), so a corridor nobody walked gets the height of where it
+    starts; cells not connected to any known floor get the median known height (0 without replays).
+    -> the cells added (the page may shade them a little differently)."""
+    from collections import deque
+    h, w = mask.shape
+    size = 1.0 / per_m                                # metres covered by the minimap (u and v go 0..1)
+    n_i, n_j = int(size / CELL) + 1, int(size / CELL) + 1
+
+    def walk(i: int, j: int) -> bool:
+        u, v = (i + 0.5) * CELL * per_m, (j + 0.5) * CELL * per_m
+        x, y = int(u * w), int(v * h)
+        return 0 <= x < w and 0 <= y < h and bool(mask[y, x])
+
+    todo = {(i, j) for i in range(n_i) for j in range(n_j) if (i, j) not in levels and walk(i, j)}
+    if not todo:
+        return set()
+    known = [min(lv) for lv in levels.values()]
+    fallback = statistics.median(known) if known else 0.0
+    height: dict = {}
+    q = deque()
+    for (i, j), lv in levels.items():                 # start from the known floors next to a gap
+        for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            c = (i + di, j + dj)
+            if c in todo and c not in height:
+                height[c] = min(lv)
+                q.append(c)
+    while q:
+        i, j = q.popleft()
+        for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            c = (i + di, j + dj)
+            if c in todo and c not in height:
+                height[c] = height[(i, j)]
+                q.append(c)
+    for c in todo:
+        levels[c] = [round(height.get(c, fallback), 2)]
+    return todo

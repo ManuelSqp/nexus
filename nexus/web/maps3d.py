@@ -3,6 +3,7 @@ the server (stats/map3d.py). The page renders and moves in the browser (static/m
 from __future__ import annotations
 
 import json
+import time
 import threading
 
 from flask import abort, jsonify, render_template
@@ -48,13 +49,21 @@ def register(app, store, sr, view_profile, known_maps: list[str]) -> None:
         """The rebuilt map, from the cache while the set of replays is the same."""
         f = out_dir / f"{name.lower()}.json"
         d = _read(f, {})
-        if d.get("ids") == sorted(ids) and d.get("version") == m3.VERSION:
+        if d.get("ids") == sorted(ids) and d.get("version") == m3.VERSION and \
+                not (d.get("no_minimap") and time.time() - d.get("at", 0) > 3600):     # try the minimap again hourly
             return d
         mi = reg.get(name=name)
         if mi is None:
             return None
-        d = m3.rebuild(mi, m3.load_replays(replays_dir, ids), name)
+        try:                                              # 4.45: the minimap fills what no replay covered
+            mm = reg.minimap_image(mi)
+            mask = m3.minimap_mask(mm) if mm else None
+        except Exception:
+            mask = None
+        d = m3.rebuild(mi, m3.load_replays(replays_dir, ids), name, walkable=mask)
         d["ids"] = sorted(ids)
+        d["at"] = int(time.time())
+        d["no_minimap"] = mask is None
         with _lock:
             out_dir.mkdir(parents=True, exist_ok=True)
             f.write_text(json.dumps(d, separators=(",", ":")))
@@ -87,10 +96,16 @@ def register(app, store, sr, view_profile, known_maps: list[str]) -> None:
         if not name.replace(" ", "").isalnum() or len(name) > 30:
             abort(404)
         by = m3.replays_by_map(replays_dir, map_of)
-        real = next((m for m in by if m.lower() == name.lower()), None)
+        real = next((m for m in sorted(set(known_maps) | set(by)) if m.lower() == name.lower()), None)
+        if real is None:                                  # a map valorant-api.com knows (a new one, say)
+            try:
+                mi = reg.get(name=name)
+            except Exception:
+                mi = None
+            real = mi.name if mi is not None else None
         if real is None:
-            return jsonify(error="No replay of this map on the server yet."), 404
-        d = built(real, by[real])
+            return jsonify(error="That map isn't known."), 404
+        d = built(real, by.get(real, []))                # 4.45: without replays: flat, from the minimap
         if d is None or not d["cells"]:
             return jsonify(error="The map data isn't loaded yet (valorant-api.com)."), 404
         return jsonify(d)
