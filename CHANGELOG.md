@@ -4,6 +4,10 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.43.1
+- `nexus vrfkit-update` (the daily vrfkit update) stopped at once with "No module named 'nexus.store'": wrong
+  import. Fixed, with a test that runs the command itself.
+
 ## 4.43.0
 - **vrfkit updates itself**: `nexus vrfkit-update`, run once a day by a systemd timer
   (`deploy/nexus-vrfkit-update.timer`, install in the README). When vrfkit has a new version it's built in a separate

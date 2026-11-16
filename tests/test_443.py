@@ -213,3 +213,23 @@ def test_cli_and_units():
     svc = (root / "nexus-vrfkit-update.service").read_text()
     assert "nexus vrfkit-update --data" in svc and "Type=oneshot" in svc and "ProtectHome" not in svc
     assert "OnCalendar=" in (root / "nexus-vrfkit-update.timer").read_text()
+
+
+def test_cli_command_runs(tmp_path, monkeypatch, capsys):
+    """4.43.1: the command itself (not only --help) runs: it opens the settings store and calls the updater."""
+    from nexus import cli
+    seen = {}
+
+    def fake_run(data, setting, force=False, dry_run=False):
+        seen.update(data=data, setting=setting, dry_run=dry_run)
+        return {"result": "up to date", "checked": 1}
+    monkeypatch.setattr(vu, "run", fake_run)
+    cli.main(["vrfkit-update", "--data", str(tmp_path), "--dry-run"])
+    assert seen == {"data": tmp_path.resolve(), "setting": "", "dry_run": True}
+    assert "vrfkit: up to date" in capsys.readouterr().out
+    monkeypatch.setattr(vu, "run", lambda *a, **k: {"result": "failed, the old vrfkit stays in use", "error": "x"})
+    with pytest.raises(SystemExit):
+        cli.main(["vrfkit-update", "--data", str(tmp_path)])
+    with pytest.raises(SystemExit, match="no previous vrfkit"):
+        monkeypatch.setattr(vu, "target_path", lambda s: tmp_path / "vrfkit")
+        cli.main(["vrfkit-update", "--data", str(tmp_path), "--rollback"])
