@@ -1,0 +1,11 @@
+# Once a day (at a random time between 4 and 6 in the morning), and 10 minutes after a boot that missed it.
+[Unit]
+Description=Nexus - check for a new vrfkit once a day
+
+[Timer]
+OnCalendar=*-*-* 04:00:00
+RandomizedDelaySec=2h
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,26 @@
+# Updates vrfkit (the replay-file reader) when there's a new version: builds it, tests it on a kept replay and
+# only then replaces the old one (kept as vrfkit.prev). Started once a day by nexus-vrfkit-update.timer.
+#
+# Install (check User= and the paths, same as nexus.service):
+#   sudo cp deploy/nexus-vrfkit-update.service deploy/nexus-vrfkit-update.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now nexus-vrfkit-update.timer
+# Run it now:   sudo systemctl start nexus-vrfkit-update   (then: journalctl -u nexus-vrfkit-update -n 20)
+# Go back:      /home/sysadmin/valcoach-v2/.venv/bin/nexus vrfkit-update --rollback --data /home/sysadmin/valcoach-v2/data
+
+[Unit]
+Description=Nexus - update vrfkit (replay files)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=sysadmin
+Group=sysadmin
+WorkingDirectory=/home/sysadmin/valcoach-v2
+Environment=PATH=/home/sysadmin/.cargo/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/sysadmin/valcoach-v2/.venv/bin/nexus vrfkit-update --data /home/sysadmin/valcoach-v2/data
+# a build uses a lot of CPU for a few minutes: let the web app go first
+Nice=15
+IOSchedulingClass=idle
+TimeoutStartSec=50min

@@ -4,6 +4,18 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.43.0
+- **vrfkit updates itself**: `nexus vrfkit-update`, run once a day by a systemd timer
+  (`deploy/nexus-vrfkit-update.timer`, install in the README). When vrfkit has a new version it's built in a separate
+  folder and tested on the newest replay kept on the server; only if that works does it replace the old one (kept as
+  `vrfkit.prev`, `--rollback` goes back). The result shows on the Server page and the Replay files page.
+- **Replays of a brand-new patch are kept**: when vrfkit can't read a replay's patch yet ("unsupported replay
+  branch"), the upload stays on the server (*Replay files › Waiting for vrfkit*) and is read by itself within
+  5 minutes of vrfkit being updated, instead of being refused. Tried once per vrfkit version.
+- Replay stats of a match are worked out again when its replay was read again (4.42.1's re-read now reaches the
+  stats pages and the utility numbers).
+- German texts.
+
 ## 4.42.1
 - **Replay upload "Error 500" fixed**: some replays have an ability effect (a smoke, a wall …) still active when the
   recording ends; it has no end time, and sorting the effects crashed the import. Those replays now import.

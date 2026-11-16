@@ -27,6 +27,7 @@ import re
 import shutil
 import statistics
 import subprocess
+import time
 import uuid
 from pathlib import Path
 
@@ -87,6 +88,22 @@ def check_vrfkit(path: str) -> str | None:
     return None
 
 
+UNSUPPORTED_RE = re.compile(r"unsupported (?:replay )?branch[^']*'([^']+)'")
+PATCH_RE = re.compile(r"release-(\d+\.\d+)")
+
+
+class UnsupportedBuild(ReplayError):
+    """vrfkit doesn't know this game build yet (a brand-new patch): the file is fine, it's kept and read later."""
+    def __init__(self, message: str, branch: str):
+        super().__init__(message)
+        self.branch = branch
+
+    @property
+    def patch(self) -> str:
+        m = PATCH_RE.search(self.branch)
+        return m.group(1) if m else self.branch
+
+
 def export(vrfkit: str, vrf: Path, out_dir: Path) -> Path:
     """vrfkit export <vrf> --out <out_dir> (out_dir must not exist yet)."""
     try:
@@ -98,6 +115,9 @@ def export(vrfkit: str, vrf: Path, out_dir: Path) -> Path:
         raise ReplayError("vrfkit took too long to read the replay file.")
     if r.returncode != 0 or not (out_dir / "manifest.json").is_file():
         last = next((ln for ln in reversed((r.stderr or r.stdout or "").splitlines()) if ln.strip()), "")
+        m = UNSUPPORTED_RE.search(r.stderr or r.stdout or "")
+        if m:
+            raise UnsupportedBuild(f"vrfkit can't read replays of {m.group(1)} yet.", m.group(1))
         raise ReplayError(f"vrfkit couldn't read the replay file{': ' + last.strip() if last else ''}. "
                           "Replays of a brand-new patch may need a newer vrfkit.")
     return out_dir
@@ -561,6 +581,98 @@ def reread_all(replays_dir: Path, work_dir: Path, vrfkit: str, lock=None) -> dic
     marker.write_text(f"{ok} read again, {failed} failed\n")
     log_.info("replay files read again (reader %s): %s ok, %s failed", READER, ok, failed)
     return {"ok": ok, "failed": failed, "skipped": False}
+
+
+# ---------------------------------------------------------------------------
+# 4.43: replays vrfkit can't read yet (a brand-new patch): kept in replays/pending, read once vrfkit can
+# ---------------------------------------------------------------------------
+def pending_dir(replays_dir: Path) -> Path:
+    return Path(replays_dir) / "pending"
+
+
+def vrfkit_fingerprint(vrfkit: str) -> str:
+    """Changes when the vrfkit program is replaced (an update): size and modification time of the file."""
+    p = shutil.which(vrfkit) or vrfkit
+    try:
+        st = Path(p).stat()
+    except OSError:
+        return ""
+    return f"{st.st_size}-{st.st_mtime_ns}"
+
+
+def keep_pending(vrf: Path, replays_dir: Path, err: "UnsupportedBuild", name: str = "", uid: int | None = None,
+                 vrfkit: str = "") -> dict:
+    """Move the uploaded file into replays/pending (named by its content, so the same file twice is kept once)."""
+    import hashlib
+    vrf = Path(vrf)
+    h = hashlib.sha256()
+    with open(vrf, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    key = h.hexdigest()[:20]
+    d = pending_dir(replays_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    dest = d / f"{key}.vrf"
+    if not dest.exists():
+        shutil.move(str(vrf), dest)
+    meta = {"key": key, "name": name or vrf.name, "branch": err.branch, "patch": err.patch, "uid": uid,
+            "added": int(time.time()), "tried_with": vrfkit_fingerprint(vrfkit) if vrfkit else "", "error": ""}
+    old = d / f"{key}.json"
+    if old.exists():
+        try:
+            meta["added"] = json.loads(old.read_text()).get("added", meta["added"])
+        except (OSError, ValueError):
+            pass
+    old.write_text(json.dumps(meta))
+    return meta
+
+
+def pending(replays_dir: Path) -> list[dict]:
+    """The kept files waiting for vrfkit, oldest first."""
+    d = pending_dir(replays_dir)
+    out = []
+    for f in sorted(d.glob("*.json")) if d.is_dir() else []:
+        try:
+            m = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        if (d / f"{m.get('key')}.vrf").is_file():
+            out.append(m)
+    return sorted(out, key=lambda m: m.get("added", 0))
+
+
+def retry_pending(replays_dir: Path, work_dir: Path, vrfkit: str, lock=None) -> dict:
+    """Try the kept files again, but only once per vrfkit version (nothing changes until vrfkit does).
+    -> {"read": [summaries], "waiting": n}."""
+    fp = vrfkit_fingerprint(vrfkit)
+    d = pending_dir(replays_dir)
+    read, waiting = [], 0
+    if not fp:
+        return {"read": read, "waiting": len(pending(replays_dir))}
+    for m in pending(replays_dir):
+        if m.get("tried_with") == fp:
+            waiting += 1
+            continue
+        vrf, mf = d / f"{m['key']}.vrf", d / f"{m['key']}.json"
+        try:
+            if lock is not None:
+                with lock:
+                    info = ingest(vrf, replays_dir, work_dir, vrfkit)
+            else:
+                info = ingest(vrf, replays_dir, work_dir, vrfkit)
+        except UnsupportedBuild as e:
+            m.update(tried_with=fp, branch=e.branch, patch=e.patch, error="")
+        except ReplayError as e:                         # readable now, but something else is wrong with it
+            m.update(tried_with=fp, error=str(e))
+        else:
+            read.append(info)
+            mf.unlink(missing_ok=True)
+            vrf.unlink(missing_ok=True)                  # ingest moved it; just in case
+            log_.info("kept replay %s read: match %s", m.get("name"), info.get("match_id"))
+            continue
+        waiting += 1
+        mf.write_text(json.dumps(m))
+    return {"read": read, "waiting": waiting}
 
 
 def stored(replays_dir: Path) -> list[str]:
