@@ -13,10 +13,10 @@
 {{ vc.pagehead('3D maps', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
    'Walk around a map rebuilt from the replays on the server') }}
 
-<div class="m3-maps">{% for m in maps %}<button type="button" data-map="{{ m.name }}" {{ 'disabled' if not m.replays }} translate="no">{{ m.name }}<span>{{ m.replays }}</span></button>{% endfor %}</div>
-{% if not maps|selectattr('replays')|list %}
+<div class="m3-maps">{% for m in maps %}<button type="button" data-map="{{ m.name }}" translate="no" title="{{ m.replays }} replays">{{ m.name }}<span>{{ m.replays }}</span></button>{% endfor %}</div>
+{% if not maps|selectattr('replays')|list %}{# 4.45: the maps still open (flat, from the minimap) #}
 <section class="card" style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center"><p class="muted" style="margin:0;flex:1;min-width:240px"><span>No replay files on the server yet.</span>
-  <span>A map appears here once a replay of it is uploaded (from the Nexus app or the Replay files page).</span> <span>Replays exist for Unrated, Competitive, Swiftplay and Premier.</span></p>
+  <span>Until then the maps are flat, from the minimap; replays add ramps, stairs and boxes (from the Nexus app or the Replay files page).</span> <span>Replays exist for Unrated, Competitive, Swiftplay and Premier.</span></p>
   <a class="btn primary" href="{{ url_for('replay_files', pid=p.id) }}">Upload replay files</a></section>
 {% endif %}
 <div class="m3-stage" id="m3-stage">
@@ -36,10 +36,10 @@
   <button type="button" class="btn sm ghost" id="m3-full">Fullscreen</button>
   <span class="muted small" id="m3-info"></span>
 </div>
-<p class="small muted" style="margin-top:12px;max-width:90ch">This map is rebuilt from where players stood in the replays, not taken from the game:
-  every spot someone stood on is floor at that height, everything else is a wall. The more replays of a map on the server, the
-  more complete it gets; with one or two, corners nobody walked into are missing and some walls stand where the real map is
-  open. Colours are per area of the map, not the game's textures. Mouse speed: your Valorant sensitivity from the aim trainer.</p>
+<p class="small muted" style="margin-top:12px;max-width:90ch"><span>This map is rebuilt from where players stood in the replays, not taken from the game: every spot someone stood on is floor at that height.</span>
+  <span>Where no replay has been yet, the minimap's layout fills the floor at the height of the nearest known floor (without any replay of a map it is flat).</span>
+  <span>The more replays of a map on the server, the more exact the heights get: ramps, stairs, boxes.</span> <span>Colours are per area of the map, not the game's textures.</span>
+  <span>Mouse speed: your Valorant sensitivity from the aim trainer.</span></p>
 <script>window.NEXUS_MAP3D = {{ boot|tojson }};</script>
 <script src="{{ url_for('static', filename='map3d.js') }}?v={{ app_version }}"></script>
 {% endblock %}

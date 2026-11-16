@@ -8,7 +8,7 @@
   const $ = id => document.getElementById(id);
   const T = s => (window.vcT ? window.vcT(s) : s);
   const OURS = '#3ee6c1', THEIRS = '#ff5d6c', SPIKE = '#ffd166';
-  const R_UTIL = {smoke: 4.6, slow: 3.2, damage: 3.2, wall: 2.0, recon: 2.5, trap: 1.2, orb: 2.5, flash: 1.2};
+  const R_UTIL = {smoke: 4.4, slow: 3.5, damage: 3.3, wall: 2.0, recon: 2.5, trap: 1.2, orb: 2.5, flash: 1.2};
   const S = {round: null, d: null, t: 0, playing: false, speed: 1, cam: 'top', follow: null, names: true, util: true,
              height: 80, comments: [], loading: 0};
   const P = C.players, byI = {};
@@ -76,20 +76,68 @@
     }
   }
 
+  // ------------------------------------------------------------------------------------------ utility shapes (4.45)
+  const MIN_LIFE = 0.9;                 // shorter than this: an ability's targeting or a flicker, not placed utility
+  function live(u, t) {
+    if (u.t0 > t || (u.t1 !== null && u.t1 < t)) return false;
+    return u.type === 'flash' || u.t1 === null || u.t1 - u.t0 >= MIN_LIFE;
+  }
+  function ring(project, x, y, z, r, n = 20) {          // a circle lying on the ground, in perspective
+    const pts = [];
+    for (let k = 0; k < n; k++) {
+      const a = k / n * 2 * Math.PI, s = project(x + Math.cos(a) * r, y, z + Math.sin(a) * r);
+      if (!s) return null;
+      pts.push(s);
+    }
+    return pts;
+  }
+  function rgba(hex, a) {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+  }
+  function drawUtil(g, project, u, dpr) {
+    const c = C.util_col[u.type] || '#cccccc', y = u.y !== null ? u.y : 0, R = R_UTIL[u.type] || 1.5;
+    if (u.type === 'smoke') {                            // a ball of smoke: the same from every side
+      const s = project(u.x, y + R * 0.55, u.z);
+      if (!s) return;
+      const r = Math.max(6 * dpr, R * s.px);
+      const gr = g.createRadialGradient(s.x - r * 0.3, s.y - r * 0.35, r * 0.1, s.x, s.y, r);
+      gr.addColorStop(0, rgba('#eef1f6', 0.95)); gr.addColorStop(0.6, rgba(c, 0.88)); gr.addColorStop(1, rgba(c, 0.55));
+      g.fillStyle = gr; g.beginPath(); g.arc(s.x, s.y, r, 0, 2 * Math.PI); g.fill();
+      g.lineWidth = 1.2 * dpr; g.strokeStyle = rgba('#ffffff', 0.55); g.stroke();
+    } else if (u.type === 'wall') {                     // a standing column where the wall is
+      const a = project(u.x, y, u.z), b = project(u.x, y + 4, u.z);
+      if (!a || !b) return;
+      const wd = Math.max(5 * dpr, 1.2 * a.px);
+      g.fillStyle = rgba(c, 0.5); g.strokeStyle = rgba(c, 0.95); g.lineWidth = 1.5 * dpr;
+      g.beginPath(); g.rect(a.x - wd / 2, b.y, wd, a.y - b.y); g.fill(); g.stroke();
+    } else if (u.type === 'damage' || u.type === 'slow') {   // on the ground
+      const pts = ring(project, u.x, y + 0.05, u.z, R);
+      if (!pts) return;
+      g.fillStyle = rgba(c, 0.35); g.strokeStyle = rgba(c, 0.95); g.lineWidth = 2 * dpr;
+      g.beginPath(); pts.forEach((p, k) => (k ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.closePath(); g.fill(); g.stroke();
+    } else {                                             // recon, orbs, traps, flashes: a small marker
+      const s = project(u.x, y + 1, u.z);
+      if (!s) return;
+      const r = Math.max(4 * dpr, Math.min(14 * dpr, 0.5 * s.px));
+      g.fillStyle = rgba(c, 0.85); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.5 * dpr;
+      g.beginPath(); g.arc(s.x, s.y, r, 0, 2 * Math.PI); g.fill(); g.stroke();
+    }
+    if (S.names && u.agent) {
+      const s = project(u.x, y + (u.type === 'smoke' ? R * 1.15 : 2.2), u.z);
+      if (s) {
+        g.font = `600 ${Math.round(10.5 * dpr)}px system-ui, sans-serif`; g.textAlign = 'center';
+        g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(0,0,0,.7)'; g.strokeText(u.agent, s.x, s.y);
+        g.fillStyle = '#fff'; g.fillText(u.agent, s.x, s.y);
+      }
+    }
+  }
+
   // ------------------------------------------------------------------------------------------ drawing
   function draw(g, project, w, h, dpr) {
     if (!S.d) return;
     const t = S.t, d = S.d;
-    if (S.util) for (const u of d.util) {
-      if (u.t0 > t || (u.t1 !== null && u.t1 < t)) continue;
-      const y = u.y !== null ? u.y : 0, s = project(u.x, y + 0.1, u.z);
-      if (!s) continue;
-      const r = Math.max(4 * dpr, (R_UTIL[u.type] || 1.5) * s.px);
-      g.globalAlpha = 0.33; g.fillStyle = C.util_col[u.type] || '#ccc';
-      g.beginPath(); g.ellipse(s.x, s.y, r, r * 0.55, 0, 0, 2 * Math.PI); g.fill();
-      g.globalAlpha = 0.9; g.lineWidth = 1.5 * dpr; g.strokeStyle = C.util_col[u.type] || '#ccc'; g.stroke();
-      g.globalAlpha = 1;
-    }
+    if (S.util) for (const u of d.util) if (live(u, t)) drawUtil(g, project, u, dpr);
     for (const k of d.kills) {
       if (k.t > t) continue;
       const s = project(k.x, k.y + 0.1, k.z); if (!s) continue;
@@ -131,7 +179,7 @@
     const t = S.t, d = S.d;
     const k = toR(1, 0)[0] - toR(0, 0)[0];
     if (S.util) for (const u of d.util) {
-      if (u.t0 > t || (u.t1 !== null && u.t1 < t)) continue;
+      if (!live(u, t)) continue;
       const [x, y] = toR(u.x, u.z);
       g.globalAlpha = 0.45; g.fillStyle = C.util_col[u.type] || '#ccc';
       g.beginPath(); g.arc(x, y, Math.max(2, (R_UTIL[u.type] || 1.5) * k), 0, 2 * Math.PI); g.fill(); g.globalAlpha = 1;

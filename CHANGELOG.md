@@ -4,6 +4,16 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.45.0
+- **3D maps are complete**: where no replay has been, the minimap's layout fills in the floor (walkable = the light
+  parts of the minimap, worked out per image; boxes and walls stay solid) at the height of the nearest floor a replay
+  knows. Every map can be opened now, flat until a replay of it is on the server; replays make the heights exact.
+  Shared by Practice › 3D maps and the replay viewer.
+- **Utility in the replay viewer**: smokes are balls of smoke (the same from every side), mollies and slows lie on the
+  ground in perspective, walls stand as columns, recon and traps are markers. Effects that exist for less than about a
+  second (an ability's targeting, like the violet circle when placing Miks' smokes) aren't shown.
+- German texts.
+
 ## 4.44.0
 - **Replay in 3D** (*Watch in 3D* on a match's page and on *Replay files*): the match's replay inside the rebuilt 3D
   map, round by round. Every player with agent, name and view direction; kills, the spike, smokes, walls, mollies and
