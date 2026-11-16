@@ -33,9 +33,11 @@
 <div class="m3-bar">
   <label><input type="checkbox" id="m3-labels"> Callouts</label>
   <label><input type="checkbox" id="m3-radar-t"> Radar</label>
+  <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
   <button type="button" class="btn sm ghost" id="m3-full">Fullscreen</button>
   <span class="muted small" id="m3-info"></span>
 </div>
+<p class="small muted" style="margin:6px 0 0"><span>Floor colours</span> · <b>Measured · guessed</b>: <span style="color:#cdb07f">■</span> <span>measured by replays</span>, <span style="color:#8fa1bd">■</span> <span>filled in from the minimap</span> · <b>Map areas</b>: <span>sites, mid, attacker and defender side</span></p>
 <p class="small muted" style="margin-top:12px;max-width:90ch"><span>This map is rebuilt from where players stood in the replays, not taken from the game: every spot someone stood on is floor at that height.</span>
   <span>Where no replay has been yet, the minimap's layout fills the floor at the height of the nearest known floor (without any replay of a map it is flat).</span>
   <span>The more replays of a map on the server, the more exact the heights get: ramps, stairs, boxes.</span> <span>Colours are per area of the map, not the game's textures.</span>

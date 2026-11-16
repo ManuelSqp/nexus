@@ -74,9 +74,11 @@
       <label><input type="checkbox" id="rv-util" checked> Utility</label>
       <label><input type="checkbox" id="m3-labels"> Callouts</label>
       <label><input type="checkbox" id="m3-radar-t"> Radar</label>
+      <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
       <button type="button" class="btn sm ghost" id="m3-full">Fullscreen</button>
       <span class="muted small" id="m3-info"></span>
     </div>
+    <p class="small muted" style="margin:6px 0 0"><span>Floor colours</span> · <b>Measured · guessed</b>: <span style="color:#cdb07f">■</span> <span>measured by replays</span>, <span style="color:#8fa1bd">■</span> <span>filled in from the minimap</span> · <b>Map areas</b>: <span>sites, mid, attacker and defender side</span></p>
   </div>
   <div class="rv-side">
     <section class="card"><h3>Your team</h3><div class="rv-team" id="rv-ours"></div>

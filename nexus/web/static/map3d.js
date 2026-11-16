@@ -15,17 +15,17 @@
   let layer = null;                  // 4.44: something drawn on top (the replay viewer, replay.js)
   const keys = new Set();
   const me = {x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: 0, ground: true, fly: false, crouch: false};
-  const opt = {labels: false, radar: true, help: true};
+  const opt = {labels: false, radar: true, help: true, colors: 'one'};   // colors (4.46): one | known | areas
   try { Object.assign(opt, JSON.parse(localStorage.getItem('nexus.map3d') || '{}')); } catch (e) {}
   const saveOpt = () => { try { localStorage.setItem('nexus.map3d', JSON.stringify(opt)); } catch (e) {} };
 
   // ---------------------------------------------------------------- the grid
   function buildGrid(d) {
     const g = new Map();
-    for (const [i, j, h, k] of d.cells) {
+    for (const [i, j, h, k, e] of d.cells) {
       const key = i + ',' + j;
       if (!g.has(key)) g.set(key, []);
-      g.get(key).push({h, k});
+      g.get(key).push({h, k, e: !!e});
     }
     for (const v of g.values()) v.sort((a, b) => a.h - b.h);
     return g;
@@ -73,8 +73,14 @@
     gl.enable(gl.DEPTH_TEST);
     return true;
   }
-  function shade(k, i, j, h) {                    // the area's colour, a little different per cell, darker low down
-    const base = M.palette[k] || M.palette[0];
+  const ONE = [0.74, 0.71, 0.66], KNOWN = [0.80, 0.69, 0.50], GUESSED = [0.56, 0.63, 0.74];
+  function baseColor(l) {                          // 4.46: one colour, measured vs. guessed, or the map's areas
+    if (opt.colors === 'areas') return M.palette[l.k] || M.palette[0];
+    if (opt.colors === 'known') return l.e ? GUESSED : KNOWN;
+    return ONE;
+  }
+  function shade(l, i, j) {                        // a little different per cell
+    const base = baseColor(l);
     const n = (((i * 73856093) ^ (j * 19349663)) >>> 0) % 1000 / 1000;
     const f = 0.92 + 0.12 * n;
     return [base[0] * f, base[1] * f, base[2] * f];
@@ -86,7 +92,7 @@
     for (const [key, lv] of grid) {
       const [i, j] = key.split(',').map(Number), x0 = i * s, z0 = j * s, x1 = x0 + s, z1 = z0 + s;
       for (const l of lv) {
-        const col = shade(l.k, i, j, l.h);
+        const col = shade(l, i, j);
         quad([x0, l.h, z0], [x0, l.h, z1], [x1, l.h, z1], [x1, l.h, z0], [0, 1, 0], col);
         // walls on the four sides: up to the next floor, or a full wall where there's nothing to stand on
         for (const [di, dj, a, b, n] of [[1, 0, [x1, z0], [x1, z1], [1, 0, 0]], [-1, 0, [x0, z1], [x0, z0], [-1, 0, 0]],
@@ -143,12 +149,80 @@
     gl.enableVertexAttribArray(loc.n); gl.vertexAttribPointer(loc.n, 3, gl.FLOAT, false, 36, 12);
     gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.FLOAT, false, 36, 24);
     gl.drawArrays(gl.TRIANGLES, 0, mesh.n);
+    gl.disableVertexAttribArray(loc.n); gl.disableVertexAttribArray(loc.c);
+    if (layer && layer.objects) drawObjects(layer.objects());
     overlay(w, h, dpr);
+  }
+  // ---------------------------------------------------------------- 3D objects: smokes and other utility (4.46)
+  // A lumpy unit ball, scaled per object; drawn after the map with the depth test on (walls hide them) and blended.
+  // The fragment shader makes it look like smoke: noise in world space, light from above, a soft edge.
+  const OVS = `attribute vec3 p; uniform mat4 vp; uniform vec4 s; uniform vec3 sc; uniform float seed; varying vec3 wp; varying vec3 nn;
+    void main(){ float bump = 1.0 + 0.07 * sin(p.x * 5.0 + seed) * sin(p.y * 4.0 + seed * 0.7) * sin(p.z * 5.0 - seed);
+      wp = s.xyz + p * sc * s.w * bump; nn = p; gl_Position = vp * vec4(wp, 1.0); }`;
+  const OFS = `precision mediump float; uniform vec3 eye; uniform vec3 col; uniform float alpha; uniform float fseed; uniform float inside; uniform float cloudy;
+    varying vec3 wp; varying vec3 nn;
+    float h(vec3 q){ return fract(sin(dot(q, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+    float n3(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y),
+                 mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); }
+    void main(){
+      vec3 n = normalize(nn); vec3 v = normalize(eye - wp);
+      float cl = 0.5 * n3(wp * 0.55 + fseed) + 0.3 * n3(wp * 1.2 - fseed) + 0.2 * n3(wp * 2.6);
+      float light = 0.62 + 0.38 * clamp(dot(n, normalize(vec3(0.3, 1.0, 0.2))), 0.0, 1.0);
+      vec3 c = col * light * (1.0 - cloudy * 0.25 + cloudy * 0.45 * cl);
+      float edge = (inside > 0.5 || cloudy < 0.5) ? 1.0 : smoothstep(0.0, 0.45, abs(dot(n, v)));
+      gl_FragColor = vec4(c, alpha * edge * (1.0 - cloudy * 0.2 + cloudy * 0.3 * cl));
+    }`;
+  let oprog = null, oloc = {}, ball = null;
+  function initObjects() {
+    if (oprog !== null) return;
+    const sh = (t, src) => { const x = gl.createShader(t); gl.shaderSource(x, src); gl.compileShader(x); return x; };
+    oprog = gl.createProgram(); gl.attachShader(oprog, sh(gl.VERTEX_SHADER, OVS)); gl.attachShader(oprog, sh(gl.FRAGMENT_SHADER, OFS)); gl.linkProgram(oprog);
+    if (!gl.getProgramParameter(oprog, gl.LINK_STATUS)) { console.error('utility shader:', gl.getProgramInfoLog(oprog)); oprog = false; return; }
+    for (const u of ['vp', 's', 'sc', 'seed', 'fseed', 'eye', 'col', 'alpha', 'inside', 'cloudy']) oloc[u] = gl.getUniformLocation(oprog, u);
+    oloc.p = gl.getAttribLocation(oprog, 'p');
+    const v = [], R = 18, C = 28;                    // a UV sphere: triangles, outward
+    const pt = (a, b) => [Math.sin(a) * Math.cos(b), Math.cos(a), Math.sin(a) * Math.sin(b)];
+    for (let i = 0; i < R; i++) for (let j = 0; j < C; j++) {
+      const a0 = i / R * Math.PI, a1 = (i + 1) / R * Math.PI, b0 = j / C * 2 * Math.PI, b1 = (j + 1) / C * 2 * Math.PI;
+      const p00 = pt(a0, b0), p01 = pt(a0, b1), p10 = pt(a1, b0), p11 = pt(a1, b1);
+      v.push(...p00, ...p10, ...p11, ...p00, ...p11, ...p01);
+    }
+    ball = {buf: gl.createBuffer(), n: v.length / 3};
+    gl.bindBuffer(gl.ARRAY_BUFFER, ball.buf); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+  }
+  function drawObjects(list) {
+    if (!list || !list.length) return;
+    initObjects();
+    if (!oprog) return;
+    const e = eyePos();
+    list = list.map(o => ({...o, d: Math.hypot(o.x - e[0], o.y - e[1], o.z - e[2])})).sort((a, b) => b.d - a.d);   // far first
+    gl.useProgram(oprog);
+    gl.bindBuffer(gl.ARRAY_BUFFER, ball.buf);
+    gl.enableVertexAttribArray(oloc.p); gl.vertexAttribPointer(oloc.p, 3, gl.FLOAT, false, 12, 0);
+    gl.uniformMatrix4fv(oloc.vp, false, VP); gl.uniform3fv(oloc.eye, e);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.enable(gl.CULL_FACE);
+    gl.frontFace(gl.CW);                              // the ball's triangles are wound clockwise from outside
+    for (const o of list) {
+      const sc = o.sc || [1, 1, 1];
+      const q = [(e[0] - o.x) / (o.r * sc[0]), (e[1] - o.y) / (o.r * sc[1]), (e[2] - o.z) / (o.r * sc[2])];
+      const inside = Math.hypot(...q) < 1.02;
+      gl.cullFace(inside ? gl.FRONT : gl.BACK);         // inside a smoke: its inner side, as fog all around
+      gl.uniform4f(oloc.s, o.x, o.y, o.z, o.r); gl.uniform3fv(oloc.sc, sc);
+      gl.uniform1f(oloc.seed, o.seed || 0); gl.uniform1f(oloc.fseed, o.seed || 0); gl.uniform3fv(oloc.col, o.col);
+      gl.uniform1f(oloc.alpha, inside ? Math.min(0.94, (o.a || 0.8) + 0.15) : (o.a || 0.8));
+      gl.uniform1f(oloc.inside, inside ? 1 : 0); gl.uniform1f(oloc.cloudy, o.cloudy === false ? 0 : 1);
+      gl.drawArrays(gl.TRIANGLES, 0, ball.n);
+    }
+    gl.frontFace(gl.CCW); gl.disable(gl.CULL_FACE); gl.depthMask(true); gl.disable(gl.BLEND);
+    gl.disableVertexAttribArray(oloc.p);
+    gl.useProgram(prog);
   }
   // ---------------------------------------------------------------- overlays: callout names, radar
   function overlay(w, h, dpr) {
     const g = over.getContext('2d');
     g.clearRect(0, 0, w, h);
+    g.lineJoin = 'round';
     if (opt.labels && VP) {
       g.textAlign = 'center'; g.font = `600 ${Math.round(13 * dpr)}px system-ui, sans-serif`;
       for (const c of M.callouts) {
@@ -178,7 +252,7 @@
     for (let i = ci - span; i <= ci + span; i++) for (let j = cj - span; j <= cj + span; j++) {
       const lv = levels(i, j); if (!lv) continue;
       const near = lv.reduce((a, l) => (Math.abs(l.h - me.y) < Math.abs(a.h - me.y) ? l : a));
-      const c = M.palette[near.k] || M.palette[0], up = near.h - me.y;
+      const c = baseColor(near), up = near.h - me.y;
       const f = up > 1.5 ? 0.55 : up < -1.5 ? 0.45 : 0.85;
       g.fillStyle = `rgb(${c[0] * 255 * f | 0},${c[1] * 255 * f | 0},${c[2] * 255 * f | 0})`;
       g.fillRect(((i + 0.5) * M.cell - me.x) * k - M.cell * k / 2, ((j + 0.5) * M.cell - me.z) * k - M.cell * k / 2, M.cell * k + 0.6, M.cell * k + 0.6);
@@ -255,6 +329,12 @@
       $('m3-msg').hidden = true;
       $('m3-info').textContent = T(`${d.matches} replay${d.matches === 1 ? '' : 's'} · ${Math.round(d.cells.length * d.cell * d.cell)} m² of floor`);
     } catch (e) { $('m3-msg').textContent = e.message; }
+  }
+  function recolor(mode) {                         // 4.46: floor colours: one | known | areas
+    if (mode) { opt.colors = mode; saveOpt(); }
+    if (!M || !gl) return;
+    if (mesh && mesh.buf) gl.deleteBuffer(mesh.buf);
+    mesh = buildMesh();
   }
   function use(d) {
     M = d; grid = buildGrid(d);
@@ -349,12 +429,13 @@
   $('m3-labels').addEventListener('change', e => { opt.labels = e.target.checked; saveOpt(); });
   $('m3-radar-t').addEventListener('change', e => { opt.radar = e.target.checked; saveOpt(); });
   $('m3-labels').checked = opt.labels; $('m3-radar-t').checked = opt.radar; $('m3-help').hidden = !opt.help;
+  if ($('m3-colors')) { $('m3-colors').value = opt.colors; $('m3-colors').addEventListener('change', e => recolor(e.target.value)); }
   $('m3-full').addEventListener('click', () => { if (stage.requestFullscreen) stage.requestFullscreen().catch(() => {}); });
   const first = document.querySelector('[data-map]:not([disabled])');
   if (first) first.click();
   window.nexusMap3D = {state: () => ({me, opt, loaded: !!M, cells: M ? M.cells.length : 0, mesh: mesh ? mesh.n : 0, touch: touch.on}), use, step: (dt, ks) => step(dt, new Set(ks)), draw, floorAt, touchKeys: () => [...touchKeys()],
     // 4.44: the replay viewer draws on top and moves the camera
-    setLayer: l => { layer = l; if (M && l && l.ready) l.ready(); }, project,
+    setLayer: l => { layer = l; if (M && l && l.ready) l.ready(); }, project, recolor,
     view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; saveOpt(); }};
   if (C.map) load(C.map);
 })();
