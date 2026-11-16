@@ -49,7 +49,7 @@
   <div class="rf-list" id="rf-list" aria-live="polite"></div>
 </section>
 
-{% if update.checked %}<p class="small muted" style="margin:8px 2px 0"><span>vrfkit updates itself once a day:</span> <span>{{ update.result }}</span> ({{ update.checked|epoch }}){% if update.error %} · <span style="color:var(--red)">{{ update.error }}</span>{% endif %}</p>{% endif %}
+{% if update.checked %}<p class="small muted" style="margin:8px 2px 0"><span>vrfkit checks for updates every 3 hours:</span> <span>{{ update.result }}</span> ({{ update.checked|epoch }}){% if update.error %} · <span style="color:var(--red)">{{ update.error }}</span>{% endif %}</p>{% endif %}
 
 <div class="rf-grid">
   <section class="card">
