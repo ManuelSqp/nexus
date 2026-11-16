@@ -110,7 +110,8 @@ def test_mobile_fixes_and_3d_touch(app):  # noqa: F811 (fixture)
     scr = (TEMPLATES / "team_scrims.html").read_text()
     assert 'class="scrim"' not in scr and ".scrim{" not in scr and 'class="sc-card"' in scr   # .scrim is the menu backdrop
     m3 = (TEMPLATES / "maps3d.html").read_text()
-    assert 'id="m3-jump"' in m3 and "Tap to walk around" in m3 and "touch-action:none" in m3
+    assert 'id="m3-jump"' in m3 and "Tap to walk around" in m3
+    assert "touch-action:none" in (STATIC / "map3d.css").read_text()        # the stage styles moved there (4.44)
     js = (STATIC / "map3d.js").read_text()
     assert "touchstart" in js and "touchKeys" in js
     css = (STATIC / "app.css").read_text()

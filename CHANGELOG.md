@@ -4,6 +4,23 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.44.0
+- **Replay in 3D** (*Watch in 3D* on a match's page and on *Replay files*): the match's replay inside the rebuilt 3D
+  map, round by round. Every player with agent, name and view direction; kills, the spike, smokes, walls, mollies and
+  recon while they're up. From above (zoomable), through one player's eyes (click him), or flying freely (click the
+  map). Play, pause, 0.5× to 4×, ±5 s and round keys, kill feed you can click to jump.
+- **Team review**: comments at a moment of a round, kept per match for everyone in the team who can open it; rounds
+  with comments are marked. You can delete your own.
+- **Utility check** (same page): per player casts per key (C, Q, E, X), rounds with utility, deaths without having
+  used any ability that round, and when the first ability of a round comes (attack and defense). The replay numbers
+  its ability slots without saying which key is which; Nexus works that out from the match data's totals and, when
+  they don't fit, shows the match data's numbers instead of guessing.
+- **Nexus app sends every replay**: all files in the Demos folder (also the ones from before the app was set up),
+  any mode. A replay of a patch vrfkit can't read yet counts as sent (the server keeps it); one that failed is tried
+  again after 3 days. (*Opponents › Replay scouting* already covers opponent prep from replays.)
+- The match page no longer says that only Competitive and Premier have replays.
+- German texts.
+
 ## 4.43.2
 - vrfkit looks for a new version every 3 hours instead of once a day (`deploy/nexus-vrfkit-update.timer`), so a
   new patch's replays are readable sooner. A check that finds nothing new is one quick look at GitHub.

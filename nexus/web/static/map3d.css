@@ -1,0 +1,23 @@
+/* The 3D map stage (Practice › 3D maps and the replay page, 4.44). */
+.m3-stage{position:relative;aspect-ratio:16/9;width:100%;background:#8c9eb8;border-radius:12px;overflow:hidden}
+.m3-stage:fullscreen{border-radius:0;aspect-ratio:auto}
+.m3-stage canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.m3-stage.touch .k-only,.m3-stage:not(.touch) .t-only{display:none}
+.m3-jump{position:absolute;right:14px;bottom:14px;width:64px;height:64px;border-radius:50%;border:2px solid rgba(255,255,255,.55);background:rgba(10,14,20,.5);color:#fff;font-weight:700;font-size:13px;touch-action:none}
+.m3-jump[hidden]{display:none}
+.m3-stick{position:absolute;width:84px;height:84px;margin:-42px 0 0 -42px;border-radius:50%;border:2px solid rgba(255,255,255,.45);pointer-events:none}
+.m3-stick i{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;background:rgba(255,255,255,.55)}
+#m3-over{pointer-events:none}
+#m3-radar{position:absolute;left:14px;top:14px;width:200px;height:200px;border-radius:10px;border:1px solid rgba(255,255,255,.18);pointer-events:none}
+.m3-cross{position:absolute;left:50%;top:50%;width:10px;height:10px;margin:-5px 0 0 -5px;pointer-events:none}
+.m3-cross::before,.m3-cross::after{content:"";position:absolute;background:#7df9c3;box-shadow:0 0 0 1px rgba(0,0,0,.6)}
+.m3-cross::before{left:4px;top:0;width:2px;height:10px}.m3-cross::after{left:0;top:4px;width:10px;height:2px}
+.m3-start,.m3-msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(10,14,20,.82);color:#fff;border-radius:12px;padding:14px 18px;text-align:center;max-width:80%}
+.m3-start b{display:block;font-size:17px;margin-bottom:4px}
+.m3-pos{position:absolute;right:14px;top:14px;background:rgba(10,14,20,.7);color:#fff;font-size:13px;font-weight:650;padding:4px 10px;border-radius:99px;pointer-events:none}
+.m3-help{position:absolute;left:14px;bottom:14px;background:rgba(10,14,20,.72);color:#e6ebf2;font-size:12px;line-height:1.6;padding:8px 12px;border-radius:10px;pointer-events:none}
+.m3-help kbd{font-size:11px;padding:0 4px;border:1px solid rgba(255,255,255,.35);border-radius:4px}
+.m3-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px;font-size:13.5px}
+.m3-bar label{display:flex;gap:6px;align-items:center}
+/* phones: after the rules above, so it wins */
+@media (max-width:700px){.m3-stage{aspect-ratio:4/5}.m3-help{font-size:11px;right:90px}#m3-radar{width:120px;height:120px;left:10px;top:10px}}

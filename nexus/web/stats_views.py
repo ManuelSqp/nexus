@@ -1013,6 +1013,8 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
     register_today(app, store, sr, view_profile)
     from .maps3d import register as register_maps3d
     register_maps3d(app, store, sr, view_profile, KNOWN_MAPS)
+    from .replayview import register as register_replayview      # 4.44: replay in 3D, comments, utility check
+    register_replayview(app, store, view_profile)
     from .askcoach import register as register_ask
     register_ask(app, store, sr, view_profile, filter_rows)
     from .drafts import register as register_drafts

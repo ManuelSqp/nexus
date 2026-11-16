@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% import "_ui.html" as vc %}
+{% block title %}Replay · {{ m.map_name }} · {{ p.riot_id }} · Nexus{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='map3d.css') }}?v={{ app_version }}">
+<style>
+.rv-rounds{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}
+.rv-rounds button{font:inherit;font-size:12.5px;font-weight:650;min-width:34px;padding:4px 6px;border-radius:7px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);cursor:pointer;position:relative;font-variant-numeric:tabular-nums}
+.rv-rounds button.w{border-bottom:3px solid var(--win)}.rv-rounds button.l{border-bottom:3px solid var(--red)}
+.rv-rounds button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.rv-rounds button[disabled]{opacity:.35;cursor:default}
+.rv-rounds button.cm::after{content:"";position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--amber)}
+.rv-rounds .half{width:1px;background:var(--line2);margin:0 4px}
+.rv-wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
+@media (max-width:980px){.rv-wrap{grid-template-columns:1fr}}
+.rv-ctrl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:10px;font-size:13.5px}
+.rv-ctrl input[type=range]{flex:1;min-width:180px}
+.rv-ctrl .clock{font-variant-numeric:tabular-nums;font-weight:650;min-width:84px}
+.rv-ctrl label{display:flex;gap:5px;align-items:center}
+.rv-ctrl select{width:auto;min-width:0;padding:3px 8px}
+.rv-seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+.rv-seg button{font:inherit;font-size:12.5px;padding:4px 10px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.rv-seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:650}
+.rv-side{display:flex;flex-direction:column;gap:12px}
+.rv-side .card{margin:0;padding:12px}
+.rv-side h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.rv-team{display:grid;gap:3px}
+.rv-p{display:flex;gap:6px;align-items:baseline;font:inherit;font-size:13px;text-align:left;padding:4px 8px;border-radius:7px;border:1px solid transparent;border-left:4px solid var(--c);background:var(--panel2);color:var(--text);cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rv-p.dead{opacity:.4;text-decoration:line-through}
+.rv-p.on{border-color:var(--c)}
+.rv-feed{display:grid;gap:2px;max-height:220px;overflow:auto}
+.rv-k{font:inherit;font-size:12.5px;text-align:left;padding:3px 6px;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
+.rv-k.past{color:var(--text)}.rv-k:hover{background:var(--panel2)}
+.rv-k .tm,.rv-c .tm{font-variant-numeric:tabular-nums;color:var(--muted);margin-right:4px}
+.rv-c{font-size:13px;padding:4px 0;border-bottom:1px solid var(--line)}
+.rv-c .tm{font:inherit;border:0;background:var(--panel3);border-radius:5px;padding:0 5px;cursor:pointer;color:var(--text)}
+.rv-del{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1}
+.rv-cadd{display:flex;gap:6px;margin-top:8px}.rv-cadd input{flex:1;min-width:0}
+.ut table{width:100%;font-size:13px;border-collapse:collapse}
+.ut th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
+.ut td{padding:5px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.ut td.k{text-align:center}.ut tr.ours td:first-child{border-left:3px solid #3ee6c1}.ut tr.theirs td:first-child{border-left:3px solid #ff5d6c}
+.ut .bad{color:var(--red);font-weight:650}
+.ut-wrap{overflow-x:auto}
+</style>{% endblock %}
+{% block content %}
+{{ vc.pagehead('Replay', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
+   m.map_name ~ ' · ' ~ (m.started_at|localtime)) }}
+
+{% if not has_map %}<div class="card"><p class="muted" style="margin:0">The map data isn't loaded yet (valorant-api.com): the replay can't be placed on the map. Try again in a minute.</p></div>{% endif %}
+
+<div class="rv-rounds" id="rv-rounds">{% for r in rounds %}{% if r.i == 12 %}<span class="half"></span>{% endif %}<button type="button" data-r="{{ r.i }}" class="{{ 'w' if r.won else 'l' if r.won == false }}" {{ 'disabled' if not r.has }} title="{{ r.result }}">{{ r.n }}</button>{% endfor %}</div>
+
+<div class="rv-wrap">
+  <div>
+    <div class="m3-stage" id="m3-stage">
+      <canvas id="m3-canvas"></canvas><canvas id="m3-over"></canvas><canvas id="m3-radar" width="400" height="400"></canvas>
+      <div class="m3-pos" id="m3-pos" translate="no"></div>
+      <div class="m3-start" id="m3-start" hidden><span class="k-only"><b>Click to fly around</b><span class="small">Esc to stop</span></span><span class="t-only"></span></div>
+      <div class="m3-msg" id="m3-msg" hidden></div>
+      <div class="m3-msg" id="rv-msg" hidden></div>
+      <button type="button" class="m3-jump t-only" id="m3-jump" hidden>Jump</button>
+      <div class="m3-help" id="m3-help" hidden><span class="k-only"><kbd>Space</kbd> <span>Play</span> · <kbd>←</kbd><kbd>→</kbd> <span translate="no">5 s</span> · <kbd>,</kbd><kbd>.</kbd> <span>Round</span> · <span>Click the map to fly</span> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="t-only">Left thumb: fly · right thumb: look around</span></div>
+    </div>
+    <div class="rv-ctrl">
+      <button type="button" class="btn sm primary" id="rv-play">Play</button>
+      <span class="clock"><span id="rv-clock">0:00</span> / <span id="rv-end">0:00</span></span>
+      <input type="range" id="rv-time" min="0" max="100" step="0.1" value="0" aria-label="Round time">
+      <select id="rv-speed" aria-label="Speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+    </div>
+    <div class="rv-ctrl">
+      <span class="rv-seg"><button type="button" data-cam="top">From above</button><button type="button" data-cam="follow">Follow</button><button type="button" data-cam="free">Fly</button></span>
+      <span class="rv-seg"><button type="button" id="rv-zoom-in" title="Closer">+</button><button type="button" id="rv-zoom-out" title="Further">−</button></span>
+      <label><input type="checkbox" id="rv-names" checked> Names</label>
+      <label><input type="checkbox" id="rv-util" checked> Utility</label>
+      <label><input type="checkbox" id="m3-labels"> Callouts</label>
+      <label><input type="checkbox" id="m3-radar-t"> Radar</label>
+      <button type="button" class="btn sm ghost" id="m3-full">Fullscreen</button>
+      <span class="muted small" id="m3-info"></span>
+    </div>
+  </div>
+  <div class="rv-side">
+    <section class="card"><h3>Your team</h3><div class="rv-team" id="rv-ours"></div>
+      <h3 style="margin-top:10px">Enemy</h3><div class="rv-team" id="rv-theirs"></div>
+      <p class="small muted" style="margin:8px 0 0">Click a player to see the round through his eyes.</p></section>
+    <section class="card"><h3>Kills</h3><div class="rv-feed" id="rv-feed"></div></section>
+    <section class="card"><h3>Team review</h3>
+      <div id="rv-clist"></div>
+      <div class="rv-cadd"><input type="text" id="rv-c-text" maxlength="600" placeholder="Comment at this moment…"><button type="button" class="btn sm" id="rv-c-add">Add</button></div>
+      <div class="small muted" style="margin-top:4px"><span id="rv-c-at"></span></div>
+      <div class="small" style="color:var(--red)" id="rv-c-err"></div>
+      <p class="small muted" style="margin:6px 0 0">Comments are for everyone in the team who can open this match.</p></section>
+  </div>
+</div>
+
+<section class="card ut" style="margin-top:16px" id="utility">
+  <h2>Utility check</h2>
+  <p class="small muted" style="margin-top:0"><span>From the replay: who used how much utility, in how many rounds, and how often someone died without having used any.</span>
+    {% if not util.keys_known %}<span>The replay doesn't say which key an ability is on, and this match's numbers didn't allow working it out: the counts per key are the match data's.</span>{% endif %}</p>
+  <div class="ut-wrap"><table>
+    <tr><th>Player</th><th class="k">C</th><th class="k">Q</th><th class="k">E</th><th class="k">X</th><th>Rounds with utility</th><th>Died without using any</th><th>First ability (attack · defense)</th></tr>
+    {% for u in util.players %}{% set pk = u.per_key if util.keys_known else u.per_key_match %}
+    <tr class="{{ 'ours' if (players|selectattr('i', 'equalto', u.i)|first).ours else 'theirs' }}">
+      <td><b translate="no">{{ u.agent }}</b> <span translate="no">{{ u.name }}</span></td>
+      {% for k in ['C', 'Q', 'E', 'X'] %}<td class="k">{{ pk.get(k, 0) }}</td>{% endfor %}
+      <td>{{ u.used_rounds }} / {{ u.rounds }}</td>
+      <td class="{{ 'bad' if u.deaths and u.dry_deaths / u.deaths >= 0.5 }}">{{ u.dry_deaths }} / {{ u.deaths }}</td>
+      <td>{{ (u.first_s.attack|string ~ ' s') if u.first_s.attack is not none else '–' }} · {{ (u.first_s.defense|string ~ ' s') if u.first_s.defense is not none else '–' }}</td>
+    </tr>{% endfor %}
+  </table></div>
+  <p class="small muted" style="margin-bottom:0">"Died without using any": rounds in which the player died before using a single ability that round (setups in the buy phase count as used). First ability: median seconds after the barriers drop.</p>
+</section>
+{% if coach_url %}<p class="small" style="margin-top:12px"><a href="{{ coach_url }}">Coach this match</a></p>{% endif %}
+<script>window.NEXUS_MAP3D = {{ boot|tojson }};</script>
+<script src="{{ url_for('static', filename='map3d.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='replay.js') }}?v={{ app_version }}"></script>
+{% endblock %}

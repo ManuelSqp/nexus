@@ -293,10 +293,55 @@ def test_replay_files_are_sent_once(tmp_path):
     assert sum(x["state"] == "done" for x in s.replays.values()) == 2
     assert any("10 players, 21 rounds" in line for line in log) and any("skipped" in line for line in log)
     api.sent.clear()
-    sync.replays(s, api, log.append)                    # nothing new: nothing sent, the broken one not retried
+    sync.replays(s, api, log.append)                    # nothing new: nothing sent, the broken one not retried yet
     assert api.sent == []
     s.send_replays = False
     os.utime(fresh, (old, old))
     sync.replays(s, api, log.append)
     assert api.sent == []
     assert demos.match_id(files["broken.vrf"]) == ""
+
+
+def test_all_replays_are_sent_and_failed_ones_retried(tmp_path):
+    """4.44: every replay in the folder is sent, also ones older than the app's setup (any mode); one of a patch
+    the server can't read yet counts as sent (the server keeps it); one that failed is tried again after RETRY_S."""
+    import time as _t
+    from nexus_desktop.api import ApiError
+    d = tmp_path / "Demos"
+    d.mkdir()
+    ancient = _t.time() - 90 * 86400                         # long before the app was set up
+    for name in ("old.vrf", "new-patch.vrf", "broken.vrf"):
+        f = d / name
+        f.write_bytes(b"x" * 100)
+        os.utime(f, (ancient, ancient))
+
+    class FakeApi:
+        sent = []
+        broken_fixed = False
+
+        def replays_have(self, ids):
+            return set()
+
+        def upload_replay(self, path, progress=None):
+            self.sent.append(path.name)
+            if path.name == "new-patch.vrf":
+                return {"ok": True, "pending": True, "patch": "13.10", "name": path.name}
+            if path.name == "broken.vrf" and not self.broken_fixed:
+                raise ApiError("This replay file couldn't be read (TypeError).", 422)
+            return {"match_id": "x", "players": 10, "rounds": 20}
+
+    s = Settings(demos_dir=str(d), send_replays=True, since=_t.time())   # since: the app was set up just now
+    api, log = FakeApi(), []
+    now = _t.time()
+    sync.replays(s, api, log.append, now=now)
+    assert sorted(api.sent) == ["broken.vrf", "new-patch.vrf", "old.vrf"]
+    states = {k.split(":")[0]: v for k, v in s.replays.items()}
+    assert states["old.vrf"]["state"] == "done" and states["broken.vrf"]["state"] == "skipped"
+    assert states["new-patch.vrf"]["state"] == "done" and "13.10" in states["new-patch.vrf"]["why"]
+    assert any("read once vrfkit supports patch 13.10" in line for line in log)
+    api.sent.clear()
+    sync.replays(s, api, log.append, now=now + 3600)        # an hour later: nothing again
+    assert api.sent == []
+    api.broken_fixed = True
+    sync.replays(s, api, log.append, now=now + sync.RETRY_S + 60)   # days later: the failed one once more
+    assert api.sent == ["broken.vrf"] and {k.split(":")[0]: v for k, v in s.replays.items()}["broken.vrf"]["state"] == "done"
