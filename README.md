@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.45.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.46.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -241,7 +241,8 @@ utility, deaths without having used any, and when the first ability of a round c
 spot a player stood on is floor at that height (ramps, Heaven over Market, boxes people stand on), everything else is
 a wall. Walk around it like in the game (WASD, Shift walk, Ctrl crouch, Space jump, F to fly), with a radar (R) and
 callout names (C) you switch on and off. Colours are per area of the map, not the game's textures. Where no replay
-has been yet, the minimap's layout fills in the floor at the height of the nearest known floor (4.45), so every map is
+has been yet, the minimap's layout fills in the floor at the height of the nearest known floor (4.45; *Floor* › *Measured ·
+guessed* shows which is which), so every map is
 complete from the start (flat without any replay); the more replays of a map, the more exact its heights get.
 
 **Callouts:** *Practice › Callouts* is a quiz on the minimap of every map (the callouts come from valorant-api.com,

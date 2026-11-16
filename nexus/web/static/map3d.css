@@ -19,5 +19,6 @@
 .m3-help kbd{font-size:11px;padding:0 4px;border:1px solid rgba(255,255,255,.35);border-radius:4px}
 .m3-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:10px;font-size:13.5px}
 .m3-bar label{display:flex;gap:6px;align-items:center}
+#m3-colors{width:auto;padding:3px 8px;min-width:0}
 /* phones: after the rules above, so it wins */
 @media (max-width:700px){.m3-stage{aspect-ratio:4/5}.m3-help{font-size:11px;right:90px}#m3-radar{width:120px;height:120px;left:10px;top:10px}}

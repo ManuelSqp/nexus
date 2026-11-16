@@ -82,60 +82,44 @@
     if (u.t0 > t || (u.t1 !== null && u.t1 < t)) return false;
     return u.type === 'flash' || u.t1 === null || u.t1 - u.t0 >= MIN_LIFE;
   }
-  function ring(project, x, y, z, r, n = 20) {          // a circle lying on the ground, in perspective
-    const pts = [];
-    for (let k = 0; k < n; k++) {
-      const a = k / n * 2 * Math.PI, s = project(x + Math.cos(a) * r, y, z + Math.sin(a) * r);
-      if (!s) return null;
-      pts.push(s);
-    }
-    return pts;
+  // Smoke colours per agent (also their codenames in the replay file); everything else uses the utility type's colour.
+  const SMOKE = {omen: [0.32, 0.25, 0.46], wraith: [0.32, 0.25, 0.46], brimstone: [0.86, 0.56, 0.40], sarge: [0.86, 0.56, 0.40],
+                 viper: [0.38, 0.68, 0.32], pandemic: [0.38, 0.68, 0.32], astra: [0.58, 0.38, 0.74], rift: [0.58, 0.38, 0.74],
+                 harbor: [0.30, 0.56, 0.82], mage: [0.30, 0.56, 0.82], clove: [0.96, 0.82, 0.90], smonk: [0.96, 0.82, 0.90],
+                 miks: [0.62, 0.88, 0.66], jett: [0.88, 0.92, 0.97], wushu: [0.88, 0.92, 0.97], cypher: [0.86, 0.88, 0.92], gumshoe: [0.86, 0.88, 0.92]};
+  const SMOKE_DEFAULT = [0.80, 0.82, 0.86];
+  const hex = h => { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+  function utilColor(u) {
+    if (u.type === 'smoke') return SMOKE[(u.agent || '').toLowerCase()] || SMOKE_DEFAULT;
+    return hex(C.util_col[u.type] || '#cccccc');
   }
-  function rgba(hex, a) {
-    const n = parseInt(hex.slice(1), 16);
-    return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`;
+  function objects() {                     // 3D utility for map3d.js (the walls hide them)
+    if (!S.d || !S.util) return [];
+    const out = [];
+    for (const u of S.d.util) {
+      if (!live(u, S.t)) continue;
+      const y = u.y !== null ? u.y : 0, col = utilColor(u), seed = (u.x * 7.3 + u.z * 3.1) % 50;
+      if (u.type === 'smoke') out.push({x: u.x, y: y + 2.4, z: u.z, r: R_UTIL.smoke, sc: [1, 0.9, 1], col, a: 0.88, seed});
+      else if (u.type === 'damage' || u.type === 'slow') out.push({x: u.x, y: y + 0.06, z: u.z, r: R_UTIL[u.type], sc: [1, 0.035, 1], col, a: 0.55, seed, cloudy: false});
+      else if (u.type === 'wall') out.push({x: u.x, y: y + 2, z: u.z, r: 2, sc: [0.35, 1, 0.35], col, a: 0.6, seed, cloudy: false});
+      else out.push({x: u.x, y: y + 1, z: u.z, r: 0.35, col, a: 0.95, seed, cloudy: false});
+    }
+    return out;
   }
-  function drawUtil(g, project, u, dpr) {
-    const c = C.util_col[u.type] || '#cccccc', y = u.y !== null ? u.y : 0, R = R_UTIL[u.type] || 1.5;
-    if (u.type === 'smoke') {                            // a ball of smoke: the same from every side
-      const s = project(u.x, y + R * 0.55, u.z);
-      if (!s) return;
-      const r = Math.max(6 * dpr, R * s.px);
-      const gr = g.createRadialGradient(s.x - r * 0.3, s.y - r * 0.35, r * 0.1, s.x, s.y, r);
-      gr.addColorStop(0, rgba('#eef1f6', 0.95)); gr.addColorStop(0.6, rgba(c, 0.88)); gr.addColorStop(1, rgba(c, 0.55));
-      g.fillStyle = gr; g.beginPath(); g.arc(s.x, s.y, r, 0, 2 * Math.PI); g.fill();
-      g.lineWidth = 1.2 * dpr; g.strokeStyle = rgba('#ffffff', 0.55); g.stroke();
-    } else if (u.type === 'wall') {                     // a standing column where the wall is
-      const a = project(u.x, y, u.z), b = project(u.x, y + 4, u.z);
-      if (!a || !b) return;
-      const wd = Math.max(5 * dpr, 1.2 * a.px);
-      g.fillStyle = rgba(c, 0.5); g.strokeStyle = rgba(c, 0.95); g.lineWidth = 1.5 * dpr;
-      g.beginPath(); g.rect(a.x - wd / 2, b.y, wd, a.y - b.y); g.fill(); g.stroke();
-    } else if (u.type === 'damage' || u.type === 'slow') {   // on the ground
-      const pts = ring(project, u.x, y + 0.05, u.z, R);
-      if (!pts) return;
-      g.fillStyle = rgba(c, 0.35); g.strokeStyle = rgba(c, 0.95); g.lineWidth = 2 * dpr;
-      g.beginPath(); pts.forEach((p, k) => (k ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.closePath(); g.fill(); g.stroke();
-    } else {                                             // recon, orbs, traps, flashes: a small marker
-      const s = project(u.x, y + 1, u.z);
-      if (!s) return;
-      const r = Math.max(4 * dpr, Math.min(14 * dpr, 0.5 * s.px));
-      g.fillStyle = rgba(c, 0.85); g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 1.5 * dpr;
-      g.beginPath(); g.arc(s.x, s.y, r, 0, 2 * Math.PI); g.fill(); g.stroke();
-    }
-    if (S.names && u.agent) {
-      const s = project(u.x, y + (u.type === 'smoke' ? R * 1.15 : 2.2), u.z);
-      if (s) {
-        g.font = `600 ${Math.round(10.5 * dpr)}px system-ui, sans-serif`; g.textAlign = 'center';
-        g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(0,0,0,.7)'; g.strokeText(u.agent, s.x, s.y);
-        g.fillStyle = '#fff'; g.fillText(u.agent, s.x, s.y);
-      }
-    }
+  function drawUtil(g, project, u, dpr) {    // the agent's name over his utility (the shapes are 3D now)
+    if (!S.names || !u.agent) return;
+    const y = u.y !== null ? u.y : 0;
+    const s = project(u.x, y + (u.type === 'smoke' ? R_UTIL.smoke * 0.95 + 2.6 : 2.2), u.z);
+    if (!s) return;
+    g.font = `600 ${Math.round(10.5 * dpr)}px system-ui, sans-serif`; g.textAlign = 'center';
+    g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(0,0,0,.7)'; g.strokeText(u.agent, s.x, s.y);
+    g.fillStyle = '#fff'; g.fillText(u.agent, s.x, s.y);
   }
 
   // ------------------------------------------------------------------------------------------ drawing
   function draw(g, project, w, h, dpr) {
     if (!S.d) return;
+    g.lineJoin = 'round';                       // no spikes on the outlined text ("M")
     const t = S.t, d = S.d;
     if (S.util) for (const u of d.util) if (live(u, t)) drawUtil(g, project, u, dpr);
     for (const k of d.kills) {
@@ -181,7 +165,8 @@
     if (S.util) for (const u of d.util) {
       if (!live(u, t)) continue;
       const [x, y] = toR(u.x, u.z);
-      g.globalAlpha = 0.45; g.fillStyle = C.util_col[u.type] || '#ccc';
+      const uc = utilColor(u);
+      g.globalAlpha = 0.55; g.fillStyle = `rgb(${uc[0] * 255 | 0},${uc[1] * 255 | 0},${uc[2] * 255 | 0})`;
       g.beginPath(); g.arc(x, y, Math.max(2, (R_UTIL[u.type] || 1.5) * k), 0, 2 * Math.PI); g.fill(); g.globalAlpha = 1;
     }
     for (const kl of d.kills) {
@@ -317,7 +302,7 @@
   });
   document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement) setCam('free'); });
 
-  const layer = {tick, draw, radar, ready: () => { camera(); }};
+  const layer = {tick, draw, radar, objects, ready: () => { camera(); }};
   window.nexusMap3D.setLayer(layer);
   window.nexusMap3D.setOpt('labels', false);
   loadRound(C.start);

@@ -65,5 +65,5 @@ def test_map_without_replays_is_flat_from_the_minimap(app):  # noqa: F811 (fixtu
 def test_utility_shapes_in_the_viewer():
     js = (STATIC / "replay.js").read_text()
     assert "MIN_LIFE = 0.9" in js and "function live(u, t)" in js and "function drawUtil(" in js
-    assert "u.type === 'smoke'" in js and "u.type === 'wall'" in js and "function ring(" in js
+    assert "u.type === 'smoke'" in js and "u.type === 'wall'" in js         # 4.46: drawn as 3D objects (test_446)
     assert "if (!live(u, t)) continue;" in js                        # the radar hides the same flickers

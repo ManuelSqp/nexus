@@ -4,6 +4,16 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.46.0
+- **Smokes are 3D**: real balls of smoke in the 3D scene, cloudy, lit from above, with a soft edge, in the agent's
+  colour (Miks green, Clove pink-white, Omen purple, Viper green, Astra violet, Harbor blue, Brimstone orange …).
+  Walls hide them like everything else in the map, and inside one you see fog. Mollies and slows are discs on the
+  floor, walls stand as columns, recon and traps are small balls, all hidden by walls too.
+- **The map in one colour**, with a switch under the map (*Floor*): one colour, **measured · guessed** (floors the
+  replays measured vs. filled in from the minimap) or the map areas (sites, mid, attacker and defender side) as before.
+  Both on Practice › 3D maps and in the replay viewer; the choice is remembered.
+- German texts.
+
 ## 4.45.0
 - **3D maps are complete**: where no replay has been, the minimap's layout fills in the floor (walkable = the light
   parts of the minimap, worked out per image; boxes and walls stay solid) at the height of the nearest floor a replay
