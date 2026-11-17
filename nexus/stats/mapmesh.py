@@ -36,8 +36,9 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 1
+VERSION = 2                      # 2 (4.48.1): objects simplified one by one; the roof map marks walkable spots
 TARGET_TRIS = 260_000            # after simplifying
+BIG_CM = 600                     # objects bigger than this (their own size) aren't simplified
 MIN_SIZE_CM = 80                 # objects smaller than this (their biggest side) are left out
 VOX = 0.25                       # m, the server's see-through grid
 VOX_WEB = 0.5                    # m, the browser's
@@ -189,9 +190,8 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
     hi = nav_w.reshape(-1, 3).max(0) + [MARGIN_CM[0], MARGIN_CM[1], MARGIN_CM[3]]
     say(f"{code}: layout {src.layout.name}, {len(src.placed)} objects, axes flipped: {flip}")
 
-    # ---- the geometry, in world cm
-    solid, glass = [], []
-    n_obj = 0
+    # ---- the geometry, in world cm: which objects, and how many triangles they'd be
+    solid, glass = [], []                                 # (mesh, its file, world matrix)
     for p in src.placed:
         if p.invisible or not render_layer(p.layer) or CLUTTER.search(p.ref.rsplit("/", 1)[-1]) or TECH.search(p.ref):
             continue
@@ -205,32 +205,27 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
             c = W[:3, 3]
             if size.max() < MIN_SIZE_CM or not ((c >= lo - 3000) & (c <= hi + 3000)).all():
                 continue
-            v = _apply(m.points, W)
-            (glass if m.glass else solid).append((v, m.tris))
-            n_obj += 1
+            (glass if m.glass else solid).append((m, id(m), W))
     if not solid:
         say(f"{code}: no meshes found (is the Environment folder exported?)")
         return None
-    V, T = _merge(solid)
-    keep = _inside(V, T, lo, hi)
-    V, T = _compact(V, T[keep])
-    say(f"{code}: {n_obj} objects, {len(T):,} triangles before simplifying")
-
+    n_obj = len(solid) + len(glass)
     fr = Frame(mi)
-    Vm = _to_frame(V, mi, fr)
     navm = _to_frame(nav_w.reshape(-1, 3), mi, fr).reshape(-1, 3, 3)
 
-    # ---- see-through grids (before simplifying: thin walls stay closed)
-    vox = voxelize(Vm, T, VOX)
+    # ---- see-through grid from the full geometry (thin walls stay closed)
+    V, T = _place(solid, lo, hi, mi, fr)
+    say(f"{code}: {n_obj} objects, {len(T):,} triangles before simplifying")
+    vox = voxelize(V, T, VOX)
     say(f"{code}: see-through grid {vox['shape']}")
+    del V, T
 
-    # ---- simplify
-    Vs, Ts = simplify(Vm, T, TARGET_TRIS)
+    # ---- simplify each object on its own (simplifying the whole map at once tears holes into floors where
+    # separate objects meet), as much as needed to stay near TARGET_TRIS
+    Vs, Ts = _place(solid, lo, hi, mi, fr, simple=per_object(solid, TARGET_TRIS))
+    Vs, Ts = weld(Vs, Ts, 0.005)
     if glass:
-        G, GT = _merge(glass)
-        GT = GT[_inside(G, GT, lo, hi)]
-        G, GT = _compact(G, GT)
-        Gm, GT = simplify(_to_frame(G, mi, fr), GT, 40_000) if len(GT) else (np.zeros((0, 3)), np.zeros((0, 3), int))
+        Gm, GT = _place(glass, lo, hi, mi, fr, simple=per_object(glass, 40_000))
     else:
         Gm, GT = np.zeros((0, 3)), np.zeros((0, 3), np.int64)
     say(f"{code}: {len(Ts):,} triangles after simplifying")
@@ -238,7 +233,7 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
     # ---- callout zones and the walkable grid
     zones = _zones(src, F, mi, fr)
     cells, floors = walk_cells(navm)
-    hmap = roof_map(navm)
+    hmap = roof_map(floors, vox)
     area = _area_per_vertex(Vs, zones, mi, fr)
     foot = foot_cm(samples, floors, mi, fr) if samples else None
     callouts = _callout_points(mi, fr, floors, zones)
@@ -256,6 +251,64 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
             "bytes": len(blob), "hash": hashlib.sha1(blob).hexdigest()[:12]}
     say(f"{code}: done in {meta['seconds']} s, {len(blob) / 1e6:.1f} MB")
     return meta, blob, vox
+
+
+def per_object(items, target: int) -> dict:
+    """Each mesh simplified once (it's placed many times): the same share of triangles kept for every mesh with
+    more than a few, chosen so the whole map lands near target. -> {id(mesh): (points, triangles)}"""
+    uses: dict[int, list] = {}
+    for m, key, _W in items:
+        uses.setdefault(key, [m, 0])[1] += 1
+    total = sum(len(m.tris) * n for m, n in uses.values())
+    out: dict[int, tuple] = {}
+    if total <= target:
+        return out
+    # big pieces (floors, walls, buildings: more than BIG_CM across) stay as they are: simplified, open surfaces
+    # shrink at their edges and leave gaps. The props and details take the cut.
+    fixed = lambda m: len(m.tris) <= 48 or (m.points.max(0) - m.points.min(0)).max() > BIG_CM   # noqa: E731
+    small = sum(len(m.tris) * n for m, n in uses.values() if fixed(m))
+    ratio = max(0.02, (target - small) / max(1, total - small))
+    for key, (m, _n) in uses.items():
+        if fixed(m):
+            continue
+        keep = max(24, int(len(m.tris) * ratio))
+        if keep >= len(m.tris):
+            continue
+        out[key] = _simplify_one(m.points, m.tris, keep)
+    return out
+
+
+def _simplify_one(P, T, keep):
+    P, T = weld(P, T, 0.5)                                 # cm: one object, its seams closed
+    if len(T) <= keep:
+        return P, T
+    try:
+        import fast_simplification as fs
+        v2, f2 = fs.simplify(P.astype(np.float32), T.astype(np.int32), target_reduction=1 - keep / len(T))
+        if len(f2):
+            return np.asarray(v2, float), np.asarray(f2, np.int64)
+    except Exception:
+        pass
+    return P, T
+
+
+def _place(items, lo, hi, mi, fr, simple: dict | None = None):
+    """The objects at their places, in the frame (metres): (vertices, triangles)."""
+    vs, ts, off = [], [], 0
+    for m, key, W in items:
+        P, T = (simple or {}).get(key, (m.points, m.tris))
+        v = _apply(P, W)
+        c = v[T].mean(1)
+        k = ((c >= lo) & (c <= hi)).all(1)
+        if not k.any():
+            continue
+        vs.append(v)
+        ts.append(T[k] + off)
+        off += len(v)
+    if not vs:
+        return np.zeros((0, 3)), np.zeros((0, 3), np.int64)
+    V, T = _compact(np.concatenate(vs), np.concatenate(ts))
+    return _to_frame(V, mi, fr), T
 
 
 def _merge(parts):
@@ -399,39 +452,54 @@ def walk_cells(navm: np.ndarray) -> tuple[list, dict]:
     return cells, floors
 
 
-def roof_map(navm: np.ndarray) -> dict:
-    """Per square metre: the highest floor (with the floors around it spread outwards into buildings and walls).
-    The browser hides what's more than ROOF above it, so the view from above shows the floors, not the roofs."""
+def roof_map(floors: dict, vox: dict | None = None) -> dict:
+    """Per square metre: the highest floor of the navigation mesh (where there's none, inside buildings and behind
+    walls, the floors around spread outwards 10 m). The browser hides what's more than ROOF above it, so the view
+    from above shows the floors, and covers the closed-off spots where something was cut away (a building) with a
+    dark lid at the cut, like the blocks on the minimap.
+    v: u16 cm above ymin; the lowest bit 1 = walkable, the next bit 1 = lid."""
     from scipy import ndimage
-    P = navm.reshape(-1, 3)
-    x0, z0 = math.floor(P[:, 0].min()) - 12, math.floor(P[:, 2].min()) - 12
-    w = int(math.ceil(P[:, 0].max() - x0)) + 13
-    h = int(math.ceil(P[:, 2].max() - z0)) + 13
+    if not floors:
+        return {"x0": 0, "z0": 0, "w": 1, "h": 1, "cell": HCELL, "ymin": 0.0, "v": np.zeros((1, 1), np.uint16)}
+    k = int(round(HCELL / CELL))
+    ij = np.array(list(floors.keys()))
+    top_h = np.array([max(v) for v in floors.values()])
+    ci, cj = np.floor_divide(ij[:, 0], k), np.floor_divide(ij[:, 1], k)    # 1 m cells: x -> column, z -> row
+    x0, z0 = int(ci.min()) - 12, int(cj.min()) - 12
+    w, h = int(ci.max()) - x0 + 13, int(cj.max()) - z0 + 13
     top = np.full((h, w), -np.inf)
-    for tri in navm:
-        for a in (0.0, 0.25, 0.5, 0.75):                  # corners, edges and inside, cheaply
-            for b in (0.0, 0.25, 0.5, 0.75):
-                if a + b > 1:
-                    continue
-                p = tri[0] * (1 - a - b) + tri[1] * a + tri[2] * b
-                i, j = int(p[2] - z0), int(p[0] - x0)
-                if 0 <= i < h and 0 <= j < w and p[1] > top[i, j]:
-                    top[i, j] = p[1]
-        c = tri.mean(0)
-        i, j = int(c[2] - z0), int(c[0] - x0)
-        if 0 <= i < h and 0 <= j < w and c[1] > top[i, j]:
-            top[i, j] = c[1]
+    np.maximum.at(top, (cj - z0, ci - x0), top_h)
     known = np.isfinite(top)
-    if not known.any():
-        return {"x0": x0, "z0": z0, "w": w, "h": h, "cell": 1.0, "ymin": 0.0, "v": np.zeros((h, w), np.uint16)}
     fill = np.where(known, top, -1e6)
     for _ in range(10):                                   # spread 10 m into buildings and over walls
         grown = ndimage.maximum_filter(fill, size=3)
         fill = np.where(fill > -1e5, fill, grown)
     fill[fill < -1e5] = float(np.median(top[known]))
     ymin = float(fill.min()) - 1
-    v = np.clip((fill - ymin) * 100, 0, 65535).astype(np.uint16)
-    return {"x0": x0, "z0": z0, "w": w, "h": h, "cell": HCELL, "ymin": round(ymin, 2), "v": v}
+    lid = np.zeros_like(known)
+    if vox is not None:                                    # something solid rises above the cut there
+        nx, ny, nz = vox["shape"]
+        g = vox_bool(vox).reshape(ny, nz, nx)
+        has = g.any(0)
+        top_iy = np.where(has, ny - 1 - np.argmax(g[::-1], axis=0), -1)          # (nz, nx)
+        ox, oy, oz = vox["origin"]
+        top_y = np.where(top_iy >= 0, oy + (top_iy + 1) * vox["cell"], -np.inf)
+        rows, cols = np.nonzero(~known)
+        cx = (cols + x0 + 0.5) * HCELL
+        cz = (rows + z0 + 0.5) * HCELL
+        r = int(round(0.5 * HCELL / vox["cell"]))
+        ix = np.floor((cx - ox) / vox["cell"]).astype(int)
+        iz = np.floor((cz - oz) / vox["cell"]).astype(int)
+        best = np.full(len(rows), -np.inf)
+        for dx in range(-r, r):
+            for dz in range(-r, r):
+                a, b = ix + dx, iz + dz
+                ok = (a >= 0) & (a < nx) & (b >= 0) & (b < nz)
+                best[ok] = np.maximum(best[ok], top_y[b[ok], a[ok]])
+        lid[rows, cols] = best > fill[rows, cols] + ROOF
+    v = (np.clip((fill - ymin) * 100, 0, 65532).astype(np.int64) & ~3) | known.astype(np.int64) | (lid.astype(np.int64) << 1)
+    return {"x0": x0 * HCELL, "z0": z0 * HCELL, "w": w, "h": h, "cell": HCELL, "ymin": round(ymin, 2),
+            "v": v.astype(np.uint16)}
 
 
 def foot_cm(samples, floors: dict, mi, fr) -> float | None:
@@ -568,7 +636,7 @@ def _area_per_vertex(Vs, zones, mi, fr) -> np.ndarray:
     if not zones or not len(Vs):
         return np.zeros(len(Vs), np.uint8)
     k = zone_index(zones, _frame_to_world(Vs, mi, fr))
-    return np.clip(k + 1, 0, 255).astype(np.uint8)
+    return np.clip(k + 1, 0, 254).astype(np.uint8)               # 255: the lids (browser)
 
 
 def _zone_public(z: dict) -> dict:

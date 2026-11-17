@@ -80,8 +80,10 @@ def write_game(root: Path) -> None:
     usd_mesh(c / "Environment" / "Test" / "Window.usda", "Window", *box((0, 0, 0), (10, 200, 200)), materials=["M_Glass_Clear"])
     usd_mesh(c / "Environment" / "Test" / "StreetLamp.usda", "StreetLamp", *box((0, 0, 0), (100, 100, 400)))
     usd_mesh(c / "Environment" / "Test" / "Mountain.usda", "Mountain", *box((-20000, -20000, 0), (20000, 20000, 8000)))
+    usd_mesh(c / "Environment" / "Test" / "Tower.usda", "Tower", *box((6500, -1000, 0), (7500, 0, 1000)))
     art = placed("Wall_0", "../../Environment/Test/Wall.usda") + placed("Window_0", "../../Environment/Test/Window.usda", t=(2000, 0, 0)) \
-        + placed("StreetLamp_0", "../../Environment/Test/StreetLamp.usda", t=(3000, 3000, 0))
+        + placed("StreetLamp_0", "../../Environment/Test/StreetLamp.usda", t=(3000, 3000, 0)) \
+        + placed("Tower_0", "../../Environment/Test/Tower.usda")
     art += ('    def Scope "Crate_1"\n    {\n        def PointInstancer "InstancedStaticMesh"\n        {\n'
             '            rel prototypes = </Testmap_Art/Crate_1/InstancedStaticMesh/Prototypes/InstancedStaticMesh>\n'
             '            int[] protoIndices = [0, 0]\n            point3f[] positions = [(0, 0, 0), (500, 0, 0)]\n'
@@ -163,7 +165,7 @@ def built(tmp_path, synthetic):  # noqa: F811
 def test_build_map(built):
     mi, meta, blob, vox = built
     assert meta["version"] == mm.VERSION and meta["tris"] > 20 and meta["flip"] == "y"
-    assert meta["objects"] == 4                                  # wall, glass, 2 crates (lamp: clutter; vista, volumes: out)
+    assert meta["objects"] == 5                                  # wall, glass, 2 crates, tower (lamp: clutter; vista, volumes: out)
     head = mm.unpack_head(blob)
     assert blob[:4] == b"NXM1" and head["gnt"] > 0 and head["nt"] == meta["tris"]
     assert head["roof"]["w"] > 10 and head["vox"]["cell"] == mm.VOX_WEB
@@ -174,6 +176,36 @@ def test_build_map(built):
     assert meta["cells"] and all(len(c) == 4 for c in meta["cells"])
     assert any(c[3] == 1 for c in meta["cells"])                 # floor in A Site has A's colour
     assert meta["hand"] == -1 and meta["start"]
+
+
+def test_roof_map_walkable_and_lids(built):
+    mi, meta, blob, _vox = built
+    head = mm.unpack_head(blob)
+    n = int.from_bytes(blob[4:8], "little")
+    o, ln = head["sections"]["roof"]
+    R = head["roof"]
+    v = np.frombuffer(blob[8 + n + o:8 + n + o + ln], "<u2").reshape(R["h"], R["w"])
+    from nexus.stats.map3d import Frame
+    fr = Frame(mi)
+
+    def cell(x, y):
+        a, b = fr.to_m(x, y)
+        return int(v[int((b - R["z0"]) // R["cell"]), int((a - R["x0"]) // R["cell"])])
+    assert cell(-5000, -4500) & 1 and not cell(-5000, -4500) & 2           # on the floor: walkable, no lid
+    t = cell(7000, 500)                                                    # the tower beyond the walkable area
+    assert not t & 1 and t & 2                                             # (files' y −1000..0 = world 0..1000)
+
+
+def test_objects_simplified_one_by_one():
+    big = gf.Mesh(np.random.default_rng(1).random((3000, 3)) * [2000, 2000, 10], np.arange(3000).reshape(-1, 3))
+    rng = np.random.default_rng(2)
+    pts = rng.random((800, 3)) * 100
+    from scipy.spatial import ConvexHull
+    prop = gf.Mesh(pts, ConvexHull(pts).simplices)
+    items = [(big, 1, np.eye(4))] + [(prop, 2, np.eye(4))] * 20
+    out = mm.per_object(items, 2000)
+    assert 1 not in out                                          # the big piece (floor, wall) stays as it is
+    assert 2 in out and len(out[2][1]) < len(prop.tris)          # the prop is simplified, once for all 20
 
 
 def test_zone_lookup_and_world_frame(built):

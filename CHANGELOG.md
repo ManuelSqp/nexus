@@ -4,6 +4,15 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.48.1
+- 3D maps from the game's files: **no more holes in the floors** and no more slanted walls. The map used to be
+  simplified as a whole, which tore gaps where separate pieces meet; now each object is simplified on its own, and
+  big pieces (floors, walls, buildings) not at all.
+- With the roofs cut away, the closed-off blocks (buildings, the space behind walls) used to be open to the sky;
+  they now get a dark lid at the cut, like the blocks on the minimap.
+- The maps are built again by themselves after the update (a minute or two in the background, or
+  `nexus build-game --data …`).
+
 ## 4.48.0
 - **3D maps from the game's files**: with VALORANT's map files exported with FModel (USD) on the server
   (`data/game/`, README › 3D maps from the game's files), the 3D maps are the real ones: every wall, floor, ramp and box
