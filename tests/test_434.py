@@ -32,4 +32,4 @@ def test_owner_links_a_teammate(app):  # noqa: F811 (fixture)
 
 
 def test_replay_notes():
-    assert replayfile.SAMPLE_MS == 100 and "Unrated, Competitive, Swiftplay or Premier" in replayfile.__doc__
+    assert replayfile.SAMPLE_MS == 100 and "Unrated, Competitive, Swiftplay, Premier or Custom" in replayfile.__doc__

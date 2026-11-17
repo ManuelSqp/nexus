@@ -4,6 +4,10 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.47.1
+- Fixed a test that still expected the old replay text without Custom games (the tests on GitHub failed for 4.47.0;
+  Nexus itself was fine).
+
 ## 4.47.0
 - **Custom games**: replays of Custom games work like any other replay: upload them (or let the Nexus app send them),
   watch them in 3D with the utility check and the team review, and coach them. The match details (names, teams,
