@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from pathlib import Path
 
 from . import pipeline
@@ -51,6 +52,24 @@ def cmd_vrfkit_update(cfg: Config, args) -> None:
           + (f" · tested: {st['tested']}" if st.get("tested") and st.get("updated") == st.get("checked") else ""))
     if st.get("error"):
         raise SystemExit(1)
+
+
+def cmd_build_game(cfg: Config, args) -> None:
+    """4.48: build the 3D maps and agent models from the game's files in <data>/game (web/gamebuild.py)."""
+    from .web.gamebuild import GameBuilder, map_of_files
+    data = Path(args.data).resolve()
+    b = GameBuilder(data, map_of_files(data))
+    if not b.available():
+        raise SystemExit(f"No game files in {b.root}: copy the export there first (README › 3D maps from the game files).")
+    t0 = time.time()
+    b.build_all(force=args.force, only=args.map or "", say=print, agents=not args.no_agents)
+    built = {k: v for k, v in b.status.items() if v != "missing"}
+    for k, v in sorted(built.items()):
+        print(f"{k}: {v}")
+    missing = sorted(k for k, v in b.status.items() if v == "missing")
+    if missing:
+        print("not in the export: " + ", ".join(missing))
+    print(f"done in {time.time() - t0:.0f} s")
 
 
 # ---------------------------------------------------------------------------
@@ -229,12 +248,18 @@ def main(argv: list[str] | None = None) -> None:
     v.add_argument("--dry-run", action="store_true", help="only check whether there's a new version")
     v.add_argument("--rollback", action="store_true", help="go back to the vrfkit before the last update")
 
+    gb = sub.add_parser("build-game", help="build the 3D maps and agent models from the game's files (data/game)")
+    gb.add_argument("--data", default="data", help="the data folder of the web app")
+    gb.add_argument("--map", help="only this map (e.g. Ascent)")
+    gb.add_argument("--force", action="store_true", help="build again even when it's up to date")
+    gb.add_argument("--no-agents", action="store_true", help="only the maps")
+
     args = ap.parse_args(argv)
     cfg = load_config(args.config)
     try:
         {"web": cmd_web, "history": cmd_history, "coach": cmd_coach, "sync": cmd_sync,
          "calibrate-minimap": cmd_calibrate, "notes-template": cmd_notes,
-         "vrfkit-update": cmd_vrfkit_update}[args.cmd](cfg, args)
+         "vrfkit-update": cmd_vrfkit_update, "build-game": cmd_build_game}[args.cmd](cfg, args)
     except HenrikError as e:
         raise SystemExit(f"HenrikDev API: {e}")
     except OllamaError as e:

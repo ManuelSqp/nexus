@@ -13,8 +13,9 @@
 {{ vc.pagehead('3D maps', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
    'Walk around a map rebuilt from the replays on the server') }}
 
-<div class="m3-maps">{% for m in maps %}<button type="button" data-map="{{ m.name }}" translate="no" title="{{ m.replays }} replays">{{ m.name }}<span>{{ m.replays }}</span></button>{% endfor %}</div>
-{% if not maps|selectattr('replays')|list %}{# 4.45: the maps still open (flat, from the minimap) #}
+<div class="m3-maps">{% for m in maps %}<button type="button" data-map="{{ m.name }}" translate="no" title="{{ m.replays }} replays">{{ m.name }}<span>{{ m.replays }}</span>{% if m.game %}<span class="m3-g" title="From the game's files">◆</span>{% endif %}</button>{% endfor %}</div>
+{% if game_files and not game_maps %}<p class="small muted" style="margin:-4px 0 10px"><span>The game's files are on the server: the maps are being built from them (a minute per map).</span> <span>Until then they're rebuilt from the replays.</span></p>{% endif %}
+{% if not maps|selectattr('replays')|list and not game_maps %}{# 4.45: the maps still open (flat, from the minimap) #}
 <section class="card" style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center"><p class="muted" style="margin:0;flex:1;min-width:240px"><span>No replay files on the server yet.</span>
   <span>Until then the maps are flat, from the minimap; replays add ramps, stairs and boxes (from the Nexus app or the Replay files page).</span> <span>Replays exist for Unrated, Competitive, Swiftplay, Premier and Custom games.</span></p>
   <a class="btn primary" href="{{ url_for('replay_files', pid=p.id) }}">Upload replay files</a></section>
@@ -33,12 +34,14 @@
 <div class="m3-bar">
   <label><input type="checkbox" id="m3-labels"> Callouts</label>
   <label><input type="checkbox" id="m3-radar-t"> Radar</label>
-  <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
+  <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="height">Height</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
+  <label title="Show the roofs (from above they hide the floors)"><input type="checkbox" id="m3-roofs"> Roofs</label>
   <button type="button" class="btn sm ghost" id="m3-full">Fullscreen</button>
   <span class="muted small" id="m3-info"></span>
 </div>
-<p class="small muted" style="margin:6px 0 0"><span>Floor colours</span> · <b>Measured · guessed</b>: <span style="color:#cdb07f">■</span> <span>measured by replays</span>, <span style="color:#8fa1bd">■</span> <span>filled in from the minimap</span> · <b>Map areas</b>: <span>sites, mid, attacker and defender side</span></p>
-<p class="small muted" style="margin-top:12px;max-width:90ch"><span>This map is rebuilt from where players stood in the replays, not taken from the game: every spot someone stood on is floor at that height.</span>
+<p class="small muted" style="margin:6px 0 0" data-legend="game" hidden><span>The map is built from the game's files.</span> <span>Floor colours</span> · <b>Height</b>: <span>low blue, high sand</span> · <b>Map areas</b>: <span>the game's callout zones</span></p>
+<p class="small muted" style="margin:6px 0 0" data-legend="replays"><span>Floor colours</span> · <b>Measured · guessed</b>: <span style="color:#cdb07f">■</span> <span>measured by replays</span>, <span style="color:#8fa1bd">■</span> <span>filled in from the minimap</span> · <b>Map areas</b>: <span>sites, mid, attacker and defender side</span></p>
+<p class="small muted" style="margin-top:12px;max-width:90ch"><span>Maps marked ◆ are built from the game's own files (walls, floors and boxes as in the game, in one colour; plants, cables and other small things are left out).</span> <span>The others are rebuilt from where players stood in the replays: every spot someone stood on is floor at that height.</span>
   <span>Where no replay has been yet, the minimap's layout fills the floor at the height of the nearest known floor (without any replay of a map it is flat).</span>
   <span>The more replays of a map on the server, the more exact the heights get: ramps, stairs, boxes.</span> <span>Colours are per area of the map, not the game's textures.</span>
   <span>Mouse speed: your Valorant sensitivity from the aim trainer.</span></p>

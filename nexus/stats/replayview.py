@@ -21,7 +21,8 @@ import statistics
 
 from .. import replayfile
 from ..models import Match
-from .map3d import FOOT_CM, Frame
+from . import sight as sg
+from .map3d import CELL, FOOT_CM, Frame
 
 PATH_MS = 200                     # one point per player every 200 ms (the viewer moves smoothly between them)
 KEYS = ("C", "Q", "E", "X")
@@ -32,8 +33,14 @@ FIT_SHARE = 0.25                  # the slot numbering is used when it misses at
 class Ctx:
     """A match with its replay, lined up: built once per match and kept (web/replayview.py caches a few)."""
 
-    def __init__(self, data: dict, match: Match, mi, agent_names: dict[str, str] | None = None):
+    def __init__(self, data: dict, match: Match, mi, agent_names: dict[str, str] | None = None,
+                 game: dict | None = None):
         self.data, self.match, self.mi = data, match, mi
+        # 4.48: the map built from the game's files: {"meta": mapmesh meta, "vox": see-through grid or None}
+        self.game = game if game and game.get("meta") else None
+        self.zones = sg.Zones(self.game["meta"].get("zones")) if self.game else None
+        self.sight = sg.Sight(self.game["vox"]) if self.game and self.game.get("vox") else None
+        self.foot_cm = FOOT_CM
         self.offsets, self.quality = replayfile.align(data, match)
         self.frame = Frame(mi) if mi is not None else None
         self.agent_names = agent_names or {}
@@ -46,11 +53,36 @@ class Ctx:
             # view direction: the world -> minimap transform is linear for directions
             self._du = (0.0, mi.x_mult)            # d(u)/d(x), d(u)/d(y)
             self._dv = (mi.y_mult, 0.0)
+        if self.game and mi is not None:
+            f = self.game["meta"].get("foot_cm")
+            self.foot_cm = f if f is not None else (self._measure_foot() or FOOT_CM)
+        self._tracks = None
+        self._reviews: dict[int, dict] = {}
 
     # -------------------------------------------------------------------------------------------- frame
     def to3d(self, x: float, y: float, z: float | None) -> tuple[float, float, float]:
         mx, mz = self.frame.to_m(x, y)
-        return round(mx, 2), round(((z or 0.0) - FOOT_CM) / 100, 2), round(mz, 2)
+        return round(mx, 2), round(((z or 0.0) - self.foot_cm) / 100, 2), round(mz, 2)
+
+    def _measure_foot(self) -> float | None:
+        """4.48: how far above the game's floor this replay puts players (cm), when the map's build had no replays."""
+        floors: dict = {}
+        for i, j, h, *_ in self.game["meta"].get("cells") or []:
+            floors.setdefault((i, j), []).append(h)
+        d = []
+        for rows in list((self.data.get("pos") or {}).values())[:10]:
+            for r in rows[::25]:
+                if len(r) < 4:
+                    continue
+                mx, mz = self.frame.to_m(r[1], r[2])
+                lv = floors.get((math.floor(mx / CELL), math.floor(mz / CELL)))
+                if not lv:
+                    continue
+                zm = r[3] / 100
+                below = [h for h in lv if h <= zm + 0.3]
+                if below and zm - max(below) < 2.5:
+                    d.append(zm - max(below))
+        return round(statistics.median(d) * 100, 1) if len(d) >= 50 else None
 
     def yaw3d(self, yaw_deg: float) -> float:
         a = math.radians(yaw_deg or 0.0)
@@ -121,12 +153,16 @@ class Ctx:
             if seq:
                 paths[self.index[puuid]] = seq
         kills = []
-        for k in r.kills:
+        reviews = self.reviews(idx)
+        for n, k in enumerate(r.kills):
             if k.victim not in self.index:
                 continue
             x, y, z = self.to3d(k.victim_x, k.victim_y, self._z_at(k.victim, off + k.t_round_ms))
-            kills.append({"t": round(k.t_round_ms / 1000, 2), "victim": self.index[k.victim],
-                          "killer": self.index.get(k.killer), "weapon": k.weapon, "x": x, "y": y, "z": z})
+            kd = {"t": round(k.t_round_ms / 1000, 2), "victim": self.index[k.victim],
+                  "killer": self.index.get(k.killer), "weapon": k.weapon, "x": x, "y": y, "z": z}
+            if n in reviews:
+                kd.update(reviews[n])
+            kills.append(kd)
         spike = []
         for ev in (r.plant, r.defuse):
             if ev is None:
@@ -148,6 +184,74 @@ class Ctx:
         return {"i": idx, "n": idx + 1, "end": round(end, 2), "paths": paths, "kills": kills, "spike": spike,
                 "util": util, "casts": casts, "result": r.result, "winner": r.winning_team}
 
+    # -------------------------------------------------------------------------------------------- 4.48: deaths
+    def tracks(self) -> sg.Tracks:
+        if self._tracks is None:
+            known = {p.lower(): p for p in self.match.players}
+            self._tracks = sg.Tracks(self.data, known, lambda x, y, z: self.to3d(x, y, z), 0.0)
+        return self._tracks
+
+    def reviews(self, idx: int) -> dict[int, dict]:
+        """Per kill of a round (by its place in the round's kills): where it happened (the game's callouts) and,
+        with the see-through grid, who saw whom first, how many had a line to the victim, how long he was in the
+        open (stats/sight.py)."""
+        if idx in self._reviews:
+            return self._reviews[idx]
+        out: dict[int, dict] = {}
+        if self.zones is None or idx not in self.offsets or self.mi is None:
+            self._reviews[idx] = out
+            return out
+        r, off = self.match.rounds[idx], self.offsets[idx]
+        tr = self.tracks()
+        died = {}
+        for k in r.kills:
+            died.setdefault(k.victim, off + k.t_round_ms)
+        alive = lambda p, ms: died.get(p, math.inf) > ms          # noqa: E731
+        for n, k in enumerate(r.kills):
+            t = off + k.t_round_ms
+            d = {}
+            x, y, z = self.to3d(k.victim_x, k.victim_y, self._z_at(k.victim, t))
+            d["where"] = self.zones.at(x, y, z)
+            kp = tr.at(k.killer, t) if k.killer else None
+            if kp is not None:
+                d["kwhere"] = self.zones.at(float(kp[0]), float(kp[1]), float(kp[2]))
+            if self.sight is not None and k.victim in self.index:
+                team = self.match.team_of(k.victim)
+                enemies = [p for p in self.match.players if self.match.players[p].team != team]
+                d["review"] = sg.death_review(self.sight, tr, t, k.victim, k.killer, enemies, alive,
+                                              lambda deg: self.yaw3d(deg))
+            out[n] = d
+        self._reviews[idx] = out
+        return out
+
+    def death_summary(self, me: str) -> dict | None:
+        """4.48: the player's deaths over the whole match: where (callouts) and, with line of sight, how often the
+        enemy saw him first, how often he was open to more than one enemy, how often he never saw his killer."""
+        if self.zones is None or not me:
+            return None
+        where: dict[str, int] = {}
+        n = first = multi = unseen = known = 0
+        for r in self.match.rounds:
+            if r.index not in self.offsets:
+                continue
+            rv = self.reviews(r.index)
+            for i, k in enumerate(r.kills):
+                if k.victim != me or i not in rv:
+                    continue
+                n += 1
+                w = rv[i].get("where") or "?"
+                where[w] = where.get(w, 0) + 1
+                rev = rv[i].get("review")
+                if rev:
+                    known += rev.get("first") is not None or rev.get("unseen") is not None
+                    first += rev.get("first") == "killer" and not rev.get("unseen")
+                    unseen += bool(rev.get("unseen"))
+                    multi += (rev.get("open_to") or 0) > 1
+        if not n:
+            return {"deaths": 0, "where": [], "reviewed": 0}
+        return {"deaths": n, "where": sorted(where.items(), key=lambda a: (-a[1], a[0])), "reviewed": known,
+                "seen_first": first, "unseen": unseen, "open_many": multi, "sight": self.sight is not None}
+
     def _z_at(self, puuid: str, t_ms: float) -> float | None:
         sub = puuid.lower()
         pts = next((v for k, v in (self.data.get("pos") or {}).items() if k.lower() == sub), None)
@@ -163,7 +267,7 @@ class Ctx:
 
     def _owner_floor(self, puuid: str, t_ms: float) -> float | None:
         z = self._z_at(puuid, t_ms)
-        return None if z is None else round((z - FOOT_CM) / 100, 2)
+        return None if z is None else round((z - self.foot_cm) / 100, 2)
 
     # -------------------------------------------------------------------------------------------- casts
     def cast_events(self) -> dict[int, list]:

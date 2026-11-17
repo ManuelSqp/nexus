@@ -66,8 +66,13 @@ def register(app, store, view_profile) -> None:
         mid = mid.lower()
         with _lock:
             if mid in ctxs:
-                ctxs.move_to_end(mid)
-                return ctxs[mid]
+                c = ctxs[mid]
+                game = app.extensions["nexus"].get("game")
+                stale = c.game is None and game is not None and c.mi is not None and game.meta(c.match.map_name)
+                if not stale:                            # 4.48: built from the game's files since: line it up again
+                    ctxs.move_to_end(mid)
+                    return c
+                ctxs.pop(mid)
         try:
             if not replayfile.has_replay(replays, mid):      # also refuses anything that isn't a match id
                 return None
@@ -92,7 +97,12 @@ def register(app, store, view_profile) -> None:
             names = {a["dev"]: a["name"] for a in AgentRegistry(cache).load() if a.get("dev")}
         except Exception:
             names = {}
-        c = rv.Ctx(data, m, mi, names)
+        game = app.extensions["nexus"].get("game")              # 4.48: the map from the game's files
+        try:
+            gd = game.game(m.map_name) if game is not None and mi is not None else None
+        except Exception:
+            gd = None
+        c = rv.Ctx(data, m, mi, names, gd)
         with _lock:
             ctxs[mid] = c
             while len(ctxs) > KEEP:
@@ -122,13 +132,15 @@ def register(app, store, view_profile) -> None:
                 "round_api": f"/api/replay/{c.match.match_id.lower()}/round/", "comments_api":
                 f"/api/replay/{c.match.match_id.lower()}/comments?pid={pid}", "rounds": rounds,
                 "players": c.players(me), "start": start, "replay": True, "user": g.user.username,
-                "sens": 0.4, "util_col": UTIL_COL}
+                "sens": 0.4, "util_col": UTIL_COL,
+                "agents": app.extensions["nexus"].get("agents_boot", dict)(), "game_map": c.game is not None}
         util = c.utility_check()
+        deaths = c.death_summary(me) if me else None
         ours = {x["i"] for x in boot["players"] if x["ours"]}
         util["players"].sort(key=lambda u: (u["i"] not in ours, u["i"]))      # your team first
         return render_template("replay_view.html", p=p, active_pid=pid, can_edit=can_edit, m=c.match, boot=boot,
                                rounds=rounds, players=boot["players"], util=util,
-                               quality=c.quality, has_map=c.mi is not None,
+                               quality=c.quality, has_map=c.mi is not None, deaths=deaths,
                                coach_url=url_for("coach", pid=pid, match_id=c.match.match_id) if can_edit else "")
 
     @app.get("/api/replay/<match_id>/round/<int:idx>")

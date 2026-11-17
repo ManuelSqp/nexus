@@ -41,6 +41,9 @@
 .ut td.k{text-align:center}.ut tr.ours td:first-child{border-left:3px solid #3ee6c1}.ut tr.theirs td:first-child{border-left:3px solid #ff5d6c}
 .ut .bad{color:var(--red);font-weight:650}
 .ut-wrap{overflow-x:auto}
+.rv-why{display:block;font-size:11.5px;color:var(--muted);margin:1px 0 0 42px}.rv-why .bad{color:var(--red)}
+.dsum{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13.5px}.dsum b{font-size:18px;display:block}
+.dwhere{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.dwhere span{font-size:12.5px;padding:2px 9px;border-radius:99px;background:var(--panel2);border:1px solid var(--line2)}
 </style>{% endblock %}
 {% block content %}
 {{ vc.pagehead('Replay', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
@@ -74,11 +77,14 @@
       <label><input type="checkbox" id="rv-util" checked> Utility</label>
       <label><input type="checkbox" id="m3-labels"> Callouts</label>
       <label><input type="checkbox" id="m3-radar-t"> Radar</label>
-      <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
+      <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="height">Height</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
+      <label title="Show the roofs (from above they hide the floors)"><input type="checkbox" id="m3-roofs"> Roofs</label>
+      <label title="Show players behind walls"><input type="checkbox" id="m3-xray"> See through walls</label>
       <button type="button" class="btn sm ghost" id="m3-full">Fullscreen</button>
       <span class="muted small" id="m3-info"></span>
     </div>
-    <p class="small muted" style="margin:6px 0 0"><span>Floor colours</span> · <b>Measured · guessed</b>: <span style="color:#cdb07f">■</span> <span>measured by replays</span>, <span style="color:#8fa1bd">■</span> <span>filled in from the minimap</span> · <b>Map areas</b>: <span>sites, mid, attacker and defender side</span></p>
+    <p class="small muted" style="margin:6px 0 0" data-legend="replays"><span>Floor colours</span> · <b>Measured · guessed</b>: <span style="color:#cdb07f">■</span> <span>measured by replays</span>, <span style="color:#8fa1bd">■</span> <span>filled in from the minimap</span> · <b>Map areas</b>: <span>sites, mid, attacker and defender side</span></p>
+    <p class="small muted" style="margin:6px 0 0" data-legend="game" hidden><span>The map is built from the game's files.</span> <span>Floor colours</span> · <b>Height</b>: <span>low blue, high sand</span> · <b>Map areas</b>: <span>the game's callout zones</span></p>
   </div>
   <div class="rv-side">
     <section class="card"><h3>Your team</h3><div class="rv-team" id="rv-ours"></div>
@@ -93,6 +99,18 @@
       <p class="small muted" style="margin:6px 0 0">Comments are for everyone in the team who can open this match.</p></section>
   </div>
 </div>
+
+{% if deaths and deaths.deaths %}<section class="card" style="margin-top:16px" id="deaths">
+  <h2>Your deaths</h2>
+  <div class="dsum">
+    <div><b>{{ deaths.deaths }}</b><span>deaths</span></div>
+    {% if deaths.sight %}<div><b>{{ deaths.seen_first }}</b><span>the enemy saw you first</span></div>
+    <div><b>{{ deaths.unseen }}</b><span>you never saw your killer</span></div>
+    <div><b>{{ deaths.open_many }}</b><span>open to more than one enemy</span></div>{% endif %}
+  </div>
+  <div class="dwhere">{% for w, n in deaths.where %}<span><b translate="no">{{ w }}</b> <span translate="no">{{ n }}×</span></span>{% endfor %}</div>
+  <p class="small muted" style="margin-bottom:0"><span>Where you died, with the game's own callouts.</span>{% if deaths.sight %} <span>Who saw whom first comes from the walls of the map: a clear line from the eyes to the head or body, inside the field of view (smokes don't count).</span> <span>Each kill in the round's list shows it too.</span>{% endif %}</p>
+</section>{% endif %}
 
 <section class="card ut" style="margin-top:16px" id="utility">
   <h2>Utility check</h2>
