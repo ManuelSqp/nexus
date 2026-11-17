@@ -182,15 +182,16 @@
     uniform sampler2D pal; uniform float paln; uniform float mode; uniform vec3 one; uniform vec2 hr; uniform float alpha;
     varying vec3 wp; varying float va; varying float fog;
     void main(){
-      if (cut > 0.5) {
-        vec4 t = texture2D(roof, (wp.xz - rg.xy) / rg.zw);
-        float h = (t.r * 65280.0 + t.a * 255.0) / 100.0 + rmin;
-        if (wp.y > h + rcut) discard;
-      }
       vec3 n = vec3(0.0, 1.0, 0.0);
       #ifdef GL_OES_standard_derivatives
       n = normalize(cross(dFdx(wp), dFdy(wp)));
       #endif
+      if (cut > 0.5) {
+        vec4 t = texture2D(roof, (wp.xz - rg.xy) / rg.zw);
+        float h = floor(t.r * 65280.0 + t.a * 255.0 + 0.5) / 100.0 + rmin;
+        if (wp.y > h + rcut) discard;
+      }
+      if (va > 254.5) { gl_FragColor = vec4(mix(vec3(0.19, 0.22, 0.29), vec3(0.55, 0.62, 0.72), fog * 0.5), 1.0); return; }
       vec3 L = normalize(vec3(0.35, 0.9, 0.25));
       float d = 0.52 + 0.48 * abs(dot(n, L));
       vec3 base = one;
@@ -251,6 +252,23 @@
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, R.w, R.h, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, rb);
       for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
       g.roof = {R, v: p.roof};
+      // lids: where a building was cut away, a dark square at the cut (zone 255 = the lid colour in the shader)
+      const lp = [], li = [];
+      for (let i = 0; i < R.h; i++) for (let j = 0; j < R.w; j++) {
+        const v = p.roof[i * R.w + j];
+        if (!(v & 2)) continue;
+        const y = (v & ~3) / 100 + R.ymin + ROOF - 0.02, x0 = R.x0 + j * R.cell, z0 = R.z0 + i * R.cell, k = lp.length / 3;
+        lp.push(x0, y, z0, x0 + R.cell, y, z0, x0 + R.cell, y, z0 + R.cell, x0, y, z0 + R.cell);
+        li.push(k, k + 1, k + 2, k, k + 2, k + 3);
+      }
+      if (li.length) {
+        const llo = [0, 1, 2].map(a => { let m = Infinity; for (let k = a; k < lp.length; k += 3) m = Math.min(m, lp[k]); return m - 0.01; });
+        const lsp = [0, 1, 2].map(a => { let m = -Infinity; for (let k = a; k < lp.length; k += 3) m = Math.max(m, lp[k]); return m + 0.01 - llo[a]; });
+        const q = new Uint16Array(lp.length);
+        for (let k = 0; k < lp.length; k++) q[k] = Math.round((lp[k] - llo[k % 3]) / lsp[k % 3] * 65535);
+        g.lid = {lo: llo, span: lsp, pos: buffer(gl.ARRAY_BUFFER, q), area: buffer(gl.ARRAY_BUFFER, new Uint8Array(lp.length / 3).fill(255)),
+                 idx: buffer(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(li)), n: li.length};
+      }
       // zone colours
       const pal = M.palette && M.palette.length ? M.palette : [[0.74, 0.72, 0.68]], pb = new Uint8Array(pal.length * 4);
       pal.forEach((c, i) => { pb[4 * i] = c[0] * 255; pb[4 * i + 1] = c[1] * 255; pb[4 * i + 2] = c[2] * 255; pb[4 * i + 3] = 255; });
@@ -275,7 +293,7 @@
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, G.roofT); gl.uniform1i(gloc.roof, 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, G.palT); gl.uniform1i(gloc.pal, 1);
     gl.activeTexture(gl.TEXTURE0);
-    gl.uniform4f(gloc.rg, R.x0, R.z0, R.w, R.h); gl.uniform1f(gloc.rmin, R.ymin);
+    gl.uniform4f(gloc.rg, R.x0, R.z0, R.w * R.cell, R.h * R.cell); gl.uniform1f(gloc.rmin, R.ymin);
     gl.uniform1f(gloc.cut, opt.roofs ? 0 : 1); gl.uniform1f(gloc.rcut, ROOF);
     gl.uniform1f(gloc.paln, G.paln); gl.uniform1f(gloc.mode, {height: 1, areas: 2}[opt.colors] || 0);
     gl.uniform3fv(gloc.one, ONE); gl.uniform2fv(gloc.hr, G.hr); gl.uniform1f(gloc.alpha, alpha);
@@ -287,7 +305,14 @@
     gl.drawElements(gl.TRIANGLES, b.n, gl.UNSIGNED_INT, 0);
     gl.disableVertexAttribArray(gloc.q); gl.disableVertexAttribArray(gloc.a);
   }
-  function drawGame() { gameUniforms(1); drawBuffers(G); gl.useProgram(prog); }
+  function drawGame() {
+    gameUniforms(1); drawBuffers(G);
+    if (G.lid && !opt.roofs) {
+      gl.uniform1f(gloc.cut, 0); gl.uniform3fv(gloc.lo, G.lid.lo); gl.uniform3fv(gloc.span, G.lid.span);
+      drawBuffers(G.lid);
+    }
+    gl.useProgram(prog);
+  }
   function drawGlass() {
     gameUniforms(0.22);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
@@ -296,9 +321,9 @@
   }
   function roofAt(x, z) {                          // the height above which things are cut away (or Infinity)
     if (!G || !G.ready || opt.roofs) return Infinity;
-    const R = G.roof.R, j = Math.floor(x - R.x0), i = Math.floor(z - R.z0);
+    const R = G.roof.R, j = Math.floor((x - R.x0) / R.cell), i = Math.floor((z - R.z0) / R.cell);
     if (i < 0 || j < 0 || i >= R.h || j >= R.w) return Infinity;
-    return G.roof.v[i * R.w + j] / 100 + R.ymin + ROOF;
+    return (G.roof.v[i * R.w + j] & ~3) / 100 + R.ymin + ROOF;
   }
   function solidAt(x, y, z) {
     const V = G.vox, c = V.cell;
@@ -598,7 +623,7 @@
   }
   function freeGame() {
     if (!G || !G.ready || !gl) { G = null; return; }
-    for (const b of [G.pos, G.area, G.idx, ...(G.glass ? [G.glass.pos, G.glass.area, G.glass.idx] : [])]) gl.deleteBuffer(b);
+    for (const b of [G.pos, G.area, G.idx, ...(G.glass ? [G.glass.pos, G.glass.area, G.glass.idx] : []), ...(G.lid ? [G.lid.pos, G.lid.area, G.lid.idx] : [])]) gl.deleteBuffer(b);
     gl.deleteTexture(G.roofT); gl.deleteTexture(G.palT);
     G = null;
   }
