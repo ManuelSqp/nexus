@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus"
-version = "4.47.1"
+version = "4.48.0"
 description = "Local Valorant coach: HenrikDev match data + replay files + VOD sync + minimap parsing + Ollama coaching, with a web app"
 requires-python = ">=3.11"
 dependencies = [
@@ -21,6 +21,7 @@ dependencies = [
   "waitress>=3.0",
   "pywebpush>=2.0",                # push notifications for the installed app
   "pyarrow>=15",                   # reads the tables vrfkit makes from the game's replay files (4.9)
+  "fast-simplification>=0.1.7",    # simplifies the 3D maps built from the game's files (4.48)
 ]
 
 [project.optional-dependencies]

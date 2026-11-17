@@ -51,6 +51,7 @@ class MapInfo:
     y_add: float
     display_icon: str = ""
     callouts: list[Callout] = field(default_factory=list)
+    map_url: str = ""                 # 4.48: /Game/Maps/Ascent/Ascent (the codename is its last part)
 
     # world -> normalised minimap (0..1)
     def to_uv(self, x: float, y: float) -> tuple[float, float]:
@@ -101,6 +102,7 @@ def _parse_maps(payload: dict) -> list[MapInfo]:
             y_add=float(m["yScalarToAdd"]),
             display_icon=m.get("displayIcon") or "",
             callouts=callouts,
+            map_url=m.get("mapUrl") or "",
         ))
     return out
 

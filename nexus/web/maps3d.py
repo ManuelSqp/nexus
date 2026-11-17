@@ -1,5 +1,8 @@
-"""Practice › 3D maps (per player, the maps are the same for everyone): walk around a map rebuilt from the replays on
-the server (stats/map3d.py). The page renders and moves in the browser (static/map3d.js)."""
+"""Practice › 3D maps (per player, the maps are the same for everyone): walk around a map. The page renders and
+moves in the browser (static/map3d.js).
+
+4.48: where the game's files are on the server (data/game, web/gamebuild.py) the map is the real one built from
+them (stats/mapmesh.py); otherwise it's rebuilt from the replays on the server (stats/map3d.py)."""
 from __future__ import annotations
 
 import json
@@ -12,6 +15,8 @@ from ..maps import MapRegistry
 from ..parse import parse_match
 from ..stats import map3d as m3
 from .aim import _read
+from .gamebuild import GameBuilder
+from .gamebuild import register as register_game
 
 _lock = threading.Lock()
 
@@ -80,6 +85,26 @@ def register(app, store, sr, view_profile, known_maps: list[str]) -> None:
                 warmed[name] = sorted(ids)
     app.extensions["nexus"].setdefault("ticks", []).append(warm)
     app.extensions["nexus"]["maps3d_warm"] = warm          # for tests
+    game = GameBuilder(store.data_dir, map_of)
+    register_game(app, store, game)
+
+    def agents_boot() -> dict:
+        """Agent name -> model URL, for the agents built from the game's files (4.48)."""
+        idx = game.agent_index()
+        if not idx:
+            return {}
+        try:
+            from ..maps import AgentRegistry
+            dev = {a["name"]: a["dev"] for a in AgentRegistry(cache).load() if a.get("dev")}
+        except Exception:
+            dev = {}
+        out = {}
+        for name, code in dev.items():
+            key = next((k for k in idx if k.lower() == code.lower()), None)
+            if key:
+                out[name] = f"/api/agents3d/{key}?h={idx[key].get('hash', '')}"
+        return out
+    app.extensions["nexus"]["agents_boot"] = agents_boot
 
     @app.get("/profiles/<int:pid>/maps3d")
     def maps3d(pid: int):
@@ -89,7 +114,11 @@ def register(app, store, sr, view_profile, known_maps: list[str]) -> None:
         maps.sort(key=lambda x: (-x["replays"], x["name"]))
         setup = _read(sr.games(pid).path.parent / "trainer.json", {}).get("setup", {})
         boot = {"maps": maps, "api": "/api/maps3d/", "sens": setup.get("sens") or 0.4}
-        return render_template("maps3d.html", p=p, active_pid=pid, maps=maps, boot=boot)
+        game_maps = {m["name"] for m in maps if game.meta(m["name"])}
+        for m in maps:
+            m["game"] = m["name"] in game_maps
+        return render_template("maps3d.html", p=p, active_pid=pid, maps=maps, boot=boot,
+                               game_files=game.available(), game_maps=game_maps)
 
     @app.get("/api/maps3d/<name>")
     def maps3d_data(name: str):
@@ -105,7 +134,15 @@ def register(app, store, sr, view_profile, known_maps: list[str]) -> None:
             real = mi.name if mi is not None else None
         if real is None:
             return jsonify(error="That map isn't known."), 404
+        meta = game.meta(real)                            # 4.48: the real map from the game's files
+        if meta is not None:
+            out = {k: v for k, v in meta.items() if k not in ("source",)}
+            out.update(mesh=f"/api/maps3d/{real}/mesh?h={meta.get('hash', '')}", matches=len(by.get(real, [])),
+                       game=True)
+            return jsonify(out)
         d = built(real, by.get(real, []))                # 4.45: without replays: flat, from the minimap
         if d is None or not d["cells"]:
             return jsonify(error="The map data isn't loaded yet (valorant-api.com)."), 404
+        if game.available():
+            d = dict(d, game_status=game.status.get(real) or ("building" if game.running else "waiting"))
         return jsonify(d)

@@ -13,9 +13,10 @@
   const SPEED = {run: 6.75, walk: 3.6, crouch: 2.4}, GRAV = 20, JUMP = 5.5;
   let gl = null, prog = null, loc = {}, mesh = null, M = null, grid = null, raf = 0, last = 0;
   let layer = null;                  // 4.44: something drawn on top (the replay viewer, replay.js)
+  let G = null;                      // 4.48: the map built from the game's files: buffers, roof map, see-through grid
   const keys = new Set();
   const me = {x: 0, y: 0, z: 0, vy: 0, yaw: 0, pitch: 0, ground: true, fly: false, crouch: false};
-  const opt = {labels: false, radar: true, help: true, colors: 'one'};   // colors (4.46): one | known | areas
+  const opt = {labels: false, radar: true, help: true, colors: 'one', roofs: false, xray: false};   // colors (4.46): one | known | areas | height (4.48)
   try { Object.assign(opt, JSON.parse(localStorage.getItem('nexus.map3d') || '{}')); } catch (e) {}
   const saveOpt = () => { try { localStorage.setItem('nexus.map3d', JSON.stringify(opt)); } catch (e) {} };
 
@@ -74,8 +75,9 @@
     return true;
   }
   const ONE = [0.74, 0.71, 0.66], KNOWN = [0.80, 0.69, 0.50], GUESSED = [0.56, 0.63, 0.74];
+  const KINDS = [[0.74, 0.72, 0.68], [0.84, 0.66, 0.46], [0.66, 0.74, 0.62], [0.82, 0.60, 0.54], [0.60, 0.66, 0.80]];
   function baseColor(l) {                          // 4.46: one colour, measured vs. guessed, or the map's areas
-    if (opt.colors === 'areas') return M.palette[l.k] || M.palette[0];
+    if (opt.colors === 'areas') return M.game ? KINDS[l.k] || KINDS[0] : (M.palette[l.k] || M.palette[0]);
     if (opt.colors === 'known') return l.e ? GUESSED : KNOWN;
     return ONE;
   }
@@ -142,16 +144,249 @@
     gl.viewport(0, 0, w, h);
     gl.clearColor(0.55, 0.62, 0.72, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (!mesh) return;
-    VP = mul(persp(71 * D2R, w / h, 0.05, 400), viewM());
-    gl.uniformMatrix4fv(loc.vp, false, VP); gl.uniform3fv(loc.eye, eyePos());
-    gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buf);
-    gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 36, 0);
-    gl.enableVertexAttribArray(loc.n); gl.vertexAttribPointer(loc.n, 3, gl.FLOAT, false, 36, 12);
-    gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.FLOAT, false, 36, 24);
-    gl.drawArrays(gl.TRIANGLES, 0, mesh.n);
-    gl.disableVertexAttribArray(loc.n); gl.disableVertexAttribArray(loc.c);
+    VP = mul(persp(71 * D2R, w / h, 0.05, 600), viewM());
+    if (G && G.ready) drawGame();
+    else {
+      gl.useProgram(prog);
+      gl.uniformMatrix4fv(loc.vp, false, VP); gl.uniform3fv(loc.eye, eyePos());
+      gl.bindBuffer(gl.ARRAY_BUFFER, mesh.buf);
+      gl.enableVertexAttribArray(loc.p); gl.vertexAttribPointer(loc.p, 3, gl.FLOAT, false, 36, 0);
+      gl.enableVertexAttribArray(loc.n); gl.vertexAttribPointer(loc.n, 3, gl.FLOAT, false, 36, 12);
+      gl.enableVertexAttribArray(loc.c); gl.vertexAttribPointer(loc.c, 3, gl.FLOAT, false, 36, 24);
+      gl.drawArrays(gl.TRIANGLES, 0, mesh.n);
+      gl.disableVertexAttribArray(loc.p); gl.disableVertexAttribArray(loc.n); gl.disableVertexAttribArray(loc.c);
+    }
+    if (layer && layer.models) drawModels(layer.models());
+    if (G && G.ready && G.glass) drawGlass();
     if (layer && layer.objects) drawObjects(layer.objects());
     overlay(w, h, dpr);
+  }
+  // ---------------------------------------------------------------- 4.48: the map from the game's files
+  // One binary file (stats/mapmesh.py pack()): vertices as 16-bit numbers between lo and hi, a zone number per vertex
+  // (for "Map areas"), triangles (32-bit), glass, the roof map (per square metre the highest floor; whatever is
+  // more than ROOF above it is cut away so the view from above shows the floors) and a coarse see-through grid
+  // (half a metre) for hiding names behind walls. Light comes from the screen-space slope (flat faces, no normals).
+  const ROOF = 3.4;
+  const GVS = `attribute vec3 q; attribute float a; uniform vec3 lo; uniform vec3 span; uniform mat4 vp; uniform vec3 eye;
+    varying vec3 wp; varying float va; varying float fog;
+    void main(){ wp = lo + q * span; va = a; gl_Position = vp * vec4(wp, 1.0); fog = clamp(length(wp - eye) / 220.0, 0.0, 1.0); }`;
+  const GFS = `#ifdef GL_OES_standard_derivatives
+    #extension GL_OES_standard_derivatives : enable
+    #endif
+    #ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
+    precision mediump float;
+    #endif
+    uniform sampler2D roof; uniform vec4 rg; uniform float rmin; uniform float cut; uniform float rcut;
+    uniform sampler2D pal; uniform float paln; uniform float mode; uniform vec3 one; uniform vec2 hr; uniform float alpha;
+    varying vec3 wp; varying float va; varying float fog;
+    void main(){
+      if (cut > 0.5) {
+        vec4 t = texture2D(roof, (wp.xz - rg.xy) / rg.zw);
+        float h = (t.r * 65280.0 + t.a * 255.0) / 100.0 + rmin;
+        if (wp.y > h + rcut) discard;
+      }
+      vec3 n = vec3(0.0, 1.0, 0.0);
+      #ifdef GL_OES_standard_derivatives
+      n = normalize(cross(dFdx(wp), dFdy(wp)));
+      #endif
+      vec3 L = normalize(vec3(0.35, 0.9, 0.25));
+      float d = 0.52 + 0.48 * abs(dot(n, L));
+      vec3 base = one;
+      if (mode > 1.5 && va > 0.5) base = texture2D(pal, vec2((va - 0.5) / paln, 0.5)).rgb;
+      else if (mode > 0.5 && mode < 1.5) { float k = clamp((wp.y - hr.x) / max(0.1, hr.y - hr.x), 0.0, 1.0);
+        base = mix(vec3(0.42, 0.55, 0.72), vec3(0.93, 0.80, 0.55), k); }
+      if (abs(n.y) < 0.45) base *= 0.86;
+      vec2 g = abs(fract((abs(n.y) > 0.5 ? wp.xz : (abs(n.x) > 0.5 ? wp.zy : wp.xy)) / 2.0) - 0.5);
+      float line = 1.0 - 0.06 * step(0.47, max(g.x, g.y)) * (1.0 - smoothstep(0.08, 0.3, fog));
+      vec3 col = base * d * line;
+      gl_FragColor = vec4(mix(col, vec3(0.55, 0.62, 0.72), fog * 0.55), alpha);
+    }`;
+  let gprog = null, gloc = {};
+  function initGame() {
+    if (gprog !== null) return !!gprog;
+    gl.getExtension('OES_standard_derivatives');
+    if (!gl.getExtension('OES_element_index_uint')) { gprog = false; return false; }
+    const sh = (t, src) => { const x = gl.createShader(t); gl.shaderSource(x, src); gl.compileShader(x);
+      if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) console.error('map shader:', gl.getShaderInfoLog(x)); return x; };
+    gprog = gl.createProgram(); gl.attachShader(gprog, sh(gl.VERTEX_SHADER, GVS)); gl.attachShader(gprog, sh(gl.FRAGMENT_SHADER, GFS)); gl.linkProgram(gprog);
+    if (!gl.getProgramParameter(gprog, gl.LINK_STATUS)) { console.error('map shader:', gl.getProgramInfoLog(gprog)); gprog = false; return false; }
+    for (const u of ['lo', 'span', 'vp', 'eye', 'roof', 'rg', 'rmin', 'cut', 'rcut', 'pal', 'paln', 'mode', 'one', 'hr', 'alpha']) gloc[u] = gl.getUniformLocation(gprog, u);
+    gloc.q = gl.getAttribLocation(gprog, 'q'); gloc.a = gl.getAttribLocation(gprog, 'a');
+    return true;
+  }
+  function parseGame(buf) {
+    const dv = new DataView(buf);
+    if (String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3)) !== 'NXM1') throw new Error('not a map file');
+    const n = dv.getUint32(4, true), head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, n))), base = 8 + n;
+    const sec = (k, T, size) => { const [o, l] = head.sections[k]; return new T(buf, base + o, l / size); };
+    return {head, pos: sec('pos', Uint16Array, 2), area: sec('area', Uint8Array, 1), idx: sec('idx', Uint32Array, 4),
+            gpos: sec('gpos', Uint16Array, 2), gidx: sec('gidx', Uint32Array, 4), roof: sec('roof', Uint16Array, 2), vox: sec('vox', Uint8Array, 1)};
+  }
+  async function loadGame(d) {
+    const tok = d;
+    G = {loading: true, ready: false};
+    $('m3-msg').textContent = T('Loading the map…'); $('m3-msg').hidden = false;
+    try {
+      const r = await fetch(d.mesh, {credentials: 'same-origin'});
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const buf = await r.arrayBuffer();
+      if (M !== tok) return;                          // another map was chosen meanwhile
+      const p = parseGame(buf);
+      if (!initGame()) throw new Error(T('This browser can\'t draw the full map.'));
+      const g = {ready: true, head: p.head, lo: p.head.lo, span: p.head.hi.map((h, i) => h - p.head.lo[i])};
+      const buffer = (target, data) => { const b = gl.createBuffer(); gl.bindBuffer(target, b); gl.bufferData(target, data, gl.STATIC_DRAW); return b; };
+      g.pos = buffer(gl.ARRAY_BUFFER, p.pos); g.area = buffer(gl.ARRAY_BUFFER, p.area);
+      g.idx = buffer(gl.ELEMENT_ARRAY_BUFFER, p.idx); g.n = p.idx.length;
+      if (p.gidx.length) {
+        g.glass = {pos: buffer(gl.ARRAY_BUFFER, p.gpos), area: buffer(gl.ARRAY_BUFFER, new Uint8Array(p.gpos.length / 3)),
+                   idx: buffer(gl.ELEMENT_ARRAY_BUFFER, p.gidx), n: p.gidx.length};
+      }
+      // roof map: 16 bits per cell as luminance (high byte) + alpha (low byte)
+      const R = p.head.roof, rb = new Uint8Array(R.w * R.h * 2);
+      for (let i = 0; i < R.w * R.h; i++) { rb[2 * i] = p.roof[i] >> 8; rb[2 * i + 1] = p.roof[i] & 255; }
+      g.roofT = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, g.roofT);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE_ALPHA, R.w, R.h, 0, gl.LUMINANCE_ALPHA, gl.UNSIGNED_BYTE, rb);
+      for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+      g.roof = {R, v: p.roof};
+      // zone colours
+      const pal = M.palette && M.palette.length ? M.palette : [[0.74, 0.72, 0.68]], pb = new Uint8Array(pal.length * 4);
+      pal.forEach((c, i) => { pb[4 * i] = c[0] * 255; pb[4 * i + 1] = c[1] * 255; pb[4 * i + 2] = c[2] * 255; pb[4 * i + 3] = 255; });
+      g.palT = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, g.palT);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, pal.length, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, pb);
+      for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+      g.paln = pal.length;
+      const ys = M.cells.map(c => c[2]).sort((a, b) => a - b);
+      g.hr = ys.length ? [ys[Math.floor(ys.length * 0.02)], ys[Math.floor(ys.length * 0.98)] + 2] : [0, 10];
+      g.vox = {...p.head.vox, bits: p.vox};
+      G = g;
+      $('m3-msg').hidden = true;
+    } catch (e) {
+      if (M === tok) { G = null; $('m3-msg').textContent = e.message; $('m3-msg').hidden = false; setTimeout(() => { $('m3-msg').hidden = true; }, 4000); }
+    }
+  }
+  function gameUniforms(alpha) {
+    gl.useProgram(gprog);
+    gl.uniformMatrix4fv(gloc.vp, false, VP); gl.uniform3fv(gloc.eye, eyePos());
+    gl.uniform3fv(gloc.lo, G.lo); gl.uniform3fv(gloc.span, G.span);
+    const R = G.roof.R;
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, G.roofT); gl.uniform1i(gloc.roof, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, G.palT); gl.uniform1i(gloc.pal, 1);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.uniform4f(gloc.rg, R.x0, R.z0, R.w, R.h); gl.uniform1f(gloc.rmin, R.ymin);
+    gl.uniform1f(gloc.cut, opt.roofs ? 0 : 1); gl.uniform1f(gloc.rcut, ROOF);
+    gl.uniform1f(gloc.paln, G.paln); gl.uniform1f(gloc.mode, {height: 1, areas: 2}[opt.colors] || 0);
+    gl.uniform3fv(gloc.one, ONE); gl.uniform2fv(gloc.hr, G.hr); gl.uniform1f(gloc.alpha, alpha);
+  }
+  function drawBuffers(b) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, b.pos); gl.enableVertexAttribArray(gloc.q); gl.vertexAttribPointer(gloc.q, 3, gl.UNSIGNED_SHORT, true, 6, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, b.area); gl.enableVertexAttribArray(gloc.a); gl.vertexAttribPointer(gloc.a, 1, gl.UNSIGNED_BYTE, false, 1, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, b.idx);
+    gl.drawElements(gl.TRIANGLES, b.n, gl.UNSIGNED_INT, 0);
+    gl.disableVertexAttribArray(gloc.q); gl.disableVertexAttribArray(gloc.a);
+  }
+  function drawGame() { gameUniforms(1); drawBuffers(G); gl.useProgram(prog); }
+  function drawGlass() {
+    gameUniforms(0.22);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+    drawBuffers(G.glass);
+    gl.depthMask(true); gl.disable(gl.BLEND); gl.useProgram(prog);
+  }
+  function roofAt(x, z) {                          // the height above which things are cut away (or Infinity)
+    if (!G || !G.ready || opt.roofs) return Infinity;
+    const R = G.roof.R, j = Math.floor(x - R.x0), i = Math.floor(z - R.z0);
+    if (i < 0 || j < 0 || i >= R.h || j >= R.w) return Infinity;
+    return G.roof.v[i * R.w + j] / 100 + R.ymin + ROOF;
+  }
+  function solidAt(x, y, z) {
+    const V = G.vox, c = V.cell;
+    const ix = Math.floor((x - V.origin[0]) / c), iy = Math.floor((y - V.origin[1]) / c), iz = Math.floor((z - V.origin[2]) / c);
+    if (ix < 0 || iy < 0 || iz < 0 || ix >= V.shape[0] || iy >= V.shape[1] || iz >= V.shape[2]) return false;
+    const k = ix + V.shape[0] * (iz + V.shape[2] * iy);
+    return (V.bits[k >> 3] >> (7 - (k & 7)) & 1) === 1 && y < roofAt(x, z);
+  }
+  // a clear line between two points? (true without the game's map: nothing to hide behind)
+  function visible(a, b) {
+    if (!G || !G.ready || !G.vox) return true;
+    const d = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]), n = Math.ceil(d / (G.vox.cell * 0.5));
+    for (let k = 1; k < n; k++) {
+      const s = k / n, along = s * d;
+      if (along < 0.6 || d - along < 0.5) continue;
+      if (solidAt(a[0] + (b[0] - a[0]) * s, a[1] + (b[1] - a[1]) * s, a[2] + (b[2] - a[2]) * s)) return false;
+    }
+    return true;
+  }
+
+  // ---------------------------------------------------------------- 4.48: agent models
+  // stats/agentmesh.py pack(): millimetres (x forward, y right, z up), normals, skin (kept for animations later).
+  // Placed per player: forward f = (sin yaw, -cos yaw) on the map, right = hand · (f.z, −f.x) (the map's minimap
+  // may be mirrored: hand comes with the map). Drawn in the team's colour; walls hide them unless "see through
+  // walls" is on (then the hidden parts show as a faint outline).
+  const AVS = `attribute vec3 p; attribute vec3 nn; uniform mat4 vp; uniform vec3 at; uniform vec2 f; uniform vec2 r; uniform float sc;
+    varying vec3 vn; varying vec3 wp;
+    void main(){ vec3 q = p * 0.001 * sc; wp = at + vec3(q.x * f.x + q.y * r.x, q.z, q.x * f.y + q.y * r.y);
+      vn = vec3(nn.x * f.x + nn.y * r.x, nn.z, nn.x * f.y + nn.y * r.y); gl_Position = vp * vec4(wp, 1.0); }`;
+  const AFS = `precision mediump float; uniform vec3 col; uniform float alpha; uniform vec3 eye; varying vec3 vn; varying vec3 wp;
+    void main(){ vec3 n = normalize(vn); vec3 L = normalize(vec3(0.3, 1.0, 0.2));
+      float d = 0.45 + 0.55 * max(dot(n, L), 0.0); float rim = pow(1.0 - abs(dot(n, normalize(eye - wp))), 2.0);
+      gl_FragColor = vec4(col * d + rim * 0.25, alpha); }`;
+  let aprog = null, aloc = {};
+  const models = new Map();                        // url -> {state, buf…}
+  function initAgents() {
+    if (aprog !== null) return !!aprog;
+    const sh = (t, src) => { const x = gl.createShader(t); gl.shaderSource(x, src); gl.compileShader(x); return x; };
+    aprog = gl.createProgram(); gl.attachShader(aprog, sh(gl.VERTEX_SHADER, AVS)); gl.attachShader(aprog, sh(gl.FRAGMENT_SHADER, AFS)); gl.linkProgram(aprog);
+    if (!gl.getProgramParameter(aprog, gl.LINK_STATUS)) { console.error('agent shader:', gl.getProgramInfoLog(aprog)); aprog = false; return false; }
+    for (const u of ['vp', 'at', 'f', 'r', 'sc', 'col', 'alpha', 'eye']) aloc[u] = gl.getUniformLocation(aprog, u);
+    aloc.p = gl.getAttribLocation(aprog, 'p'); aloc.nn = gl.getAttribLocation(aprog, 'nn');
+    return true;
+  }
+  function model(url) {
+    let m = models.get(url);
+    if (m) return m.state === 'ready' ? m : null;
+    m = {state: 'loading'}; models.set(url, m);
+    fetch(url, {credentials: 'same-origin'}).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(buf => {
+      const dv = new DataView(buf), n = dv.getUint32(4, true), head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, n))), base = 8 + n;
+      const sec = (k, Tp, size) => { const [o, l] = head.sections[k]; return new Tp(buf, base + o, l / size); };
+      const b = (target, data) => { const x = gl.createBuffer(); gl.bindBuffer(target, x); gl.bufferData(target, data, gl.STATIC_DRAW); return x; };
+      if (head.u32 && !gl.getExtension('OES_element_index_uint')) throw new Error('index');
+      Object.assign(m, {state: 'ready', head, pos: b(gl.ARRAY_BUFFER, sec('pos', Int16Array, 2)), nrm: b(gl.ARRAY_BUFFER, sec('nrm', Int8Array, 1)),
+                        idx: b(gl.ELEMENT_ARRAY_BUFFER, head.u32 ? sec('idx', Uint32Array, 4) : sec('idx', Uint16Array, 2)), n: head.nt * 3, u32: head.u32});
+    }).catch(() => { m.state = 'failed'; });
+    return null;
+  }
+  // list: [{url, x, y, z, yaw, col: [r, g, b]}] -> which of them were drawn as models (the rest need a marker)
+  const drawn = new Set();
+  function drawModels(list) {
+    drawn.clear();
+    if (!list || !list.length || !initAgents()) return;
+    const hand = (M && M.hand) || 1, e = eyePos();
+    gl.useProgram(aprog);
+    gl.uniformMatrix4fv(aloc.vp, false, VP); gl.uniform3fv(aloc.eye, e);
+    const pass = (alpha) => {
+      for (const o of list) {
+        const m = o.url ? model(o.url) : null;
+        if (!m) continue;
+        const f = [Math.sin(o.yaw), -Math.cos(o.yaw)];
+        gl.uniform3f(aloc.at, o.x, o.y, o.z); gl.uniform2fv(aloc.f, f); gl.uniform2f(aloc.r, hand * f[1], -hand * f[0]);
+        gl.uniform1f(aloc.sc, o.scale || 1); gl.uniform3fv(aloc.col, o.col); gl.uniform1f(aloc.alpha, alpha);
+        gl.bindBuffer(gl.ARRAY_BUFFER, m.pos); gl.enableVertexAttribArray(aloc.p); gl.vertexAttribPointer(aloc.p, 3, gl.SHORT, false, 6, 0);
+        gl.bindBuffer(gl.ARRAY_BUFFER, m.nrm); gl.enableVertexAttribArray(aloc.nn); gl.vertexAttribPointer(aloc.nn, 3, gl.BYTE, true, 4, 0);
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.idx);
+        gl.drawElements(gl.TRIANGLES, m.n, m.u32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+        drawn.add(o.key);
+      }
+    };
+    pass(1);
+    if (opt.xray) {                                  // the hidden parts, faint
+      gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.depthFunc(gl.GREATER);
+      pass(0.35);
+      gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND);
+    }
+    gl.disableVertexAttribArray(aloc.p); gl.disableVertexAttribArray(aloc.nn);
+    gl.useProgram(prog);
   }
   // ---------------------------------------------------------------- 3D objects: smokes and other utility (4.46)
   // A lumpy unit ball, scaled per object; drawn after the map with the depth test on (walls hide them) and blended.
@@ -232,6 +467,7 @@
         if (q[3] <= 0.1) continue;
         const d = Math.hypot(c.x - me.x, c.z - me.z);
         if (d > 70) continue;
+        if (G && G.ready && !visible(eyePos(), [c.x, c.y + 1.4, c.z])) continue;
         const sx = (q[0] / q[3] * 0.5 + 0.5) * w, sy = (1 - (q[1] / q[3] * 0.5 + 0.5)) * h;
         g.globalAlpha = Math.max(0.35, 1 - d / 80);
         g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(c.label, sx, sy);
@@ -313,7 +549,29 @@
     draw();
     $('m3-pos').textContent = M ? `${nearest()}${me.fly ? ' · ' + T('flying') : ''}` : '';
   }
+  function inPoly(poly, x, z) {
+    let ins = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const [xi, zi] = poly[i], [xj, zj] = poly[j];
+      if ((zi > z) !== (zj > z) && x < (xj - xi) * (z - zi) / ((zj - zi) || 1e-9) + xi) ins = !ins;
+    }
+    return ins;
+  }
+  function zoneAt(x, y, z) {                       // 4.48: the game's callout zone at a point ('' outside them)
+    if (!M || !M.zones) return '';
+    if (!M._zs) M._zs = M.zones.map(zz => ({...zz, area: Math.abs(zz.poly.reduce((a, p, i) => { const q = zz.poly[(i + 1) % zz.poly.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0)) / 2}))
+      .sort((a, b) => a.area - b.area);
+    let loose = '';
+    for (const zz of M._zs) {
+      if (!inPoly(zz.poly, x, z)) continue;
+      if (y === null || (y >= zz.y0 - 1.5 && y <= zz.y1 + 1.5)) return zz.label;
+      loose = loose || zz.label;
+    }
+    return loose;
+  }
   function nearest() {
+    const zl = zoneAt(me.x, me.y, me.z);
+    if (zl) return zl;
     let b = null, bd = Infinity;
     for (const c of M.callouts) { const d = Math.hypot(c.x - me.x, c.z - me.z) + (c.y === null ? 0 : Math.abs(c.y - me.y) * 2); if (d < bd) { bd = d; b = c; } }
     return b ? b.label : '';
@@ -325,9 +583,11 @@
       const r = await fetch(C.api + encodeURIComponent(name), {credentials: 'same-origin'});
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
-      use(d);
       $('m3-msg').hidden = true;
-      $('m3-info').textContent = T(`${d.matches} replay${d.matches === 1 ? '' : 's'} · ${Math.round(d.cells.length * d.cell * d.cell)} m² of floor`);
+      use(d);
+      $('m3-info').textContent = d.game ? T('From the game\'s files') + ` · ${d.matches} ${T(d.matches === 1 ? 'replay' : 'replays')}`
+        : T(`${d.matches} replay${d.matches === 1 ? '' : 's'} · ${Math.round(d.cells.length * d.cell * d.cell)} m² of floor`)
+          + (d.game_status === 'building' ? ' · ' + T('the map from the game\'s files is being built') : '');
     } catch (e) { $('m3-msg').textContent = e.message; }
   }
   function recolor(mode) {                         // 4.46: floor colours: one | known | areas
@@ -336,10 +596,30 @@
     if (mesh && mesh.buf) gl.deleteBuffer(mesh.buf);
     mesh = buildMesh();
   }
+  function freeGame() {
+    if (!G || !G.ready || !gl) { G = null; return; }
+    for (const b of [G.pos, G.area, G.idx, ...(G.glass ? [G.glass.pos, G.glass.area, G.glass.idx] : [])]) gl.deleteBuffer(b);
+    gl.deleteTexture(G.roofT); gl.deleteTexture(G.palT);
+    G = null;
+  }
+  function colorChoices() {                        // 4.48: "Height" for the game's maps, "Measured · guessed" for the others
+    const sel = $('m3-colors'); if (!sel) return;
+    for (const o of sel.options) {
+      if (o.value === 'height') o.hidden = o.disabled = !(M && M.game);
+      if (o.value === 'known') o.hidden = o.disabled = !!(M && M.game);
+    }
+    if (M && M.game && opt.colors === 'known') opt.colors = 'height';
+    if (M && !M.game && opt.colors === 'height') opt.colors = 'known';
+    sel.value = opt.colors;
+    document.querySelectorAll('[data-legend]').forEach(x => { x.hidden = x.dataset.legend !== (M && M.game ? 'game' : 'replays'); });
+  }
   function use(d) {
+    freeGame();
     M = d; grid = buildGrid(d);
     if (!initGL()) { $('m3-msg').textContent = T('This browser has no WebGL.'); $('m3-msg').hidden = false; return; }
+    colorChoices();
     mesh = buildMesh();
+    if (d.game && d.mesh) loadGame(d);
     [me.x, me.y, me.z] = d.start; me.vy = 0; me.ground = true; me.yaw = 0; me.pitch = 0;
     const fl = floorAt(me.x, me.z, me.y + 2); if (fl !== null) me.y = fl;
     if (C.replay) { me.fly = true; if (layer && layer.ready) layer.ready(); }
@@ -430,12 +710,16 @@
   $('m3-radar-t').addEventListener('change', e => { opt.radar = e.target.checked; saveOpt(); });
   $('m3-labels').checked = opt.labels; $('m3-radar-t').checked = opt.radar; $('m3-help').hidden = !opt.help;
   if ($('m3-colors')) { $('m3-colors').value = opt.colors; $('m3-colors').addEventListener('change', e => recolor(e.target.value)); }
+  if ($('m3-roofs')) { $('m3-roofs').checked = opt.roofs; $('m3-roofs').addEventListener('change', e => { opt.roofs = e.target.checked; saveOpt(); }); }
+  if ($('m3-xray')) { $('m3-xray').checked = opt.xray; $('m3-xray').addEventListener('change', e => { opt.xray = e.target.checked; saveOpt(); }); }
   $('m3-full').addEventListener('click', () => { if (stage.requestFullscreen) stage.requestFullscreen().catch(() => {}); });
   const first = document.querySelector('[data-map]:not([disabled])');
   if (first) first.click();
   window.nexusMap3D = {state: () => ({me, opt, loaded: !!M, cells: M ? M.cells.length : 0, mesh: mesh ? mesh.n : 0, touch: touch.on}), use, step: (dt, ks) => step(dt, new Set(ks)), draw, floorAt, touchKeys: () => [...touchKeys()],
     // 4.44: the replay viewer draws on top and moves the camera
     setLayer: l => { layer = l; if (M && l && l.ready) l.ready(); }, project, recolor,
-    view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; saveOpt(); }};
+    visible, roofAt, zoneAt, drawnModel: k => drawn.has(k), eye: () => eyePos(),
+    game: () => (G && G.ready ? {tris: G.n / 3, glass: G.glass ? G.glass.n / 3 : 0, vox: G.vox.shape} : null),
+    view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; saveOpt(); }, opt: () => opt};
   if (C.map) load(C.map);
 })();

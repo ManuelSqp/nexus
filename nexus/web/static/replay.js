@@ -116,6 +116,23 @@
     g.fillStyle = '#fff'; g.fillText(u.agent, s.x, s.y);
   }
 
+  // ------------------------------------------------------------------------------------------ 4.48: agent models
+  const rgb = h => hex(h);
+  function models() {                      // the players as their agents (map3d.js draws them; walls hide them)
+    if (!S.d || !C.agents) return [];
+    const out = [];
+    for (const [i, path] of Object.entries(S.d.paths)) {
+      if (S.t > deadAt(+i)) continue;
+      if (S.cam === 'follow' && +i === S.follow) continue;
+      const p = at(path, S.t); if (!p) continue;
+      const pl = byI[i], url = C.agents[pl.agent];
+      if (!url) continue;
+      out.push({key: +i, url, x: p[0], y: p[1], z: p[2], yaw: p[3], col: rgb(col(pl)).map(c => c * 0.85 + 0.1)});
+    }
+    return out;
+  }
+  const headOf = p => [p[0], p[1] + 1.9, p[2]];
+
   // ------------------------------------------------------------------------------------------ drawing
   function draw(g, project, w, h, dpr) {
     if (!S.d) return;
@@ -145,16 +162,27 @@
       list.push([s, p, byI[i]]);
     }
     list.sort((a, b) => b[0].d - a[0].d);                           // far ones first
+    const V = window.nexusMap3D, xray = V.opt().xray, eye = V.eye();
     for (const [s, p, pl] of list) {
-      const r = Math.min(16 * dpr, Math.max(5 * dpr, 0.45 * s.px));
-      const f = project(p[0] + Math.sin(p[3]) * 1.4, p[1] + 0.2, p[2] - Math.cos(p[3]) * 1.4);
-      if (f) { g.strokeStyle = col(pl); g.lineWidth = 2.5 * dpr; g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(f.x, f.y); g.stroke(); }
-      g.fillStyle = col(pl); g.strokeStyle = pl.me ? '#fff' : 'rgba(0,0,0,.7)'; g.lineWidth = (pl.me ? 2.5 : 1.5) * dpr;
-      g.beginPath(); g.arc(s.x, s.y, r, 0, 2 * Math.PI); g.fill(); g.stroke();
+      const hidden = !xray && !V.visible(eye, headOf(p)) && !V.visible(eye, [p[0], p[1] + 1.1, p[2]]);
+      let top = s.y;
+      if (V.drawnModel(pl.i) && s.px >= 9) {         // 4.48: drawn as his agent (close enough to see): the name above the head
+        const hd = project(p[0], p[1] + 2.25, p[2]);
+        if (!hd || hidden) continue;
+        top = hd.y + 5 * dpr;
+      } else {
+        if (hidden) continue;
+        const r = Math.min(16 * dpr, Math.max(5 * dpr, 0.45 * s.px));
+        const f = project(p[0] + Math.sin(p[3]) * 1.4, p[1] + 0.2, p[2] - Math.cos(p[3]) * 1.4);
+        if (f) { g.strokeStyle = col(pl); g.lineWidth = 2.5 * dpr; g.beginPath(); g.moveTo(s.x, s.y); g.lineTo(f.x, f.y); g.stroke(); }
+        g.fillStyle = col(pl); g.strokeStyle = pl.me ? '#fff' : 'rgba(0,0,0,.7)'; g.lineWidth = (pl.me ? 2.5 : 1.5) * dpr;
+        g.beginPath(); g.arc(s.x, s.y, r, 0, 2 * Math.PI); g.fill(); g.stroke();
+        top = s.y - r;
+      }
       if (S.names) {
         const label = `${pl.agent} · ${pl.name}`;
-        g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(label, s.x, s.y - r - 5 * dpr);
-        g.fillStyle = '#fff'; g.fillText(label, s.x, s.y - r - 5 * dpr);
+        g.lineWidth = 3 * dpr; g.strokeStyle = 'rgba(0,0,0,.75)'; g.strokeText(label, s.x, top - 5 * dpr);
+        g.fillStyle = pl.me ? '#ffd166' : '#fff'; g.fillText(label, s.x, top - 5 * dpr);
       }
     }
   }
@@ -206,12 +234,28 @@
     const d = S.d;
     $('rv-feed').innerHTML = d.kills.map(k => {
       const a = byI[k.killer], v = byI[k.victim];
+      const more = review(k);
       return `<button type="button" class="rv-k" data-t="${Math.max(0, k.t - 3)}" data-kt="${k.t}"><span class="tm">${fmt(k.t)}</span> ` +
              `<b style="color:${col(a)}" translate="no">${a ? esc(a.name) : '–'}</b> → <b style="color:${col(v)}" translate="no">${esc(v ? v.name : '')}</b>` +
-             (k.weapon ? ` <span class="muted" translate="no">${esc(k.weapon)}</span>` : '') + '</button>';
+             (k.weapon ? ` <span class="muted" translate="no">${esc(k.weapon)}</span>` : '') +
+             (more ? `<span class="rv-why">${more}</span>` : '') + '</button>';
     }).join('') + d.spike.map(s => `<button type="button" class="rv-k" data-t="${Math.max(0, s.t - 3)}" data-kt="${s.t}"><span class="tm">${fmt(s.t)}</span> ` +
              `<b style="color:${SPIKE}">${T(s.kind === 'plant' ? 'Spike planted' : 'Spike defused')}</b>${s.site ? ' ' + esc(s.site) : ''}</button>`).join('');
     feedNow();
+  }
+  // 4.48: where it happened (the game's callouts) and, with line of sight, who saw whom first
+  function review(k) {
+    const parts = [];
+    if (k.where) parts.push(`<span translate="no">${esc(k.where)}</span>`);
+    const r = k.review;
+    if (r) {
+      if (r.unseen && r.killer_saw !== null) parts.push(`<span class="bad">${T('never saw the killer')}</span>`);
+      else if (r.first === 'killer' && r.victim_saw !== null) parts.push(`<span class="bad">${T('the enemy saw him first')}</span> <span translate="no">(+${(r.killer_saw - r.victim_saw).toFixed(1)} s)</span>`);
+      else if (r.first === 'victim') parts.push(`<span>${T('he saw the killer first')}</span>` + (r.killer_saw !== null ? ` <span translate="no">(+${(r.victim_saw - r.killer_saw).toFixed(1)} s)</span>` : ''));
+      else if (r.first === 'same') parts.push(`<span>${T('saw each other at once')}</span>`);
+      if (r.open_to > 1) parts.push(`<span class="bad">${T('open to')} <span translate="no">${r.open_to}</span></span>`);
+    }
+    return parts.join(' · ');
   }
   function feedNow() {
     document.querySelectorAll('#rv-feed .rv-k').forEach(b => b.classList.toggle('past', +b.dataset.kt <= S.t));
@@ -302,7 +346,7 @@
   });
   document.addEventListener('pointerlockchange', () => { if (document.pointerLockElement) setCam('free'); });
 
-  const layer = {tick, draw, radar, objects, ready: () => { camera(); }};
+  const layer = {tick, draw, radar, models, objects, ready: () => { camera(); }};
   window.nexusMap3D.setLayer(layer);
   window.nexusMap3D.setOpt('labels', false);
   loadRound(C.start);

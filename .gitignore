@@ -1,5 +1,11 @@
 # runtime data: database (API keys, users, passwords), match cache, reports
 /data/
+# the game's own files (4.48): never in git, they belong in data/game/
+*.usda
+*.usdc
+*.uasset
+*.umap
+*.pak
 /output/
 
 # local config with secrets

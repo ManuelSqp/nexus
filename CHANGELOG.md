@@ -4,6 +4,27 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.48.0
+- **3D maps from the game's files**: with VALORANT's map files exported with FModel (USD) on the server
+  (`data/game/`, README › 3D maps from the game's files), the 3D maps are the real ones: every wall, floor, ramp and box
+  at its real size, merged and simplified, in one colour. Plants, cables, lamps, decals, the vista around the map and
+  invisible volumes are left out. *Floor* › *Height* colours by height, *Map areas* by the game's callout zones; roofs
+  are cut away so the view from above shows the floors (*Roofs* shows them). Walking uses the game's navigation mesh.
+  Maps without files stay rebuilt from the replays.
+- Built in the background (`data/maps3d/*.game.*`) or with `nexus build-game --data …`; built again when the files
+  change and once when a map's first replays arrive: they check which way round the export's axes are (FModel mirrors
+  the world) and measure how high above the floor the replays put players.
+- **Agents in the replay viewer**: every player is his agent's real model, in the team's colour, turned the way he
+  looks. Walls hide players and their names; *See through walls* shows them again (hidden parts faint). The skeleton
+  and skin weights are kept, so animations can come later without converting again.
+- **Callouts**: kills name the game's own callout zone where the victim died (and the killer stood).
+- **Line of sight and the death review**: from the map's walls, per kill: who saw whom first (in the field of view
+  with a clear line to head or body) and by how much, how many enemies had a line to the victim just before he died,
+  whether he ever had his killer in view. Shown under each kill in the round's list; *Your deaths* on the replay page
+  sums it up for the match with the callouts you died at most.
+- New dependency: fast-simplification (simplifies the maps; without it a coarser method is used).
+- German texts.
+
 ## 4.47.1
 - Fixed a test that still expected the old replay text without Custom games (the tests on GitHub failed for 4.47.0;
   Nexus itself was fine).

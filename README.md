@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.47.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.48.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -234,6 +234,14 @@ round by round: every player with name and view direction, kills, the spike, smo
 through one player's eyes, or flying freely. The team writes comments at a moment of a round (*Team review*); everyone
 who can open the match sees them. Below it, the **utility check**: per player casts per key (C, Q, E, X), rounds with
 utility, deaths without having used any, and when the first ability of a round comes.
+
+**3D maps from the game's files (4.48):** with VALORANT's own map and agent files on the server (see *3D maps from the
+game's files* below) the 3D maps and the replay viewer use the real maps: every wall, floor, ramp and box at its real
+size, in one colour (*Floor* › *Height* or *Map areas*: the game's callout zones), roofs cut away for the view from
+above (*Roofs* shows them). Agents are their real models in the team's colour; walls hide them and their names
+(*See through walls* shows them again). Kills name the game's callout where they happened, and with line of sight from
+the walls the replay page says who saw whom first, how many enemies had a line to the victim, and whether he ever had
+his killer in view; *Your deaths* sums it up per match.
 
 **Replay files:** *Performance › Matches › Replay files* uploads replay files (.vrf, from VALORANT › Saved › Demos) of any match, several at once, without a coaching run, and lists which of your recent matches still have none.
 
@@ -668,6 +676,32 @@ the jump buttons.
   rifles, ...), forces that were lost and left you broke the next round, split buys (half the team on rifles, half
   saving), the round after a won pistol, who buys or saves against the team's call, and the rounds per match lost
   to buys (`stats/teamecon.py`). The weekly focus coach gets it too.
+
+### 3D maps from the game's files
+
+Nexus doesn't ship any of the game's files. You export them yourself on a PC with VALORANT installed, with
+[FModel](https://fmodel.app) (VALORANT closed):
+
+1. *Settings › Models*: mesh format **USD**, only **LOD0**, materials and textures **off**.
+2. Export (right-click › *Export Folder's Packages Models*) these folders of `ShooterGame/Content`: `Environment`,
+   `Blueprints/Utilities`, `SuperGrid/Source/Meshes`, `Characters`, `VFX/Barrier`, and `Engine/Content/BasicShapes`,
+   plus the map layouts from `Maps` exported as USD levels (per map `<codename>.usda` with its sublevels such as
+   `Ascent_Art_A.usda`). Keep FModel's folder structure.
+3. Copy everything to the server into `data/game/` (any folders below it; Nexus finds `ShooterGame/Content` and the
+   layouts itself). It stays in the data folder, which is never in git.
+4. Build once from the command line (a minute or less per map), then restart:
+   ```
+   nexus build-game --data /home/sysadmin/valcoach-v2/data
+   sudo systemctl restart nexus
+   ```
+   Without the command the web app builds them in the background on its own (`data/maps3d/*.game.*`,
+   `data/agents3d/`). A map is built again when its files change and once when its first replays arrive (they check the
+   axes and measure the players' height above the floor). `--map Ascent` builds one map, `--force` rebuilds.
+
+Maps are matched by codename (Bind = Duality, Haven = Triad, Split = Bonsai, Icebox = Port, Breeze = Foxtrot,
+Fracture = Canyon, Pearl = Pitt, Lotus = Jam, Sunset = Juliett, Abyss = Infinity, Corrode = Rook, Summit = Plummet),
+agents by valorant-api.com's developer names (Jett = Wushu, …). Maps without files stay rebuilt from the replays.
+Animations aren't used yet: the agents stand in their default pose (the skeleton is kept for later).
 
 ### Run it permanently
 
