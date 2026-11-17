@@ -21,6 +21,7 @@ from .. import replayfile
 from ..maps import AgentRegistry, MapRegistry
 from ..parse import parse_match
 from ..stats import replayview as rv
+from .replays import fetch_match
 
 MAX_COMMENT = 600
 KEEP = 3                                   # matches kept lined up in memory (a replay is a few MB)
@@ -61,7 +62,7 @@ def register(app, store, view_profile) -> None:
                     return None
         return None
 
-    def ctx(mid: str) -> rv.Ctx | None:
+    def ctx(mid: str, region: str = "") -> rv.Ctx | None:
         mid = mid.lower()
         with _lock:
             if mid in ctxs:
@@ -73,6 +74,8 @@ def register(app, store, view_profile) -> None:
         except replayfile.ReplayError:
             return None
         m = match_of(mid)
+        if m is None and fetch_match(store, mid, region):    # 4.47: Customs aren't in the stats import
+            m = match_of(mid)
         if m is None:
             return None
         try:
@@ -102,7 +105,7 @@ def register(app, store, view_profile) -> None:
 
     def allowed(pid: int, mid: str):
         p, can_edit = view_profile(pid)                  # 404 for someone who may not open this player
-        c = ctx(mid)
+        c = ctx(mid, p.region)
         if c is None:
             abort(404)
         return p, can_edit, c

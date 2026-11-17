@@ -16,7 +16,7 @@
 <div class="m3-maps">{% for m in maps %}<button type="button" data-map="{{ m.name }}" translate="no" title="{{ m.replays }} replays">{{ m.name }}<span>{{ m.replays }}</span></button>{% endfor %}</div>
 {% if not maps|selectattr('replays')|list %}{# 4.45: the maps still open (flat, from the minimap) #}
 <section class="card" style="display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center"><p class="muted" style="margin:0;flex:1;min-width:240px"><span>No replay files on the server yet.</span>
-  <span>Until then the maps are flat, from the minimap; replays add ramps, stairs and boxes (from the Nexus app or the Replay files page).</span> <span>Replays exist for Unrated, Competitive, Swiftplay and Premier.</span></p>
+  <span>Until then the maps are flat, from the minimap; replays add ramps, stairs and boxes (from the Nexus app or the Replay files page).</span> <span>Replays exist for Unrated, Competitive, Swiftplay, Premier and Custom games.</span></p>
   <a class="btn primary" href="{{ url_for('replay_files', pid=p.id) }}">Upload replay files</a></section>
 {% endif %}
 <div class="m3-stage" id="m3-stage">
