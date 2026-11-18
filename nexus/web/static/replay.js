@@ -163,7 +163,10 @@
       if (S.mode === 'player' && +i === S.follow) continue;
       const p = at(path, S.t); if (!p) continue;
       const o = {key: +i, url, x: p[0], y: p[1], z: p[2], yaw: p[3], col: c};
-      if (C.anims) { const m = motion(path, S.t, p); o.anim = m.anim; o.y += m.lift; o.gun = gunOf(+i, S.t); }
+      if (C.anims) {
+        const w = weaponOf(+i, S.t), m = motion(path, S.t, p, holdFor(w));
+        o.anim = m.anim; o.y += m.lift; o.gun = (C.guns && C.guns[w]) || null; o.hold = holdFor(w);
+      }
       out.push(o);
     }
     return out;
@@ -200,7 +203,7 @@
     return (a[n] || 0) + ((b[n] || 0) - (a[n] || 0)) * f;
   }
   const clamp01 = v => Math.max(0, Math.min(1, v));
-  function motion(path, t, p) {                          // -> {anim: {lb, ub}, lift}
+  function motion(path, t, p, hold = 'hold') {           // -> {anim: {lb, ub}, lift}
     const t0 = path[0][0], t1 = path[path.length - 1][0];
     const ta = Math.max(t0, t - 0.2), tb = Math.min(t1, t + 0.2), dt = tb - ta;
     let vx = 0, vy = 0, vz = 0;
@@ -223,7 +226,7 @@
     }
     add('fall', t, air);
     if (!lb.length) lb.push(['idle', t, 1]);
-    return {anim: {lb, ub: [['hold', t, 1]]}, lift: cr * Math.max(0, dip)};
+    return {anim: {lb, ub: [[hold, t, 1]]}, lift: cr * Math.max(0, dip)};
   }
   function body(i, path) {                               // a dead player: where he fell and how (away from the killer)
     const k = S.d.kills.find(k => k.victim === i);
@@ -243,13 +246,15 @@
     o.anim = {lb: [[clip, S.t - k.t, 1]], ub: null};
     return o;
   }
-  function gunOf(i, t) {                                 // the gun in his hands: bought, then what he killed with
-    if (!C.guns) return null;
+  function weaponOf(i, t) {                              // the gun in his hands: bought, then what he killed with
     const seq = (S.d.guns || {})[i];
     let name = 'Classic';
     if (seq) for (const [t0, w] of seq) if (t0 <= t) name = w;
-    return C.guns[name] || null;
+    return name;
   }
+  // 4.50.1: sidearms are held out in front with both hands (the rifle pose made a pistol look odd)
+  const SIDEARMS = new Set(['Classic', 'Shorty', 'Frenzy', 'Ghost', 'Sheriff', 'Bandit']);
+  const holdFor = w => (SIDEARMS.has(w) && window.nexusMap3D.clips().includes('pistol') ? 'pistol' : 'hold');
   const headOf = p => [p[0], p[1] + 1.9, p[2]];
 
   // ------------------------------------------------------------------------------------------ drawing

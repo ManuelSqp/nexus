@@ -4,6 +4,13 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.50.1
+- **Pistols are held like in the game**: out in front with both hands. Every gun used the rifle pose, so a Classic
+  or a Sheriff sat in the right hand at the chest while the left hand held nothing. The game's own pistol pose is
+  used when it's in the export (`TP_Core_BasePistol_S0_IdlePose`, in an agent's folder); without it the pose is made
+  from the rifle pose (the right arm stretched out to the left hand). The animations are built again after the
+  update (`nexus build-game --data …`).
+
 ## 4.50.0
 - **The agents move like in the game.** The replay viewer plays the game's own third-person animations on every
   agent: standing, walking and running in eight directions (blended, following where the player looks), crouching,

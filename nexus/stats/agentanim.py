@@ -28,7 +28,7 @@ import numpy as np
 
 from .. import gamefiles as gf
 
-VERSION = 1
+VERSION = 2
 FPS = 30.0
 # which joints carry translations from the clip (the rest keep the agent's own)
 MOVE = ("Root", "Splitter")
@@ -41,6 +41,9 @@ UPPER = "Spine1"
 CLIPS: dict[str, tuple[tuple[str, ...], str]] = {
     "idle": (("TP_Core_Idle_LB", "TP_Core_IdlePose_LB"), "lb"),
     "hold": (("Core_Rifle_Idle", "TP_Core_Idle_UB", "TP_Core_IdlePose_UB"), "ub"),
+    # 4.50.1: sidearms held with both hands, arms stretched out (the core pose sits in an agent's folder; without
+    # it the pose is made from "hold", see pistol_from_hold)
+    "pistol": (("TP_Core_BasePistol_S0_IdlePose",), "ub"),
     "crouch": (("TP_Core_CrouchIdle_LB", "TP_Core_CrouchPose_LB"), "lb"),
     **{f"walk_{d}": ((f"TP_Core_Walk{d}_LB",), "lb") for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW")},
     **{f"run_{d}": ((f"TP_Core_Run{d}_LB",), "lb") for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW")},
@@ -52,7 +55,9 @@ CLIPS: dict[str, tuple[tuple[str, ...], str]] = {
     "death_right": (("TP_Core_Death_Body_Right_LG", "TP_Core_Death_Body_Right_SM"), "full"),
     "death_head": (("TP_Core_Death_Headshot01", "TP_Core_Death_Head_Front_LG"), "full"),
 }
-LOOP = {"idle", "hold", "crouch", "fall"} | {k for k in CLIPS if k.startswith(("walk_", "run_", "cwalk_"))}
+LOOP = {"idle", "hold", "pistol", "crouch", "fall"} | {k for k in CLIPS if k.startswith(("walk_", "run_", "cwalk_"))}
+ANYWHERE = {"pistol"}                     # clips found outside the _Core folders too (by their TP_Core_ name)
+SIDEARMS = ("BasePistol", "Slim", "AutoPistol", "Luger", "Revolver", "Compact")     # held like a pistol
 
 _HEAD = re.compile(r"timeCodesPerSecond\s*=\s*([\d.eE+-]+)")
 _SAMPLES = re.compile(r"(\w+)\[\]\s+(translations|rotations|scales)\.timeSamples\s*=\s*\{")
@@ -173,7 +178,7 @@ def find_clips(files: gf.GameFiles) -> dict[str, Path]:
     found: dict[str, Path] = {}
     for clip, (names, _part) in CLIPS.items():
         for n in names:
-            f = files.find(n, "/_Core/", "/3P/")
+            f = files.find(n, "/3P/") if clip in ANYWHERE else files.find(n, "/_Core/", "/3P/")
             if f is not None:
                 found[clip] = f
                 break
@@ -205,6 +210,10 @@ def build(files: gf.GameFiles, log=None) -> tuple[dict, bytes] | None:
         clips[clip] = {"R": R, "T": T, "part": CLIPS[clip][1], "loop": clip in LOOP, "src": f.stem}
     if not clips:
         return None
+    if "pistol" not in clips and "hold" in clips:
+        made = pistol_from_hold(joints, parents, rest, clips)
+        if made is not None:
+            clips["pistol"] = made
     return pack(joints, rest, clips, parents)
 
 
@@ -215,19 +224,24 @@ def world_rest(rest: np.ndarray, parents: list[int]) -> np.ndarray:
     return W
 
 
-def grip(joints: list[str], parents: list[int], rest: np.ndarray, clips: dict) -> np.ndarray:
-    """Where the gun sits in the right hand's frame (4x4, metres), found from the "hold" pose of the core
-    skeleton: its origin (the grip) at the right hand, its barrel (x) towards the left hand, its top (z) up."""
+def _anim(joints, parents, rest, clips, names) -> dict:
+    """The clips in the shape pose() takes (as unpack() gives them)."""
+    mj = [joints.index(j) for j in MOVE if j in joints]
+    return {"joints": joints, "move": [joints[i] for i in mj], "rest": rest, "parents": parents,
+            "clips": {n: {"R": clips[n]["R"], "T": clips[n]["T"][:, mj], "frames": len(clips[n]["R"])}
+                      for n in names if n in clips}}
+
+
+def grip(joints: list[str], parents: list[int], rest: np.ndarray, clips: dict, clip: str = "hold") -> np.ndarray:
+    """Where the gun sits in the right hand's frame (4x4, metres), found from a pose of the core skeleton: its
+    origin (the grip) at the right hand, its top (z) up, its barrel (x) towards the left hand ("hold": a rifle) or
+    straight ahead ("pistol": both hands on the grip)."""
     G = np.eye(4)
-    if "hold" not in clips or "R_Hand" not in joints or "L_Hand" not in joints:
+    if clip not in clips or "R_Hand" not in joints or "L_Hand" not in joints:
         return G
-    c = clips["hold"]
-    anim = {"joints": joints, "move": [j for j in MOVE if j in joints], "rest": rest,
-            "clips": {"hold": {"R": c["R"], "T": c["T"][:, [joints.index(j) for j in MOVE if j in joints]],
-                               "frames": len(c["R"])}}}
-    W = pose(joints, parents, world_rest(rest, parents), anim, "hold", 0)
+    W = pose(joints, parents, world_rest(rest, parents), _anim(joints, parents, rest, clips, [clip]), clip, 0)
     R, L = W[joints.index("R_Hand")], W[joints.index("L_Hand")]
-    x = L[:3, 3] - R[:3, 3]
+    x = L[:3, 3] - R[:3, 3] if clip == "hold" else np.array([1.0, 0, 0])
     if np.linalg.norm(x) < 0.05:
         x = np.array([1.0, 0, 0])
     x /= np.linalg.norm(x)
@@ -239,6 +253,69 @@ def grip(joints: list[str], parents: list[int], rest: np.ndarray, clips: dict) -
     return np.linalg.inv(R) @ M
 
 
+def _turn(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """The smallest rotation (3x3) turning direction a into direction b."""
+    a, b = a / np.linalg.norm(a), b / np.linalg.norm(b)
+    v, c = np.cross(a, b), float(np.dot(a, b))
+    if c < -0.9999:
+        return -np.eye(3)
+    k = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+    return np.eye(3) + k + k @ k / (1 + c)
+
+
+def mat_quat(m: np.ndarray) -> np.ndarray:
+    """3x3 rotation -> quaternion (w, x, y, z)."""
+    t = m[0, 0] + m[1, 1] + m[2, 2]
+    if t > 0:
+        s = np.sqrt(t + 1.0) * 2
+        q = [0.25 * s, (m[2, 1] - m[1, 2]) / s, (m[0, 2] - m[2, 0]) / s, (m[1, 0] - m[0, 1]) / s]
+    elif m[0, 0] > m[1, 1] and m[0, 0] > m[2, 2]:
+        s = np.sqrt(1.0 + m[0, 0] - m[1, 1] - m[2, 2]) * 2
+        q = [(m[2, 1] - m[1, 2]) / s, 0.25 * s, (m[0, 1] + m[1, 0]) / s, (m[0, 2] + m[2, 0]) / s]
+    elif m[1, 1] > m[2, 2]:
+        s = np.sqrt(1.0 + m[1, 1] - m[0, 0] - m[2, 2]) * 2
+        q = [(m[0, 2] - m[2, 0]) / s, (m[0, 1] + m[1, 0]) / s, 0.25 * s, (m[1, 2] + m[2, 1]) / s]
+    else:
+        s = np.sqrt(1.0 + m[2, 2] - m[0, 0] - m[1, 1]) * 2
+        q = [(m[1, 0] - m[0, 1]) / s, (m[0, 2] + m[2, 0]) / s, (m[1, 2] + m[2, 1]) / s, 0.25 * s]
+    q = np.array(q)
+    return q / np.linalg.norm(q)
+
+
+PISTOL_REACH = np.array([-0.04, 0.02, -0.02])   # the right hand next to the left one (m, the model's frame)
+
+
+def pistol_from_hold(joints: list[str], parents: list[int], rest: np.ndarray, clips: dict) -> dict | None:
+    """A pistol pose made from the rifle pose (first frame): the right arm stretched out so that the right hand
+    meets the left one (two-bone IK, the elbow stays on its side). Only the right shoulder and elbow change."""
+    need = ("R_Shoulder", "R_Elbow", "R_Hand", "L_Hand")
+    if any(n not in joints for n in need):
+        return None
+    sh, el, ha, lh = (joints.index(n) for n in need)
+    anim = _anim(joints, parents, rest, clips, ["hold", "idle"])
+    W = pose(joints, parents, world_rest(rest, parents), anim, "idle" if "idle" in clips else "hold", 0, upper="hold")
+    S, E, H = W[sh][:3, 3], W[el][:3, 3], W[ha][:3, 3]
+    T = W[lh][:3, 3] + PISTOL_REACH
+    a, b = np.linalg.norm(E - S), np.linalg.norm(H - E)
+    d = min(np.linalg.norm(T - S), a + b - 1e-3)
+    u = (T - S) / np.linalg.norm(T - S)
+    side = (E - S) - u * np.dot(E - S, u)
+    if np.linalg.norm(side) < 1e-6:
+        side = np.array([0, 0, -1.0]) - u * u[2]
+    v = side / np.linalg.norm(side)
+    ca = np.clip((a * a + d * d - b * b) / (2 * a * d), -1, 1)
+    E2 = S + a * (ca * u + np.sqrt(1 - ca * ca) * v)
+    r1 = _turn(E - S, E2 - S)
+    H1 = E2 + r1 @ (H - E)
+    r2 = _turn(H1 - E2, S + u * d - E2)
+    rsh = r1 @ W[sh][:3, :3]
+    rel = r2 @ r1 @ W[el][:3, :3]
+    R = clips["hold"]["R"][:1].copy()
+    R[0, sh] = mat_quat(W[parents[sh]][:3, :3].T @ rsh)
+    R[0, el] = mat_quat(rsh.T @ rel)
+    return {"R": R, "T": clips["hold"]["T"][:1].copy(), "part": "ub", "loop": True, "src": "made from hold"}
+
+
 def pack(joints: list[str], rest: np.ndarray, clips: dict, parents: list[int] | None = None) -> tuple[dict, bytes]:
     """b"NXN1", u32 header length, header JSON, then per clip: rotations i16 x 4 per joint per frame (x 32767),
     translations f32 x 3 of the MOVE joints per frame. Header: joints, the core rest (f32 x 16 per joint,
@@ -247,6 +324,9 @@ def pack(joints: list[str], rest: np.ndarray, clips: dict, parents: list[int] | 
     head = {"v": VERSION, "fps": FPS, "joints": joints, "move": [joints[i] for i in mj], "upper": UPPER,
             "scaled": list(SCALED), "gun": GUN, "parents": parents or [],
             "grip": np.round(grip(joints, parents, rest, clips).T.reshape(-1), 5).tolist() if parents else None,
+            "grips": {c: np.round(grip(joints, parents, rest, clips, c).T.reshape(-1), 5).tolist()
+                      for c in ("hold", "pistol") if c in clips and parents},
+            "sidearms": list(SIDEARMS),
             "clips": {}, "sections": {}}
     body = io.BytesIO()
 
@@ -282,6 +362,7 @@ def unpack(blob: bytes) -> dict:
 
     out = {"joints": head["joints"], "move": head["move"], "fps": head["fps"], "parents": head.get("parents", []),
            "grip": np.array(head["grip"]).reshape(4, 4).T if head.get("grip") else np.eye(4),
+           "grips": {k: np.array(v).reshape(4, 4).T for k, v in (head.get("grips") or {}).items()},
            "rest": sec(head["sections"]["rest"], "<f4").reshape(nj, 4, 4).transpose(0, 2, 1), "clips": {}}
     for name, c in head["clips"].items():
         f = c["frames"]
