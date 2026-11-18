@@ -199,7 +199,8 @@ def test_roof_map_walkable_and_lids(built):
 def test_objects_simplified_one_by_one():
     big = gf.Mesh(np.random.default_rng(1).random((3000, 3)) * [2000, 2000, 10], np.arange(3000).reshape(-1, 3))
     rng = np.random.default_rng(2)
-    pts = rng.random((800, 3)) * 100
+    pts = rng.normal(size=(800, 3))
+    pts = pts / np.linalg.norm(pts, axis=1, keepdims=True) * 50 + 50          # a ball: ~1600 triangles
     from scipy.spatial import ConvexHull
     prop = gf.Mesh(pts, ConvexHull(pts).simplices)
     items = [(big, 1, np.eye(4))] + [(prop, 2, np.eye(4))] * 20

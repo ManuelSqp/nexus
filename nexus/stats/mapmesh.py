@@ -36,8 +36,10 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 2                      # 2 (4.48.1): objects simplified one by one; the roof map marks walkable spots
-TARGET_TRIS = 260_000            # after simplifying
+VERSION = 3                      # 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
+TARGET_TRIS = 450_000            # after simplifying (a soft target: see per_object)
+MIN_KEEP = 0.35                  # a simplified object keeps at least this share of its triangles
+SIMPLIFY_MIN = 300               # objects with fewer triangles aren't simplified
 BIG_CM = 600                     # objects bigger than this (their own size) aren't simplified
 MIN_SIZE_CM = 80                 # objects smaller than this (their biggest side) are left out
 VOX = 0.25                       # m, the server's see-through grid
@@ -265,13 +267,15 @@ def per_object(items, target: int) -> dict:
         return out
     # big pieces (floors, walls, buildings: more than BIG_CM across) stay as they are: simplified, open surfaces
     # shrink at their edges and leave gaps. The props and details take the cut.
-    fixed = lambda m: len(m.tris) <= 48 or (m.points.max(0) - m.points.min(0)).max() > BIG_CM   # noqa: E731
+    # Detailed props keep at least MIN_KEEP of their triangles (cut harder, they turn into spiky shards); small
+    # ones aren't touched. So a busy map ends up above target rather than torn.
+    fixed = lambda m: len(m.tris) <= SIMPLIFY_MIN or (m.points.max(0) - m.points.min(0)).max() > BIG_CM   # noqa: E731
     small = sum(len(m.tris) * n for m, n in uses.values() if fixed(m))
-    ratio = max(0.02, (target - small) / max(1, total - small))
+    ratio = min(1.0, max(MIN_KEEP, (target - small) / max(1, total - small)))
     for key, (m, _n) in uses.items():
         if fixed(m):
             continue
-        keep = max(24, int(len(m.tris) * ratio))
+        keep = max(SIMPLIFY_MIN, int(len(m.tris) * ratio))
         if keep >= len(m.tris):
             continue
         out[key] = _simplify_one(m.points, m.tris, keep)
