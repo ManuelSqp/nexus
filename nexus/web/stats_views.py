@@ -1015,6 +1015,8 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
     register_maps3d(app, store, sr, view_profile, KNOWN_MAPS)
     from .replayview import register as register_replayview      # 4.44: replay in 3D, comments, utility check
     register_replayview(app, store, view_profile)
+    from .drills import register as register_drills              # 4.51: your deaths as aim drills on the real maps
+    register_drills(app, store, sr, view_profile)
     from .askcoach import register as register_ask
     register_ask(app, store, sr, view_profile, filter_rows)
     from .drafts import register as register_drafts

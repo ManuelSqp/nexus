@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.50.2** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.51.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -722,6 +722,12 @@ two more folders the same way and copy them anywhere into `data/game/` too:
 `data/agents3d/guns/`. Without them the agents stand in their default pose as before. Which animation plays is
 read from the replay (speed, direction compared to where the player looks, up or down, crouching from the height
 when the replay shows it); the legs follow the distance walked, so the feet don't slide.
+
+**Aim on maps (4.51).** With the maps built from the game's files, Practice › Aim on maps turns your deaths into aim
+drills: you stand where you died and your killer comes out the way he did (his path from the replay, his agent and
+gun, the round's smokes and walls). The drills of a match are worked out in the background the first time the page
+needs them (`data/drills/<match id>.json`); your runs are kept in `data/profiles/<pid>/stats/drills.json` and your
+keys in `data/aim/keys-<user id>.json`.
 
 ### Run it permanently
 

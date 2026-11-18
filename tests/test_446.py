@@ -22,7 +22,7 @@ def test_3d_utility_pass():
 
 
 def test_smoke_colours_per_agent():
-    js = (STATIC / "replay.js").read_text()
+    js = (STATIC / "replay.js").read_text() + (STATIC / "motion.js").read_text()   # 4.51: shared code in motion.js
     for agent in ("miks", "clove", "omen", "viper", "astra", "harbor", "brimstone"):
         assert f"{agent}: [" in js, agent
     assert "smonk: [" in js and "wraith: [" in js                       # their codenames in the replay file

@@ -4,6 +4,29 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.51.0
+- **Practice › Aim on maps: your deaths as drills.** Every death in a match with a replay file, on a map built from
+  the game's files, can be played again as an aim drill. You stand where you died, looking where you looked; your
+  killer comes out of the same spot on his real path from the replay, as his agent (animated) with his gun, and the
+  round's smokes and walls are where they were (smokes hide him, flashes that popped in your view blind you).
+  - Kill him before **his time**: how long he had you in view before he killed you (the Combat Report's "who saw
+    whom first"). Your time counts from the moment he could be seen. 10 reps by default (5 or 20), then the result:
+    how often you beat him, your best and median time, every rep, where your first shots went (head, body, legs),
+    how far off him your crosshair was when he appeared (and in the match), and your sessions on this spot.
+  - Like Valorant: your sens and DPI from the aim trainer (0.07° per count × sens, 103° wide view, raw mouse input),
+    the gun you had in that round with its real magazine, fire rate, reload and damage, zoom when aiming down
+    sights. Hits count on the agent's skeleton (head, body and arms, legs), so a running or crouching enemy is hit
+    where he's drawn; walls stop shots. "Count only headshots" (on by default) or real damage (150 HP).
+  - **Watch how he did it** (P): his peek, slowed down. Options: the enemy's speed (0.75× to 1.25×), reps.
+  - The list: one card per spot (the same angle killing you again shows as ×2, ×3) with his time, who saw whom
+    first, your best; filters for the map, the last 10/30 matches or all replays, "only where he saw me first",
+    and **Play them in a row**. The drills of new matches are worked out in the background (a few seconds each).
+- **Your own keys**: shoot, reload, aim down sights, restart the drill, next rep, watch, full screen: any key, mouse
+  button (4, 5) or the wheel, two per action, saved with your account (the same on every PC and in the Nexus app).
+  A key on two actions is marked. Esc always stops. Defaults: Mouse 1, R, Mouse 2, Backspace, Space, P, F.
+- The replay viewer and the drills share how players move (`static/motion.js`).
+- German texts.
+
 ## 4.50.2
 - **3D maps from the game's files: doors that are open in the game don't look closed any more.** The layouts have
   every door in its closed place, but most are open when a round starts (Ascent's two mechanical doors, Sunset's,

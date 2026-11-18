@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% import "_ui.html" as vc %}
+{% block title %}Aim on maps · {{ p.riot_id }} · Nexus{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='drills.css') }}?v={{ app_version }}">{% endblock %}
+{% block content %}
+{{ vc.pagehead('Aim on maps', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
+   'Your deaths as drills, on the real maps') }}
+
+<div class="am-head">
+  <div class="am-intro">
+    <h2>Your deaths as drills</h2>
+    <p class="muted">You stand where you died, looking where you looked. Your killer comes out of the same spot, the same way, with the same gun, and the round's smokes and walls are where they were. Beat his time.</p>
+  </div>
+  <div class="am-stats" id="am-stats"></div>
+</div>
+
+<div class="am-tabs" role="tablist" aria-label="Kind of drill">
+  <button type="button" role="tab" aria-selected="true" class="on">Your deaths <span id="am-n"></span></button>
+  <button type="button" role="tab" aria-selected="false" disabled>Hold an angle <small>later</small></button>
+  <button type="button" role="tab" aria-selected="false" disabled>Clear a site <small>later</small></button>
+  <button type="button" role="tab" aria-selected="false" disabled>Crosshair walk <small>later</small></button>
+</div>
+
+<div class="am-filters">
+  <label>Map <select id="am-map"><option value="">All maps</option></select></label>
+  <label>From <select id="am-from"><option value="10">Last 10 matches</option><option value="30">Last 30 matches</option><option value="all">All replays</option></select></label>
+  <label><input type="checkbox" id="am-first"> Only where he saw me first</label>
+  <span class="am-grow"></span>
+  <button type="button" class="btn ghost" id="am-keys-btn">Your keys</button>
+  <a class="btn primary" id="am-all" href="#" hidden>Play them in a row</a>
+</div>
+<p class="small muted" id="am-msg" aria-live="polite"></p>
+
+<section class="card am-keys" id="am-keys" hidden>
+  <h2 style="margin-top:0">Your keys</h2>
+  <p class="muted small">Click a key, then press the key or mouse button you want. Saved with your account, for the drills (and later the aim trainer).</p>
+  <div id="am-keys-box"></div>
+</section>
+
+<div class="am-grid" id="am-grid"></div>
+<div class="card am-empty" id="am-empty" hidden></div>
+
+<script>window.NEXUS_DRILLS = {{ boot|tojson }};</script>
+<script src="{{ url_for('static', filename='keys.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='aim_maps.js') }}?v={{ app_version }}"></script>
+{% endblock %}
