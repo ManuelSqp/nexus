@@ -36,7 +36,7 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 4                      # 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
+VERSION = 5                      # 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
 TARGET_TRIS = 450_000            # after simplifying (a soft target: see per_object)
 MIN_KEEP = 0.35                  # a simplified object keeps at least this share of its triangles
 SIMPLIFY_MIN = 300               # objects with fewer triangles aren't simplified
@@ -202,6 +202,7 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
 
     # ---- the geometry, in world cm: which objects, and how many triangles they'd be
     solid, glass = [], []                                 # (mesh, its file, world matrix)
+    doors, n_doors = Doorways(nav_w), 0
     for p in src.placed:
         if p.invisible or not render_layer(p.layer) or CLUTTER.search(p.ref.rsplit("/", 1)[-1]) or TECH.search(p.ref):
             continue
@@ -215,6 +216,10 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
             c = W[:3, 3]
             if size.max() < MIN_SIZE_CM or not ((c >= lo - 3000) & (c <= hi + 3000)).all():
                 continue
+            if doors.is_open(m, W):                         # 4.50.2: drawn like glass, don't block the view
+                glass.append((m, id(m), W))
+                n_doors += 1
+                continue
             sm, gm = src.parts(m)
             if sm is not None:
                 solid.append((sm, id(sm), W))
@@ -224,6 +229,8 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
         say(f"{code}: no meshes found (is the Environment folder exported?)")
         return None
     n_obj = len(solid) + len(glass)
+    if n_doors:
+        say(f"{code}: {n_doors} doors open in the game (drawn see-through)")
     fr = Frame(mi)
     navm = _to_frame(nav_w.reshape(-1, 3), mi, fr).reshape(-1, 3, 3)
 
@@ -265,6 +272,67 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
             "bytes": len(blob), "hash": hashlib.sha1(blob).hexdigest()[:12]}
     say(f"{code}: done in {meta['seconds']} s, {len(blob) / 1e6:.1f} MB")
     return meta, blob, vox
+
+
+class Doorways:
+    """4.50.2: doors that stand in a passage. The layouts have the game's doors in their closed place, but most are
+    open when a round starts (Ascent's and Sunset's mechanical doors, Breeze's and Fracture's, Bind's teleporter
+    doors, Abyss's breakable ones), and players walk through them. Found by their shape and the navigation mesh: a
+    slab standing on the floor (thin, at least a person's height) whose middle and both sides are walkable."""
+    MIN_H, MAX_H = 150, 700          # cm
+    MAX_THICK = 30
+    MIN_W, MAX_W = 70, 650
+    SIDE = 70                         # how far in front of and behind it the floor is checked
+    ZTOL = 40
+
+    def __init__(self, nav_w: np.ndarray):
+        A, B, C = nav_w[:, 0], nav_w[:, 1], nav_w[:, 2]
+        v0, v1 = C[:, :2] - A[:, :2], B[:, :2] - A[:, :2]
+        d00, d01, d11 = (v0 * v0).sum(1), (v0 * v1).sum(1), (v1 * v1).sum(1)
+        den = d00 * d11 - d01 * d01
+        ok = np.abs(den) > 1.0                            # upright and broken triangles cover no floor
+        self.A, self.B, self.C = A[ok], B[ok], C[ok]
+        self.v0, self.v1, self.d00, self.d01, self.d11, self.den = v0[ok], v1[ok], d00[ok], d01[ok], d11[ok], den[ok]
+
+    def walkable(self, p: np.ndarray, z0: float) -> bool:
+        """Is there walkable floor at p (x, y) within ZTOL of height z0?"""
+        if not len(self.A):
+            return False
+        v2 = p[None, :2] - self.A[:, :2]
+        d20, d21 = (v2 * self.v0).sum(1), (v2 * self.v1).sum(1)
+        u = (self.d11 * d20 - self.d01 * d21) / self.den
+        v = (self.d00 * d21 - self.d01 * d20) / self.den
+        inside = (u >= -1e-6) & (v >= -1e-6) & (u + v <= 1 + 1e-6)
+        z = self.A[:, 2] + u * (self.C[:, 2] - self.A[:, 2]) + v * (self.B[:, 2] - self.A[:, 2])
+        return bool((inside & (np.abs(z - z0) <= self.ZTOL)).any())
+
+    def is_open(self, m: gf.Mesh, W: np.ndarray) -> bool:
+        lo, hi = m.points.min(0), m.points.max(0)
+        R = W[:3, :3]
+        ax = np.linalg.norm(R, axis=0)
+        size = (hi - lo) * ax
+        dirs = R / np.where(ax > 0, ax, 1)
+        up = int(np.argmax(np.abs(dirs[2])))
+        if abs(dirs[2, up]) < 0.9:
+            return False
+        th, wi = sorted((i for i in range(3) if i != up), key=lambda i: size[i])
+        if not (self.MIN_H <= size[up] <= self.MAX_H and size[th] <= self.MAX_THICK and self.MIN_W <= size[wi] <= self.MAX_W):
+            return False
+        c = (W @ np.r_[(lo + hi) / 2, 1.0])[:3]
+        base = c[2] - size[up] / 2
+        along = sum(self.walkable(c + dirs[:, wi] * f * size[wi], base) for f in (-0.15, 0.0, 0.15))
+        if along < 2 or not all(self.walkable(c + dirs[:, th] * s * self.SIDE, base) for s in (-1, 1)):
+            return False
+        # it fills its own middle (a door frame doesn't: the passage goes through it anyway)
+        P2 = m.points[:, [wi, up]]
+        mid = ((lo + hi) / 2)[[wi, up]]
+        a, b, cc = P2[m.tris[:, 0]], P2[m.tris[:, 1]], P2[m.tris[:, 2]]
+
+        def side(p1, p2):
+            return (p1[:, 0] - mid[0]) * (p2[:, 1] - mid[1]) - (p2[:, 0] - mid[0]) * (p1[:, 1] - mid[1])
+        s1, s2, s3 = side(a, b), side(b, cc), side(cc, a)
+        neg, pos = (s1 < 0) | (s2 < 0) | (s3 < 0), (s1 > 0) | (s2 > 0) | (s3 > 0)
+        return bool((~(neg & pos)).any())
 
 
 def per_object(items, target: int) -> dict:

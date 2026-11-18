@@ -4,6 +4,14 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.50.2
+- **3D maps from the game's files: doors that are open in the game don't look closed any more.** The layouts have
+  every door in its closed place, but most are open when a round starts (Ascent's two mechanical doors, Sunset's,
+  Breeze's and Fracture's, Bind's teleporter doors, Abyss's breakable ones), so players walked through solid doors.
+  A door standing in a walkable passage (the game's navigation mesh runs through it and on both sides) is now drawn
+  like glass, faint, so you still see where it is, and it doesn't block the line of sight. The maps are built again
+  after the update.
+
 ## 4.50.1
 - **Pistols are held like in the game**: out in front with both hands. Every gun used the rifle pose, so a Classic
   or a Sheriff sat in the right hand at the chest while the left hand held nothing. The game's own pistol pose is
