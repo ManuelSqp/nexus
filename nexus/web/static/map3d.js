@@ -653,8 +653,10 @@
     if (!raf) raf = requestAnimationFrame(frame);
   }
   // ---------------------------------------------------------------- input
-  canvas.addEventListener('click', () => { if (M && document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
-  document.addEventListener('pointerlockchange', () => { $('m3-start').hidden = document.pointerLockElement === canvas; if (document.pointerLockElement !== canvas) keys.clear(); });
+  // 4.49: the replay viewer has its own controls (replay.js, like the game's replays): no walking, no pointer lock
+  const OWN = !C.replay;
+  canvas.addEventListener('click', () => { if (OWN && M && document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
+  document.addEventListener('pointerlockchange', () => { $('m3-start').hidden = !OWN || document.pointerLockElement === canvas; if (document.pointerLockElement !== canvas) keys.clear(); });
   document.addEventListener('mousemove', e => {
     if (document.pointerLockElement !== canvas) return;
     const k = 0.07 * (+C.sens || 0.4) * D2R;
@@ -722,7 +724,7 @@
       if (touch.look && t.identifier === touch.look.id) touch.look = null;
     }
   }
-  canvas.addEventListener('touchstart', touchStart, {passive: false});
+  if (OWN) canvas.addEventListener('touchstart', touchStart, {passive: false});
   $('m3-start').addEventListener('touchstart', touchStart, {passive: false});
   canvas.addEventListener('touchmove', touchMove, {passive: false});
   canvas.addEventListener('touchend', touchEnd); canvas.addEventListener('touchcancel', touchEnd);

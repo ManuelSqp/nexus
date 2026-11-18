@@ -36,7 +36,7 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 3                      # 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
+VERSION = 4                      # 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
 TARGET_TRIS = 450_000            # after simplifying (a soft target: see per_object)
 MIN_KEEP = 0.35                  # a simplified object keeps at least this share of its triangles
 SIMPLIFY_MIN = 300               # objects with fewer triangles aren't simplified
@@ -89,6 +89,7 @@ class Source:
                 sig.append(f"{f.name}:{f.stat().st_size}")
         self.signature = hashlib.sha1("|".join(sig).encode()).hexdigest()[:12]
         self._meshes: dict[Path, gf.Mesh | None] = {}
+        self._parts: dict[int, tuple] = {}
 
     def mesh(self, p: gf.Placed) -> gf.Mesh | None:
         f = self.files.resolve(p.ref, p.base)
@@ -97,6 +98,13 @@ class Source:
         if f not in self._meshes:
             self._meshes[f] = gf.read_mesh(f)
         return self._meshes[f]
+
+    def parts(self, m: gf.Mesh):
+        """A mesh without its glass, and its glass (each made once)."""
+        hit = self._parts.get(id(m))
+        if hit is None:
+            hit = self._parts[id(m)] = m.split()
+        return hit
 
     def nav(self) -> np.ndarray | None:
         """Triangles of the navigation (targeting) mesh in world cm, (n, 3, 3)."""
@@ -207,7 +215,11 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
             c = W[:3, 3]
             if size.max() < MIN_SIZE_CM or not ((c >= lo - 3000) & (c <= hi + 3000)).all():
                 continue
-            (glass if m.glass else solid).append((m, id(m), W))
+            sm, gm = src.parts(m)
+            if sm is not None:
+                solid.append((sm, id(sm), W))
+            if gm is not None:
+                glass.append((gm, id(gm), W))
     if not solid:
         say(f"{code}: no meshes found (is the Environment folder exported?)")
         return None

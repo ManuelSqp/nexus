@@ -92,25 +92,58 @@ class Mesh:
     bind: np.ndarray | None = None     # (j, 4, 4) world matrices of the joints in the bind pose
     jidx: np.ndarray | None = None     # (n, k) int
     jw: np.ndarray | None = None       # (n, k) float
+    glass_tris: np.ndarray | None = None   # (m,) bool: the triangle's material is glass (4.49: per face, not per mesh)
 
     @property
     def glass(self) -> bool:
-        return any("glass" in m.lower() for m in self.materials)
+        return bool(self.glass_tris is not None and self.glass_tris.any())
+
+    def split(self) -> tuple["Mesh | None", "Mesh | None"]:
+        """-> (the mesh without its glass, its glass) — a building with one window is a wall, not glass."""
+        if self.glass_tris is None or not self.glass_tris.any():
+            return self, None
+        g = self.glass_tris
+        solid = Mesh(self.points, self.tris[~g], self.materials) if (~g).any() else None
+        return solid, Mesh(self.points, self.tris[g], self.materials)
 
 
-def triangulate(counts: np.ndarray, idx: np.ndarray) -> np.ndarray:
-    """Faces with any number of corners -> triangles (fans)."""
+def triangulate(counts: np.ndarray, idx: np.ndarray, faces: bool = False):
+    """Faces with any number of corners -> triangles (fans); with faces: also each triangle's face."""
     counts = counts.astype(np.int64)
     if counts.size and (counts == 3).all():
-        return idx.reshape(-1, 3)
-    out = []
+        t = idx.reshape(-1, 3)
+        return (t, np.arange(len(t))) if faces else t
+    out, fid = [], []
     pos = 0
-    for c in counts:
+    for n, c in enumerate(counts):
         f = idx[pos:pos + c]
         for k in range(1, c - 1):
             out.append((f[0], f[k], f[k + 1]))
+            fid.append(n)
         pos += c
-    return np.array(out, np.int64).reshape(-1, 3)
+    t = np.array(out, np.int64).reshape(-1, 3)
+    return (t, np.array(fid, np.int64)) if faces else t
+
+
+_SUBSET = re.compile(r'def GeomSubset "[^"]*"(.*?)rel material:binding = <[^>]*/([^/>]+)>', re.S)
+
+
+def _glass_faces(text: str, n_faces: int) -> np.ndarray | None:
+    """Faces bound to a glass material (GeomSubsets), or None when nothing is glass."""
+    if "glass" not in text.lower():
+        return None
+    out = np.zeros(n_faces, bool)
+    for body, mat in _SUBSET.findall(text):
+        if "glass" not in mat.lower():
+            continue
+        ix = _array(body, "indices")
+        if ix is None:
+            continue
+        i = _floats(ix).astype(np.int64)
+        out[i[(i >= 0) & (i < n_faces)]] = True
+    if not _SUBSET.search(text) and any("glass" in m.lower() for m in re.findall(r'def Material "([^"]+)"', text)):
+        out[:] = True                                    # one material for the whole mesh, and it's glass
+    return out if out.any() else None
 
 
 def read_mesh(path: Path) -> Mesh | None:
@@ -128,10 +161,14 @@ def read_mesh(path: Path) -> Mesh | None:
     c, i = _floats(counts).astype(np.int64), _floats(idx).astype(np.int64)
     if not c.size or c.sum() != i.size:
         return None
-    tris = triangulate(c, i)
-    tris = tris[(tris >= 0).all(1) & (tris < len(p)).all(1)]
+    tris, fid = triangulate(c, i, faces=True)
+    ok = (tris >= 0).all(1) & (tris < len(p)).all(1)
+    tris, fid = tris[ok], fid[ok]
     mats = re.findall(r'def Material "([^"]+)"', text)
     m = Mesh(p, tris, mats)
+    gf_ = _glass_faces(text, len(c))
+    if gf_ is not None:
+        m.glass_tris = gf_[fid]
     if "skel:jointIndices" in text:
         _read_skin(text, m)
     return m

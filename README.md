@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.48.2** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.49.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -229,17 +229,22 @@ coming out of main facing the site). Enemy models peek from the callouts in fron
 distance on that map, and the callout's name shows when one appears. The positions come from valorant-api.com's
 callouts, which have no walls or heights: each spot gets a piece of cover and everyone is at your height.
 
-**Replay in 3D:** *Watch in 3D* on a match (or on *Replay files*) plays the match's replay inside the rebuilt 3D map,
-round by round: every player with name and view direction, kills, the spike, smokes and other utility, from above,
-through one player's eyes, or flying freely. The team writes comments at a moment of a round (*Team review*); everyone
-who can open the match sees them. Below it, the **utility check**: per player casts per key (C, Q, E, X), rounds with
-utility, deaths without having used any, and when the first ability of a round comes.
+**Replay in 3D:** *Watch in 3D* on a match (or on *Replay files*) plays the match's replay inside the 3D map, round
+by round, controlled like the game's own replays (4.49): **Player** view (through a player's eyes; `1`–`0` or a click
+on his portrait picks him, a click on the view the next one, a right click the previous one) and **Free camera**
+(`W` `A` `S` `D`, `E`/`Q` up and down, `Shift` faster, drag to look, the wheel flies forward), switched with `V`.
+`Space` plays, `←` `→` jump 5 s, `,` `.` change the round, `[` `]` the speed (0.1× to 8×), `T` hides the controls,
+`N` opens the **Combat Report**: the round's kills (with callouts and who saw whom first), *Your deaths* (with the
+sightline between you and your killer), the **utility check** (per player casts per key C/Q/E/X, rounds with utility,
+deaths without having used any, when the first ability comes) and *Team review*, comments at a moment of a round that
+everyone who can open the match sees. The timeline shows the rounds (won, lost, the side swap) and the round's
+kills, deaths, ultimates and the spike; a click on one jumps 3 s before it.
 
 **3D maps from the game's files (4.48):** with VALORANT's own map and agent files on the server (see *3D maps from the
 game's files* below) the 3D maps and the replay viewer use the real maps: every wall, floor, ramp and box at its real
 size, in one colour (*Floor* › *Height* or *Map areas*: the game's callout zones), roofs cut away for the view from
 above (*Roofs* shows them). Agents are their real models in the team's colour; walls hide them and their names
-(*See through walls* shows them again). Kills name the game's callout where they happened, and with line of sight from
+(*Outlines* shows them again). Kills name the game's callout where they happened, and with line of sight from
 the walls the replay page says who saw whom first, how many enemies had a line to the victim, and whether he ever had
 his killer in view; *Your deaths* sums it up per match.
 
