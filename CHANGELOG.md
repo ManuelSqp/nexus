@@ -4,6 +4,15 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.48.2
+- 3D maps from the game's files: **no more spiky shards**. Detailed objects were simplified too hard (some to 2 % of
+  their triangles), which turned them into big slanted triangles; now every object keeps at least a third of its
+  triangles and small ones aren't touched. The maps are a bit heavier (about 5–6 MB to download, the browser keeps
+  them).
+- The dark lids over closed-off blocks are only drawn from above: from below or the side they used to float in the
+  air as dark plates.
+- The maps are built again by themselves after the update (or `nexus build-game --data …`).
+
 ## 4.48.1
 - 3D maps from the game's files: **no more holes in the floors** and no more slanted walls. The map used to be
   simplified as a whole, which tore gaps where separate pieces meet; now each object is simplified on its own, and

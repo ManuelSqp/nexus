@@ -178,7 +178,7 @@
     #else
     precision mediump float;
     #endif
-    uniform sampler2D roof; uniform vec4 rg; uniform float rmin; uniform float cut; uniform float rcut;
+    uniform sampler2D roof; uniform vec4 rg; uniform float rmin; uniform float cut; uniform float rcut; uniform float ey;
     uniform sampler2D pal; uniform float paln; uniform float mode; uniform vec3 one; uniform vec2 hr; uniform float alpha;
     varying vec3 wp; varying float va; varying float fog;
     void main(){
@@ -191,6 +191,7 @@
         float h = floor(t.r * 65280.0 + t.a * 255.0 + 0.5) / 100.0 + rmin;
         if (wp.y > h + rcut) discard;
       }
+      if (va > 254.5 && ey < wp.y) discard;                  // a lid is only seen from above
       if (va > 254.5) { gl_FragColor = vec4(mix(vec3(0.19, 0.22, 0.29), vec3(0.55, 0.62, 0.72), fog * 0.5), 1.0); return; }
       vec3 L = normalize(vec3(0.35, 0.9, 0.25));
       float d = 0.52 + 0.48 * abs(dot(n, L));
@@ -213,7 +214,7 @@
       if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) console.error('map shader:', gl.getShaderInfoLog(x)); return x; };
     gprog = gl.createProgram(); gl.attachShader(gprog, sh(gl.VERTEX_SHADER, GVS)); gl.attachShader(gprog, sh(gl.FRAGMENT_SHADER, GFS)); gl.linkProgram(gprog);
     if (!gl.getProgramParameter(gprog, gl.LINK_STATUS)) { console.error('map shader:', gl.getProgramInfoLog(gprog)); gprog = false; return false; }
-    for (const u of ['lo', 'span', 'vp', 'eye', 'roof', 'rg', 'rmin', 'cut', 'rcut', 'pal', 'paln', 'mode', 'one', 'hr', 'alpha']) gloc[u] = gl.getUniformLocation(gprog, u);
+    for (const u of ['lo', 'span', 'vp', 'eye', 'ey', 'roof', 'rg', 'rmin', 'cut', 'rcut', 'pal', 'paln', 'mode', 'one', 'hr', 'alpha']) gloc[u] = gl.getUniformLocation(gprog, u);
     gloc.q = gl.getAttribLocation(gprog, 'q'); gloc.a = gl.getAttribLocation(gprog, 'a');
     return true;
   }
@@ -287,7 +288,8 @@
   }
   function gameUniforms(alpha) {
     gl.useProgram(gprog);
-    gl.uniformMatrix4fv(gloc.vp, false, VP); gl.uniform3fv(gloc.eye, eyePos());
+    const e = eyePos();
+    gl.uniformMatrix4fv(gloc.vp, false, VP); gl.uniform3fv(gloc.eye, e); gl.uniform1f(gloc.ey, e[1]);
     gl.uniform3fv(gloc.lo, G.lo); gl.uniform3fv(gloc.span, G.span);
     const R = G.roof.R;
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, G.roofT); gl.uniform1i(gloc.roof, 0);
