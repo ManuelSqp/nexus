@@ -3,47 +3,82 @@
 {% block title %}Replay · {{ m.map_name }} · {{ p.riot_id }} · Nexus{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='map3d.css') }}?v={{ app_version }}">
 <style>
-.rv-rounds{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 10px}
-.rv-rounds button{font:inherit;font-size:12.5px;font-weight:650;min-width:34px;padding:4px 6px;border-radius:7px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);cursor:pointer;position:relative;font-variant-numeric:tabular-nums}
-.rv-rounds button.w{border-bottom:3px solid var(--win)}.rv-rounds button.l{border-bottom:3px solid var(--red)}
-.rv-rounds button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-.rv-rounds button[disabled]{opacity:.35;cursor:default}
-.rv-rounds button.cm::after{content:"";position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--amber)}
-.rv-rounds .half{width:1px;background:var(--line2);margin:0 4px}
-.rv-wrap{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:14px;align-items:start}
-@media (max-width:980px){.rv-wrap{grid-template-columns:1fr}}
-.rv-ctrl{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-top:10px;font-size:13.5px}
-.rv-ctrl input[type=range]{flex:1;min-width:180px}
-.rv-ctrl .clock{font-variant-numeric:tabular-nums;font-weight:650;min-width:84px}
-.rv-ctrl label{display:flex;gap:5px;align-items:center}
+/* 4.49: the replay viewer, laid out like the game's replays: the view fills the page, the teams and the score on
+   top, the timeline and the controls below, the Combat Report (N) as a drawer on the right */
+.rv{display:flex;flex-direction:column;background:#0d0e17;border-radius:14px;overflow:hidden;border:1px solid var(--line2)}
+.rv:fullscreen{border-radius:0;border:0}
+.rv .m3-stage.rv-stage{aspect-ratio:auto;height:calc(100vh - 250px);min-height:420px;border-radius:0}
+.rv:fullscreen .m3-stage.rv-stage{height:auto;flex:1 1 auto}
+.rv .m3-help,.rv .m3-start,.rv .m3-jump,.rv .m3-pos{display:none!important}
+.rv-stage canvas#m3-canvas{cursor:grab}.rv-stage.drag canvas#m3-canvas{cursor:grabbing}
+.rv-hud{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;pointer-events:none;z-index:3}
+.rv-team{display:flex;gap:5px;pointer-events:auto}
+.rv-a{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:inherit;font-weight:750;font-size:11.5px;letter-spacing:.02em;color:#e8e9f2;background:#22324a;border:2px solid var(--c);cursor:pointer;padding:0;text-transform:uppercase}
+.rv-a.dead{background:#20222c;color:#5d6275;border-color:#3a3d4a}
+.rv-a.on{box-shadow:0 0 0 2px #fff}
+.rv-score{display:flex;flex-direction:column;align-items:center;background:rgba(13,14,23,.86);border-radius:10px;padding:5px 14px;min-width:128px;color:#e8e9f2}
+.rv-score b{font-size:21px;display:flex;gap:12px;font-variant-numeric:tabular-nums}.rv-score small{font-size:11px;color:#b6bbd0}
+.rv-tr{position:absolute;top:12px;right:12px;display:flex;gap:8px;align-items:center;z-index:3}
+.rv-chip{background:rgba(13,14,23,.86);color:#e8e9f2;border-radius:99px;padding:6px 13px;font-weight:650;font-size:13px;border:1px solid rgba(255,255,255,.12)}
+button.rv-chip{cursor:pointer;font:inherit;font-weight:650;font-size:13px}
+.rv-chip kbd{font-size:11px;color:#9aa0b8;border:0;background:none}
+.rv-pov{position:absolute;left:12px;bottom:12px;display:flex;gap:10px;align-items:center;background:rgba(13,14,23,.86);color:#e8e9f2;border-radius:12px;padding:7px 13px 7px 7px;z-index:3}
+.rv-pov .rv-a{cursor:default}.rv-pov small{display:block;color:#b6bbd0;font-size:12px}
+.rv-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:3}
+.rv-report{position:absolute;top:0;right:0;bottom:0;width:min(430px,100%);background:#161827;border-left:1px solid #2a2f45;z-index:4;display:flex;flex-direction:column;color:#e8e9f2}
+.rv-report header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 6px}
+.rv-report h2{margin:0;font-size:17px}
+.rv-tabs{display:flex;flex-wrap:wrap;gap:6px;padding:4px 14px 10px}
+.rv-tabs button{font:inherit;font-size:12.5px;border:0;border-radius:99px;padding:5px 11px;background:#23273a;color:#d0d4e4;cursor:pointer}
+.rv-tabs button.on{background:var(--accent);color:var(--accent-ink);font-weight:650}
+.rv-pane{overflow:auto;padding:0 14px 14px;flex:1 1 auto}
+.rv-bar{background:#141624;border-top:1px solid #2a2f45;padding:8px 14px 10px;display:flex;flex-direction:column;gap:6px;color:#e8e9f2}
+.rv-rounds{display:flex;gap:3px;align-items:flex-end}
+.rv-rounds button{flex:1 1 0;min-width:6px;height:10px;padding:0;border:0;border-radius:3px;background:#2a2f45;cursor:pointer;position:relative}
+.rv-rounds button.w{background:#2fc4b2}.rv-rounds button.l{background:#e2505f}
+.rv-rounds button.on{height:15px;background:var(--accent)}
+.rv-rounds button[disabled]{opacity:.3;cursor:default}
+.rv-rounds button.cm::after{content:"";position:absolute;top:-5px;left:50%;width:5px;height:5px;margin-left:-2px;border-radius:50%;background:var(--amber)}
+.rv-rounds .half{width:3px;height:15px;border-radius:2px;background:#f5c76a;flex:0 0 3px}
+.rv-tl{position:relative;height:30px;cursor:pointer}
+.rv-tl .track{position:absolute;left:0;right:0;top:18px;height:6px;border-radius:3px;background:#2a2f45}
+.rv-tl .fill{position:absolute;left:0;top:18px;height:6px;border-radius:3px;background:var(--accent)}
+.rv-tl .head{position:absolute;top:13px;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px var(--accent);pointer-events:none}
+.rv-tl .mk{position:absolute;top:0;transform:translateX(-50%);font-size:13px;line-height:13px;border:0;background:none;padding:0 1px;cursor:pointer}
+.rv-tl input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;margin:0}
+.rv-ctrl{display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center;font-size:13px}
+.rv-ctrl .btn{min-width:0}
+.rv-ctrl .clock{font-variant-numeric:tabular-nums;font-weight:700;min-width:84px}
+.rv-ctrl label{display:flex;gap:5px;align-items:center;color:#c4c8da}
 .rv-ctrl select{width:auto;min-width:0;padding:3px 8px}
-.rv-seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
-.rv-seg button{font:inherit;font-size:12.5px;padding:4px 10px;border:0;background:transparent;color:var(--muted);cursor:pointer}
+.rv-seg{display:inline-flex;background:#23273a;border-radius:9px;padding:2px}
+.rv-seg button{font:inherit;font-size:12.5px;padding:5px 11px;border:0;border-radius:7px;background:transparent;color:#b6bbd0;cursor:pointer;display:flex;gap:5px;align-items:center}
 .rv-seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:650}
-.rv-side{display:flex;flex-direction:column;gap:12px}
-.rv-side .card{margin:0;padding:12px}
-.rv-side h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-.rv-team{display:grid;gap:3px}
-.rv-p{display:flex;gap:6px;align-items:baseline;font:inherit;font-size:13px;text-align:left;padding:4px 8px;border-radius:7px;border:1px solid transparent;border-left:4px solid var(--c);background:var(--panel2);color:var(--text);cursor:pointer;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.rv-p.dead{opacity:.4;text-decoration:line-through}
-.rv-p.on{border-color:var(--c)}
-.rv-feed{display:grid;gap:2px;max-height:220px;overflow:auto}
-.rv-k{font:inherit;font-size:12.5px;text-align:left;padding:3px 6px;border:0;border-radius:6px;background:transparent;color:var(--muted);cursor:pointer}
-.rv-k.past{color:var(--text)}.rv-k:hover{background:var(--panel2)}
-.rv-k .tm,.rv-c .tm{font-variant-numeric:tabular-nums;color:var(--muted);margin-right:4px}
-.rv-c{font-size:13px;padding:4px 0;border-bottom:1px solid var(--line)}
-.rv-c .tm{font:inherit;border:0;background:var(--panel3);border-radius:5px;padding:0 5px;cursor:pointer;color:var(--text)}
-.rv-del{border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:15px;line-height:1}
+.rv-more{position:relative}.rv-more summary{cursor:pointer;list-style:none;color:#c4c8da;padding:4px 8px;border-radius:7px;background:#23273a}
+.rv-more[open] .rv-menu{display:flex}
+.rv-menu{display:none;position:absolute;bottom:34px;left:0;z-index:6;flex-direction:column;gap:8px;background:#1d2033;border:1px solid #343a55;border-radius:10px;padding:10px 12px;min-width:220px}
+.rv-keys{color:#8a90a8;font-size:12px;margin-left:auto}
+.rv-feed{display:grid;gap:4px}
+.rv-k{font:inherit;font-size:13px;text-align:left;padding:7px 9px;border:0;border-radius:9px;background:#1d2033;color:#9aa0b8;cursor:pointer}
+.rv-k.past{color:#e8e9f2}.rv-k:hover{background:#262a42}
+.rv-k .tm,.rv-c .tm{font-variant-numeric:tabular-nums;color:#9aa0b8;margin-right:4px}
+.rv-why{display:block;font-size:12px;color:#b6bbd0;margin-top:2px}.rv-why .bad{color:#ff8f9b}
+.rv-c{font-size:13px;padding:5px 0;border-bottom:1px solid #2a2f45}
+.rv-c .tm{font:inherit;border:0;background:#23273a;border-radius:5px;padding:0 5px;cursor:pointer;color:#e8e9f2}
+.rv-del{border:0;background:transparent;color:#9aa0b8;cursor:pointer;font-size:15px;line-height:1}
 .rv-cadd{display:flex;gap:6px;margin-top:8px}.rv-cadd input{flex:1;min-width:0}
-.ut table{width:100%;font-size:13px;border-collapse:collapse}
-.ut th{text-align:left;font-size:11.5px;color:var(--muted);font-weight:600;padding:4px 6px;border-bottom:1px solid var(--line)}
-.ut td{padding:5px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.rv-death{background:#1d2033;border:1px solid #343a55;border-radius:10px;padding:9px 11px;margin-top:8px;font-size:13px}
+.rv-death .bad{color:#ff8f9b}
+.ut table{width:100%;font-size:12.5px;border-collapse:collapse}
+.ut th{text-align:left;font-size:11px;color:#9aa0b8;font-weight:600;padding:4px 5px;border-bottom:1px solid #2a2f45}
+.ut td{padding:5px 5px;border-bottom:1px solid #2a2f45;font-variant-numeric:tabular-nums}
 .ut td.k{text-align:center}.ut tr.ours td:first-child{border-left:3px solid #3ee6c1}.ut tr.theirs td:first-child{border-left:3px solid #ff5d6c}
-.ut .bad{color:var(--red);font-weight:650}
+.ut .bad{color:#ff8f9b;font-weight:650}
 .ut-wrap{overflow-x:auto}
-.rv-why{display:block;font-size:11.5px;color:var(--muted);margin:1px 0 0 42px}.rv-why .bad{color:var(--red)}
-.dsum{display:flex;flex-wrap:wrap;gap:8px 22px;font-size:13.5px}.dsum b{font-size:18px;display:block}
-.dwhere{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.dwhere span{font-size:12.5px;padding:2px 9px;border-radius:99px;background:var(--panel2);border:1px solid var(--line2)}
+.dsum{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px}.dsum b{font-size:18px;display:block}
+.dwhere{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.dwhere span{font-size:12.5px;padding:2px 9px;border-radius:99px;background:#23273a}
+@media (max-width:1400px){.rv-tr{top:62px}}
+@media (max-width:700px){.rv .m3-stage.rv-stage{height:62vh}.rv-a{width:30px;height:30px;font-size:9px}.rv-keys{display:none}}
 </style>{% endblock %}
 {% block content %}
 {{ vc.pagehead('Replay', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
@@ -51,84 +86,117 @@
 
 {% if not has_map %}<div class="card"><p class="muted" style="margin:0">The map data isn't loaded yet (valorant-api.com): the replay can't be placed on the map. Try again in a minute.</p></div>{% endif %}
 
-<div class="rv-rounds" id="rv-rounds">{% for r in rounds %}{% if r.i == 12 %}<span class="half"></span>{% endif %}<button type="button" data-r="{{ r.i }}" class="{{ 'w' if r.won else 'l' if r.won == false }}" {{ 'disabled' if not r.has }} title="{{ r.result }}">{{ r.n }}</button>{% endfor %}</div>
+<div class="rv" id="rv">
+  <div class="m3-stage rv-stage" id="m3-stage">
+    <canvas id="m3-canvas"></canvas><canvas id="m3-over"></canvas><canvas id="m3-radar" width="400" height="400"></canvas>
+    <div class="m3-pos" id="m3-pos" translate="no"></div>
+    <div class="m3-start" id="m3-start" hidden></div>
+    <div class="m3-msg" id="m3-msg" hidden></div>
+    <div class="m3-msg" id="rv-msg" hidden></div>
+    <button type="button" class="m3-jump" id="m3-jump" hidden>Jump</button>
+    <div class="m3-help" id="m3-help" hidden></div>
 
-<div class="rv-wrap">
-  <div>
-    <div class="m3-stage" id="m3-stage">
-      <canvas id="m3-canvas"></canvas><canvas id="m3-over"></canvas><canvas id="m3-radar" width="400" height="400"></canvas>
-      <div class="m3-pos" id="m3-pos" translate="no"></div>
-      <div class="m3-start" id="m3-start" hidden><span class="k-only"><b>Click to fly around</b><span class="small">Esc to stop</span></span><span class="t-only"></span></div>
-      <div class="m3-msg" id="m3-msg" hidden></div>
-      <div class="m3-msg" id="rv-msg" hidden></div>
-      <button type="button" class="m3-jump t-only" id="m3-jump" hidden>Jump</button>
-      <div class="m3-help" id="m3-help" hidden><span class="k-only"><kbd>Space</kbd> <span>Play</span> · <kbd>←</kbd><kbd>→</kbd> <span translate="no">5 s</span> · <kbd>,</kbd><kbd>.</kbd> <span>Round</span> · <span>Click the map to fly</span> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span><span class="t-only">Left thumb: fly · right thumb: look around</span></div>
+    <div class="rv-hud" id="rv-hud">
+      <div class="rv-team" id="rv-ours"></div>
+      <div class="rv-score"><b><span style="color:#2fc4b2" id="rv-s-ours">0</span><span id="rv-rclock" style="color:#c4c8da">0:00</span><span style="color:#ff6b79" id="rv-s-theirs">0</span></b><small id="rv-rlabel"></small></div>
+      <div class="rv-team" id="rv-theirs"></div>
+    </div>
+    <div class="rv-tr" id="rv-tr">
+      <span class="rv-chip" id="rv-where" translate="no"></span>
+      <button type="button" class="rv-chip" id="rv-report-btn" aria-label="Combat Report (N)">Combat Report <kbd>N</kbd></button>
+    </div>
+    <div class="rv-pov" id="rv-pov" hidden></div>
+    <span class="rv-chip rv-hint" id="rv-hint" hidden>T · show the controls</span>
+
+    <aside class="rv-report" id="rv-report" hidden aria-label="Combat Report">
+      <header><h2>Combat Report</h2><button type="button" class="btn sm ghost" id="rv-report-x" aria-label="Close the Combat Report (N)">N ✕</button></header>
+      <div class="rv-tabs" role="tablist">
+        <button type="button" role="tab" data-tab="round" class="on">Round</button>
+        <button type="button" role="tab" data-tab="deaths">Your deaths</button>
+        <button type="button" role="tab" data-tab="utility">Utility</button>
+        <button type="button" role="tab" data-tab="review">Team review</button>
+      </div>
+      <div class="rv-pane" data-pane="round"><div class="rv-feed" id="rv-feed"></div>
+        <p class="small muted">Click a kill: the replay jumps 3 s before it.</p></div>
+      <div class="rv-pane" data-pane="deaths" id="deaths" hidden>
+        {% if deaths and deaths.deaths %}
+        <div class="dsum">
+          <div><b>{{ deaths.deaths }}</b><span>deaths</span></div>
+          {% if deaths.sight %}<div><b>{{ deaths.seen_first }}</b><span>the enemy saw you first</span></div>
+          <div><b>{{ deaths.unseen }}</b><span>you never saw your killer</span></div>
+          <div><b>{{ deaths.open_many }}</b><span>open to more than one enemy</span></div>{% endif %}
+        </div>
+        <div class="dwhere">{% for w, n in deaths.where %}<span><b translate="no">{{ w }}</b> <span translate="no">{{ n }}×</span></span>{% endfor %}</div>
+        {% else %}<p class="muted small"><span>No deaths of yours in this match.</span>{% if not deaths %} <span>The map isn't built from the game's files yet.</span>{% endif %}</p>{% endif %}
+        <h3 style="margin:14px 0 4px;font-size:13px">This round</h3>
+        <div id="rv-deaths"></div>
+        <p class="small muted"><span>Where you died, with the game's own callouts.</span>{% if deaths and deaths.sight %} <span>Who saw whom first comes from the walls of the map: a clear line from the eyes to the head or body, inside the field of view (smokes don't count).</span>{% endif %}</p>
+      </div>
+      <div class="rv-pane ut" data-pane="utility" hidden id="utility">
+        <h3 style="margin:0 0 6px;font-size:14px">Utility check</h3>
+        <p class="small muted" style="margin-top:0"><span>From the replay: who used how much utility, in how many rounds, and how often someone died without having used any.</span>
+          {% if not util.keys_known %}<span>The replay doesn't say which key an ability is on, and this match's numbers didn't allow working it out: the counts per key are the match data's.</span>{% endif %}</p>
+        <div class="ut-wrap"><table>
+          <tr><th>Player</th><th class="k">C</th><th class="k">Q</th><th class="k">E</th><th class="k">X</th><th>Rounds with utility</th><th>Died without using any</th><th>First ability (attack · defense)</th></tr>
+          {% for u in util.players %}{% set pk = u.per_key if util.keys_known else u.per_key_match %}
+          <tr class="{{ 'ours' if (players|selectattr('i', 'equalto', u.i)|first).ours else 'theirs' }}">
+            <td><b translate="no">{{ u.agent }}</b> <span translate="no">{{ u.name }}</span></td>
+            {% for k in ['C', 'Q', 'E', 'X'] %}<td class="k">{{ pk.get(k, 0) }}</td>{% endfor %}
+            <td>{{ u.used_rounds }} / {{ u.rounds }}</td>
+            <td class="{{ 'bad' if u.deaths and u.dry_deaths / u.deaths >= 0.5 }}">{{ u.dry_deaths }} / {{ u.deaths }}</td>
+            <td>{{ (u.first_s.attack|string ~ ' s') if u.first_s.attack is not none else '–' }} · {{ (u.first_s.defense|string ~ ' s') if u.first_s.defense is not none else '–' }}</td>
+          </tr>{% endfor %}
+        </table></div>
+        <p class="small muted" style="margin-bottom:0">"Died without using any": rounds in which the player died before using a single ability that round (setups in the buy phase count as used). First ability: median seconds after the barriers drop.</p>
+      </div>
+      <div class="rv-pane" data-pane="review" hidden>
+        <div id="rv-clist"></div>
+        <div class="rv-cadd"><input type="text" id="rv-c-text" maxlength="600" placeholder="Comment at this moment…"><button type="button" class="btn sm" id="rv-c-add">Add</button></div>
+        <div class="small muted" style="margin-top:4px"><span id="rv-c-at"></span></div>
+        <div class="small" style="color:var(--red)" id="rv-c-err"></div>
+        <p class="small muted" style="margin:6px 0 0">Comments are for everyone in the team who can open this match.</p>
+      </div>
+    </aside>
+  </div>
+
+  <div class="rv-bar" id="rv-bar">
+    <div class="rv-rounds" id="rv-rounds">{% for r in rounds %}{% if r.i == 12 %}<span class="half" title="Side swap"></span>{% endif %}<button type="button" data-r="{{ r.i }}" class="{{ 'w' if r.won else 'l' if r.won == false }}" {{ 'disabled' if not r.has }} aria-label="Round {{ r.n }}: {{ r.result }}"></button>{% endfor %}</div>
+    <div class="rv-tl" id="rv-tl">
+      <div class="track"></div><div class="fill" id="rv-fill"></div>
+      <input type="range" id="rv-time" min="0" max="100" step="0.05" value="0" aria-label="Round time">
+      <div id="rv-marks"></div>
+      <div class="head" id="rv-head"></div>
     </div>
     <div class="rv-ctrl">
       <button type="button" class="btn sm primary" id="rv-play">Play</button>
+      <button type="button" class="btn sm ghost" id="rv-back" aria-label="Back 5 seconds (←)">−5 s</button>
+      <button type="button" class="btn sm ghost" id="rv-fwd" aria-label="Forward 5 seconds (→)">+5 s</button>
       <span class="clock"><span id="rv-clock">0:00</span> / <span id="rv-end">0:00</span></span>
-      <input type="range" id="rv-time" min="0" max="100" step="0.1" value="0" aria-label="Round time">
-      <select id="rv-speed" aria-label="Speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
-    </div>
-    <div class="rv-ctrl">
-      <span class="rv-seg"><button type="button" data-cam="top">From above</button><button type="button" data-cam="follow">Follow</button><button type="button" data-cam="free">Fly</button></span>
-      <span class="rv-seg"><button type="button" id="rv-zoom-in" title="Closer">+</button><button type="button" id="rv-zoom-out" title="Further">−</button></span>
-      <label><input type="checkbox" id="rv-names" checked> Names</label>
-      <label><input type="checkbox" id="rv-util" checked> Utility</label>
+      <select id="rv-speed" aria-label="Speed"><option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
+      <span class="rv-seg" role="group" aria-label="Camera mode (V)">
+        <button type="button" data-mode="player" title="Player view: through a player's eyes (V, 1–0)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M17 14.5c2.2 0 4 1.4 4.5 4"></path></svg>Player</button>
+        <button type="button" data-mode="free" title="Free camera: WASD, E/Q up and down, drag to look (V)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2.5" y="6.5" width="14" height="11" rx="2"></rect><path d="M16.5 10.5l5-3v9l-5-3"></path></svg>Free camera</button>
+      </span>
+      <label title="Players behind walls as outlines"><input type="checkbox" id="m3-xray"> Outlines</label>
       <label><input type="checkbox" id="m3-labels"> Callouts</label>
-      <label><input type="checkbox" id="m3-radar-t"> Radar</label>
-      <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="height">Height</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
-      <label title="Show the roofs (from above they hide the floors)"><input type="checkbox" id="m3-roofs"> Roofs</label>
-      <label title="Show players behind walls"><input type="checkbox" id="m3-xray"> See through walls</label>
-      <button type="button" class="btn sm ghost" id="m3-full">Fullscreen</button>
-      <span class="muted small" id="m3-info"></span>
+      <details class="rv-more"><summary>View</summary>
+        <div class="rv-menu">
+          <label><input type="checkbox" id="rv-names" checked> Names</label>
+          <label><input type="checkbox" id="rv-util" checked> Utility</label>
+          <label><input type="checkbox" id="m3-radar-t"> Minimap</label>
+          <label title="Show the roofs (from above they hide the floors)"><input type="checkbox" id="m3-roofs"> Roofs</label>
+          <label title="Floor colours">Floor <select id="m3-colors" aria-label="Floor colours"><option value="one">One colour</option><option value="height">Height</option><option value="known">Measured · guessed</option><option value="areas">Map areas</option></select></label>
+          <p class="small muted" style="margin:0" data-legend="replays"><b>Measured · guessed</b>: <span>measured by replays</span> / <span>filled in from the minimap</span></p>
+          <p class="small muted" style="margin:0" data-legend="game" hidden><span>The map is built from the game's files.</span> <b>Height</b>: <span>low blue, high sand</span> · <b>Map areas</b>: <span>the game's callout zones</span></p>
+          <span class="small muted" id="m3-info"></span>
+        </div>
+      </details>
+      <button type="button" class="btn sm ghost" id="rv-full">Fullscreen</button>
+      <button type="button" id="m3-full" hidden></button>
+      <span class="rv-keys"><span translate="no">Space</span> <span>play</span> · <span translate="no">← →</span> <span translate="no">5 s</span> · <span translate="no">V</span> <span>camera</span> · <span translate="no">1–0</span> <span>player</span> · <span translate="no">T</span> <span>hide</span> · <span translate="no">N</span> <span>report</span> · <span translate="no">WASD E Q</span> <span>fly</span></span>
     </div>
-    <p class="small muted" style="margin:6px 0 0" data-legend="replays"><span>Floor colours</span> · <b>Measured · guessed</b>: <span style="color:#cdb07f">■</span> <span>measured by replays</span>, <span style="color:#8fa1bd">■</span> <span>filled in from the minimap</span> · <b>Map areas</b>: <span>sites, mid, attacker and defender side</span></p>
-    <p class="small muted" style="margin:6px 0 0" data-legend="game" hidden><span>The map is built from the game's files.</span> <span>Floor colours</span> · <b>Height</b>: <span>low blue, high sand</span> · <b>Map areas</b>: <span>the game's callout zones</span></p>
-  </div>
-  <div class="rv-side">
-    <section class="card"><h3>Your team</h3><div class="rv-team" id="rv-ours"></div>
-      <h3 style="margin-top:10px">Enemy</h3><div class="rv-team" id="rv-theirs"></div>
-      <p class="small muted" style="margin:8px 0 0">Click a player to see the round through his eyes.</p></section>
-    <section class="card"><h3>Kills</h3><div class="rv-feed" id="rv-feed"></div></section>
-    <section class="card"><h3>Team review</h3>
-      <div id="rv-clist"></div>
-      <div class="rv-cadd"><input type="text" id="rv-c-text" maxlength="600" placeholder="Comment at this moment…"><button type="button" class="btn sm" id="rv-c-add">Add</button></div>
-      <div class="small muted" style="margin-top:4px"><span id="rv-c-at"></span></div>
-      <div class="small" style="color:var(--red)" id="rv-c-err"></div>
-      <p class="small muted" style="margin:6px 0 0">Comments are for everyone in the team who can open this match.</p></section>
   </div>
 </div>
-
-{% if deaths and deaths.deaths %}<section class="card" style="margin-top:16px" id="deaths">
-  <h2>Your deaths</h2>
-  <div class="dsum">
-    <div><b>{{ deaths.deaths }}</b><span>deaths</span></div>
-    {% if deaths.sight %}<div><b>{{ deaths.seen_first }}</b><span>the enemy saw you first</span></div>
-    <div><b>{{ deaths.unseen }}</b><span>you never saw your killer</span></div>
-    <div><b>{{ deaths.open_many }}</b><span>open to more than one enemy</span></div>{% endif %}
-  </div>
-  <div class="dwhere">{% for w, n in deaths.where %}<span><b translate="no">{{ w }}</b> <span translate="no">{{ n }}×</span></span>{% endfor %}</div>
-  <p class="small muted" style="margin-bottom:0"><span>Where you died, with the game's own callouts.</span>{% if deaths.sight %} <span>Who saw whom first comes from the walls of the map: a clear line from the eyes to the head or body, inside the field of view (smokes don't count).</span> <span>Each kill in the round's list shows it too.</span>{% endif %}</p>
-</section>{% endif %}
-
-<section class="card ut" style="margin-top:16px" id="utility">
-  <h2>Utility check</h2>
-  <p class="small muted" style="margin-top:0"><span>From the replay: who used how much utility, in how many rounds, and how often someone died without having used any.</span>
-    {% if not util.keys_known %}<span>The replay doesn't say which key an ability is on, and this match's numbers didn't allow working it out: the counts per key are the match data's.</span>{% endif %}</p>
-  <div class="ut-wrap"><table>
-    <tr><th>Player</th><th class="k">C</th><th class="k">Q</th><th class="k">E</th><th class="k">X</th><th>Rounds with utility</th><th>Died without using any</th><th>First ability (attack · defense)</th></tr>
-    {% for u in util.players %}{% set pk = u.per_key if util.keys_known else u.per_key_match %}
-    <tr class="{{ 'ours' if (players|selectattr('i', 'equalto', u.i)|first).ours else 'theirs' }}">
-      <td><b translate="no">{{ u.agent }}</b> <span translate="no">{{ u.name }}</span></td>
-      {% for k in ['C', 'Q', 'E', 'X'] %}<td class="k">{{ pk.get(k, 0) }}</td>{% endfor %}
-      <td>{{ u.used_rounds }} / {{ u.rounds }}</td>
-      <td class="{{ 'bad' if u.deaths and u.dry_deaths / u.deaths >= 0.5 }}">{{ u.dry_deaths }} / {{ u.deaths }}</td>
-      <td>{{ (u.first_s.attack|string ~ ' s') if u.first_s.attack is not none else '–' }} · {{ (u.first_s.defense|string ~ ' s') if u.first_s.defense is not none else '–' }}</td>
-    </tr>{% endfor %}
-  </table></div>
-  <p class="small muted" style="margin-bottom:0">"Died without using any": rounds in which the player died before using a single ability that round (setups in the buy phase count as used). First ability: median seconds after the barriers drop.</p>
-</section>
 {% if coach_url %}<p class="small" style="margin-top:12px"><a href="{{ coach_url }}">Coach this match</a></p>{% endif %}
 <script>window.NEXUS_MAP3D = {{ boot|tojson }};</script>
 <script src="{{ url_for('static', filename='map3d.js') }}?v={{ app_version }}"></script>

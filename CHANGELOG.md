@@ -4,6 +4,28 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.49.0
+- **The replay viewer works like the game's own replays.** The view fills the page; the teams' agents (dead ones
+  grey), the score and the round clock on top; the timeline and the controls below.
+  - Two camera modes, switched with **V**: **Player** (through a player's eyes: `1`–`0` or his portrait picks him,
+    a click on the view the next one, a right click or the mouse's back button the previous one) and **Free
+    camera** (`WASD`, `E`/`Q` up and down, `Shift` faster, drag to look, the wheel flies forward).
+  - **Space** plays and pauses (it used to make the camera jump), `←` `→` 5 s, `,` `.` rounds, `[` `]` speed from
+    0.1× to 8×, **T** hides the controls, **N** opens the Combat Report.
+  - The timeline: the rounds (won, lost, the side swap), and for the round kills ◆, deaths ▮, ultimates ★ and the
+    spike; a click jumps 3 s before it.
+  - No more "click to fly": the replay doesn't take over the mouse or the keyboard's walking keys any more.
+- **Combat Report** (N), a drawer on the right: the round's kills with callouts and who saw whom first, *Your
+  deaths* (the match's summary and this round's deaths, each with **Show the sightline**: the replay stops where
+  your killer first had you, and the line between you two is drawn, red when it's clear), the utility check, and
+  the team's comments.
+- *See through walls* is now **Outlines**, as in the game.
+- **3D maps from the game's files: walls with a window are walls.** A mesh counted as glass when any of its
+  materials was glass, so whole buildings and boxes with a pane (Bind's A Elbow, among others) were drawn
+  see-through and didn't block line of sight. Now only the glass faces are glass. The maps are built again after the
+  update (or `nexus build-game --data …`).
+- German texts.
+
 ## 4.48.2
 - 3D maps from the game's files: **no more spiky shards**. Detailed objects were simplified too hard (some to 2 % of
   their triangles), which turned them into big slanted triangles; now every object keeps at least a third of its
