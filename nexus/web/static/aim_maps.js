@@ -12,7 +12,18 @@
   const T = s => (window.vcT ? window.vcT(s) : s);
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
   const TABS = ['deaths', 'hold', 'attack', 'track', 'clear'];
-  let tab = TABS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'deaths';
+  // the tab from the address or a button: always one of our own names (never the text itself)
+  const tabOf = v => {
+    switch (v) {
+      case 'deaths': return 'deaths';
+      case 'hold': return 'hold';
+      case 'attack': return 'attack';
+      case 'track': return 'track';
+      case 'clear': return 'clear';
+      default: return null;
+    }
+  };
+  let tab = tabOf(location.hash.slice(1)) || 'deaths';
 
   // ------------------------------------------------------------------------------------------ your deaths (4.51)
   let data = null, timer = 0;
@@ -90,14 +101,27 @@
     track: ['Tracking', 'An enemy strafes left and right (ADAD) where the fights happen. Stay on his head for 30 seconds.'],
     clear: ['Clear a site', 'Walk the attackers\' route onto a site. Each hiding place defenders used is checked the moment it opens: was your crosshair on it, at head height? Some have an enemy.']};
   const fromTo = (a, b) => (a === b ? a : `${a} ${T('from')} ${b}`);
-  const TITLE = {hold: (s) => `${T('Hold:')} ${fromTo(s.az, s.dz)}`, attack: (s) => `${T('Take:')} ${fromTo(s.dz, s.az)}`,
-                 track: (s) => `${T('Tracking at')} ${s.az}`, clear: (s) => `${T('Clear:')} ${fromTo(s.dz, s.az)}`};
+  function title(s) {                       // a spot's name in this tab
+    switch (tab) {
+      case 'hold': return `${T('Hold:')} ${fromTo(s.az, s.dz)}`;
+      case 'attack': return `${T('Take:')} ${fromTo(s.dz, s.az)}`;
+      case 'track': return `${T('Tracking at')} ${s.az}`;
+      default: return `${T('Clear:')} ${fromTo(s.dz, s.az)}`;
+    }
+  }
   const STYLE = {wide: 'Wide swing', jiggle: 'Jiggle peek', crouch: 'Crouch peek', jump: 'Jump peek', two: 'Two at once'};
   const DIFF = {easy: 'Easy', medium: 'Medium', hard: 'Hard', pro: 'Pro'};
   const REPS = {hold: [10, 20, 30], attack: [3, 5, 10], track: [1, 3, 5], clear: [1, 3, 5]};
   let G = null, gTimer = 0, sel = null;
   const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}};
   try { Object.assign(g, JSON.parse(localStorage.getItem('nexus.drills.g') || '{}')); } catch (e) {}
+  // only our own values (from the lists the page came with), whatever was saved or picked
+  const own = (list, v, dflt) => { const i = list.indexOf(v); return i >= 0 ? list[i] : dflt; };
+  g.diff = own(C.diffs, g.diff, 'medium'); g.gun = own(C.guns, g.gun, 'Vandal');
+  g.styles = C.peeks.filter(k => Array.isArray(g.styles) && g.styles.includes(k));
+  if (!g.styles.length) g.styles = ['wide'];
+  g.map = typeof g.map === 'string' ? g.map : '';
+  if (!g.reps || typeof g.reps !== 'object') g.reps = {};
   const saveG = () => { try { localStorage.setItem('nexus.drills.g', JSON.stringify(g)); } catch (e) {} };
 
   async function loadSpots() {
@@ -115,8 +139,8 @@
   const list = () => (!G ? [] : tab === 'clear' ? G.sites : G.angles);
   const where = s => (tab === 'clear' ? (s.hides[0] || s.route[s.route.length - 1]) : s.hold);
   function renderGen() {
-    const [title, text] = INTRO[tab];
-    $('am-g-title').textContent = T(title); $('am-g-text').textContent = T(text);
+    const [head, text] = INTRO[tab];
+    $('am-g-title').textContent = T(head); $('am-g-text').textContent = T(text);
     if (!G) return;
     const ms = $('am-g-map');
     ms.innerHTML = G.maps.map(m => `<option value="${esc(m.name)}" translate="no">${esc(m.name)} (${m.matches})</option>`).join('');
@@ -134,7 +158,7 @@
     $('am-g-list').innerHTML = L.slice(0, 40).map(s => {
       const best = (s.best || {})[tab];
       const b = best === null || best === undefined ? '' : `<span class="good">${tab === 'track' || tab === 'clear' ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>`;
-      return `<li><button type="button" data-sid="${esc(s.id)}" class="${s.id === sel ? 'on' : ''}"><span translate="no">${esc(TITLE[tab](s))}</span><small>×${s.count}${b ? ' · ' + b : ''}</small></button></li>`;
+      return `<li><button type="button" data-sid="${esc(s.id)}" class="${s.id === sel ? 'on' : ''}"><span translate="no">${esc(title(s))}</span><small>×${s.count}${b ? ' · ' + b : ''}</small></button></li>`;
     }).join('');
     plan();
     spotCard();
@@ -208,7 +232,7 @@
       `<label class="am-chip"><input type="checkbox" data-style="${k}" ${g.styles.includes(k) ? 'checked' : ''}> ${esc(T(STYLE[k]))}</label>`).join('')}</fieldset>`;
     const best = (s.best || {})[tab];
     el.innerHTML = `<p class="muted small" translate="no">${esc(G.map)} · ${esc(s.dz)}</p>
-      <h2 translate="no">${esc(TITLE[tab](s))}</h2>
+      <h2 translate="no">${esc(title(s))}</h2>
       <p>${esc(T('Fought over'))} ${s.count} ${esc(T(s.count === 1 ? 'time in the replays.' : 'times in the replays.'))}${esc(won)} ${what}</p>
       ${styles}
       <fieldset class="am-opt"><legend>${esc(T(tab === 'track' ? 'How fast he strafes' : 'Difficulty'))}</legend>${C.diffs.map(k =>
@@ -218,7 +242,7 @@
       <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${reps} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
         ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${tab === 'track' || tab === 'clear' ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>`;
   }
-  $('am-g-map').addEventListener('change', e => { g.map = e.target.value; saveG(); sel = null; G = null; plan(); loadSpots(); });
+  $('am-g-map').addEventListener('change', e => { g.map = own((G ? G.maps : []).map(m => m.name), e.target.value, g.map); saveG(); sel = null; G = null; plan(); loadSpots(); });
   $('am-g-list').addEventListener('click', e => { const b = e.target.closest('[data-sid]'); if (b) { sel = b.dataset.sid; renderGen(); } });
   $('am-plan').addEventListener('click', e => {
     if (!plan.to) return;
@@ -234,15 +258,16 @@
       const on = new Set(g.styles); if (t.checked) on.add(t.dataset.style); else on.delete(t.dataset.style);
       g.styles = C.peeks.filter(k => on.has(k));
       if (!g.styles.length) g.styles = ['wide'];
-    } else if (t.name === 'am-diff') g.diff = t.value;
-    else if (t.id === 'am-g-gun') g.gun = t.value;
-    else if (t.id === 'am-g-reps') g.reps[tab] = +t.value;
+    } else if (t.name === 'am-diff') g.diff = own(C.diffs, t.value, g.diff);
+    else if (t.id === 'am-g-gun') g.gun = own(C.guns, t.value, g.gun);
+    else if (t.id === 'am-g-reps') g.reps[tab] = own(REPS[tab], +t.value, C.reps[tab]);
     saveG(); spotCard();
   });
 
   // ------------------------------------------------------------------------------------------ tabs, keys
   function show(t) {
-    tab = t;
+    tab = tabOf(t) || 'deaths';
+    t = tab;
     for (const b of document.querySelectorAll('.am-tabs [data-tab]')) {
       const on = b.dataset.tab === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', String(on));
     }
@@ -260,7 +285,7 @@
     box.hidden = !box.hidden;
     if (!box.hidden && !ed) ed = window.NexusKeys.editor($('am-keys-box'), {keys: C.keys, defaults: C.defaults, actions: C.actions, api: C.keys_api});
   });
-  window.addEventListener('hashchange', () => { const t = location.hash.slice(1); if (TABS.includes(t) && t !== tab) show(t); });
+  window.addEventListener('hashchange', () => { const t = tabOf(location.hash.slice(1)); if (t && t !== tab) show(t); });
   show(tab);
   load();
 })();

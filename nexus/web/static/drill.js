@@ -573,9 +573,15 @@
 
   // ------------------------------------------------------------------------------------------ the page
   const fromTo = (a, b) => (a === b ? a : `${a} ${T('from')} ${b}`);
-  const TITLE = {hold: () => `${T('Hold:')} ${fromTo(SP.az, SP.dz)}`, attack: () => `${T('Take:')} ${fromTo(SP.dz, SP.az)}`,
-                 track: () => `${T('Tracking at')} ${SP.az}`, clear: () => `${T('Clear:')} ${fromTo(SP.dz, SP.az)}`};
-  const title = () => (TITLE[MODE] ? TITLE[MODE]() : C.title || '');
+  function title() {                        // the spot's name (translated)
+    switch (MODE) {
+      case 'hold': return `${T('Hold:')} ${fromTo(SP.az, SP.dz)}`;
+      case 'attack': return `${T('Take:')} ${fromTo(SP.dz, SP.az)}`;
+      case 'track': return `${T('Tracking at')} ${SP.az}`;
+      case 'clear': return `${T('Clear:')} ${fromTo(SP.dz, SP.az)}`;
+      default: return C.title || '';
+    }
+  }
   const STYLE = {wide: 'Wide swing', jiggle: 'Jiggle peek', crouch: 'Crouch peek', jump: 'Jump peek', two: 'Two at once'};
   let lastHud = 0;
   function hud(force) {
