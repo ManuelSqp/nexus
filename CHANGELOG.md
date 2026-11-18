@@ -4,6 +4,22 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.50.0
+- **The agents move like in the game.** The replay viewer plays the game's own third-person animations on every
+  agent: standing, walking and running in eight directions (blended, following where the player looks), crouching,
+  in the air, and a death animation, away from the killer. **The bodies stay where they fell** until the round is
+  over (the X on the floor gives way to the body; the radar keeps it).
+- **Guns in their hands**: each player holds the gun he bought that round, and the one he killed with when he picked
+  up another. The default skin of every gun, from the game's files.
+- **The agents' portraits on top**, like in the game: your team left, the enemy right, a coloured bar per team, the
+  dead greyed out and struck through. The same portrait in the player card.
+- **P** plays and pauses in both camera modes. In the free camera **Space** flies up and **Ctrl** down (E/Q still
+  work); in the player view Space still plays. In full screen the page keeps Ctrl+W & co. for itself (Chrome, Edge);
+  outside full screen the browser closes the tab on Ctrl+W, so use Q there or switch to full screen.
+- To get them: export `Characters/_Core` with its animations and `Equippables/Guns` too and copy them into
+  `data/game/` (README › 3D maps from the game's files), then `nexus build-game --data …` and restart.
+- German texts.
+
 ## 4.49.0
 - **The replay viewer works like the game's own replays.** The view fills the page; the teams' agents (dead ones
   grey), the score and the round clock on top; the timeline and the controls below.
@@ -21,7 +37,7 @@ every report, and with `nexus --version` (`valcoach --version` up to 4.4). Updat
   the team's comments.
 - *See through walls* is now **Outlines**, as in the game.
 - **3D maps from the game's files: walls with a window are walls.** A mesh counted as glass when any of its
-  materials was glass, so whole buildings and boxes with a pane (Bind's A Elbow, among others) were drawn
+  materials was glass, so whole buildings and boxes with a pane (Sunset's Elbow, among others) were drawn
   see-through and didn't block line of sight. Now only the glass faces are glass. The maps are built again after the
   update (or `nexus build-game --data …`).
 - German texts.

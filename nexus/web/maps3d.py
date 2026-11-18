@@ -13,6 +13,7 @@ from flask import abort, jsonify, render_template
 
 from ..maps import MapRegistry
 from ..parse import parse_match
+from ..stats import agentmesh as am
 from ..stats import map3d as m3
 from .aim import _read
 from .gamebuild import GameBuilder
@@ -105,6 +106,18 @@ def register(app, store, sr, view_profile, known_maps: list[str]) -> None:
                 out[name] = f"/api/agents3d/{key}?h={idx[key].get('hash', '')}"
         return out
     app.extensions["nexus"]["agents_boot"] = agents_boot
+
+    def motion_boot() -> dict:
+        """4.50: {"anims": URL of the animations or None, "guns": {weapon name (Vandal…): URL of its model}}."""
+        meta = game.anims()
+        guns = game.gun_index()
+        out = {}
+        for name, code in am.WEAPONS.items():
+            key = next((k for k in guns if k.lower() == code.lower()), None)
+            if key:
+                out[name] = f"/api/guns3d/{key}?h={guns[key].get('hash', '')}"
+        return {"anims": f"/api/anims3d?h={meta.get('hash', '')}" if meta.get("hash") else None, "guns": out}
+    app.extensions["nexus"]["motion_boot"] = motion_boot
 
     @app.get("/profiles/<int:pid>/maps3d")
     def maps3d(pid: int):

@@ -4,6 +4,9 @@ simplified to a few thousand triangles and drawn in one colour (the team's).
 The skeleton and the skin weights are kept in the file, so animations can be added later without converting the
 models again; without animations the models stand in the pose they're exported in.
 
+4.50: the guns (the default skin of each, guns/<code>.bin.gz, the same format without a skeleton); the animations
+are in agentanim.py.
+
 The model's own frame after reading: metres, x forward, y to the right, z up, the feet at 0 (the game's frame; the
 exported files have y mirrored, see gamefiles.py). Stored per agent codename (Wushu = Jett, …) in
 data/agents3d/<code>.bin.gz with an index (index.json)."""
@@ -24,6 +27,16 @@ from .mapmesh import simplify
 
 VERSION = 1
 TARGET_TRIS = 5000
+GUN_VERSION = 1
+GUN_TRIS = 1500
+
+# the weapon's name (match data) -> its folder in Equippables/Guns (the game's codename)
+WEAPONS = {
+    "Classic": "BasePistol", "Shorty": "Slim", "Frenzy": "AutoPistol", "Ghost": "Luger", "Sheriff": "Revolver",
+    "Bandit": "Compact", "Stinger": "Vector", "Spectre": "MP5", "Bucky": "PumpShotgun", "Judge": "AutoShotgun",
+    "Bulldog": "Burst", "Guardian": "DMR", "Phantom": "Carbine", "Vandal": "AK", "Warden": "BattleRifle",
+    "Marshal": "Boltsniper", "Outlaw": "Doublesniper", "Operator": "Leversniper", "Ares": "LMG", "Odin": "HMG",
+}
 
 
 def convert(mesh: gf.Mesh) -> dict:
@@ -127,6 +140,47 @@ def build_all(files: gf.GameFiles, dest: Path, log=None, only: set[str] | None =
                      "src": sig}
         say(f"{code}: {head['nt']} triangles, {len(blob) // 1024} KB ({time.time() - t0:.1f} s)")
     (dest / "index.json").write_text(json.dumps(idx, indent=1))
+    return idx
+
+
+def convert_gun(mesh: gf.Mesh) -> dict:
+    """A gun: metres, y mirrored back, x along the barrel, z up, the grip at 0 (the game's own origin)."""
+    P = mesh.points * np.array([1.0, -1.0, 1.0]) / 100.0
+    V, T = simplify(P, mesh.tris, GUN_TRIS)
+    return {"V": V, "T": T, "N": normals(V, T)}
+
+
+def guns_dir(dest: Path) -> Path:
+    return Path(dest) / "guns"
+
+
+def build_guns(files: gf.GameFiles, dest: Path, log=None) -> dict:
+    """Converts every gun's default model that's new or changed into <dest>/guns. -> the index
+    {code: {"hash", "tris", "src"}}."""
+    say = log or (lambda *_: None)
+    out = guns_dir(dest)
+    idx = read_index(out)
+    found = files.gun_models()
+    if not found:
+        return idx
+    out.mkdir(parents=True, exist_ok=True)
+    for code, f in sorted(found.items()):
+        sig = f"{GUN_VERSION}:{f.name}:{f.stat().st_size}"
+        if idx.get(code, {}).get("src") == sig and (out / f"{code.lower()}.bin.gz").is_file():
+            continue
+        mesh = gf.read_mesh(f)
+        if mesh is None or not len(mesh.tris):
+            say(f"gun {code}: no model in {f.name}")
+            continue
+        blob = pack(convert_gun(mesh))
+        tmp = out / f"{code.lower()}.tmp"
+        with gzip.open(tmp, "wb", compresslevel=6) as fh:
+            fh.write(blob)
+        tmp.replace(out / f"{code.lower()}.bin.gz")
+        head = json.loads(blob[8:8 + struct.unpack("<I", blob[4:8])[0]])
+        idx[code] = {"hash": hashlib.sha1(blob).hexdigest()[:12], "tris": head["nt"], "src": sig}
+        say(f"gun {code}: {head['nt']} triangles")
+    (out / "index.json").write_text(json.dumps(idx, indent=1))
     return idx
 
 

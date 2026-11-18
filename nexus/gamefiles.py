@@ -446,6 +446,32 @@ class GameFiles:
         return out
 
 
+    def gun_models(self) -> dict[str, Path]:
+        """Gun codename (AK, Carbine, …: the folder under Equippables/Guns/<kind>/) -> its default model (the S0 skin,
+        "GN_<code>_S0_Skelmesh"). The first-person model: the game shows the same one in third person."""
+        out: dict[str, Path] = {}
+        pat = re.compile(r"^gn_([a-z0-9]+)_s0_skelmesh\.usda$")
+        for name, paths in self._index().items():
+            if not pat.match(name):
+                continue
+            for f in sorted(paths):
+                parts = f.parts
+                if "Guns" not in parts or "Attachments" in parts or len(parts) < 5 or parts[-3:-1] != ("1P", "Models") or parts[-4] != "S0":
+                    continue
+                code = parts[-5]
+                if code.lower() == pat.match(name).group(1):
+                    out.setdefault(code, f)
+        return out
+
+    def find(self, stem: str, *needles: str) -> Path | None:
+        """A .usda file by its name (without .usda) whose path contains all `needles` (the first one, sorted)."""
+        for f in sorted(self._index().get(f"{stem.lower()}.usda", [])):
+            s = str(f).replace("\\", "/")
+            if all(n in s for n in needles):
+                return f
+        return None
+
+
 def read_layout_head(path: Path) -> tuple[list[str], int]:
     with open(path, errors="ignore") as fh:
         head = fh.read(20000)

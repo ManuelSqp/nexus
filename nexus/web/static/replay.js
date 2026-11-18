@@ -1,7 +1,8 @@
 // Replay page (4.44; 4.49: controlled like the game's own replays). A match's replay inside the 3D map (map3d.js),
 // round by round. Two camera modes, switched with V: Player (through a player's eyes; 1–0 or a click on his
-// portrait picks him, left/right click on the view the next/previous one) and Free camera (WASD, E/Q up and down,
-// Shift faster, drag to look, the wheel moves forward). Space plays, ← → jump 5 s, , . change the round, T hides
+// portrait picks him, left/right click on the view the next/previous one) and Free camera (WASD, Space/E up,
+// Ctrl/Q down, Shift faster, drag to look, the wheel moves forward). P plays (Space too in player view; 4.50: the
+// agents are animated and hold their guns, dead ones lie where they fell), ← → jump 5 s, , . change the round, T hides
 // the controls, N opens the Combat Report (kills with callouts and who saw whom first, your deaths with the
 // sightline, the utility check, the team's comments, kept per match for the whole team: web/replayview.py).
 (function () {
@@ -35,6 +36,7 @@
       const d = await r.json();
       if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
       if (tok !== S.loading) return;
+      prep(d);
       S.round = i; S.d = d; S.t = Math.min(t0, d.end);
       $('rv-time').max = String(d.end); $('rv-end').textContent = fmt(d.end);
       document.querySelectorAll('#rv-rounds [data-r]').forEach(b => b.classList.toggle('on', +b.dataset.r === i));
@@ -65,12 +67,12 @@
     if (S.mode === 'free') fly(dt);
     camera();
   }
-  function fly(dt) {                    // the free camera: WASD along the view, E/Q straight up and down
+  function fly(dt) {                    // the free camera: WASD along the view, Space/E up, Ctrl/Q down
     const k = S.keys, c = S.cam, v = FLY * (k.has('ShiftLeft') || k.has('ShiftRight') ? FAST : 1) * dt;
     const fx = Math.sin(c.yaw) * Math.cos(c.pitch), fy = Math.sin(c.pitch), fz = -Math.cos(c.yaw) * Math.cos(c.pitch);
     const rx = Math.cos(c.yaw), rz = Math.sin(c.yaw);
     const f = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0), r = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0);
-    const u = (k.has('KeyE') ? 1 : 0) - (k.has('KeyQ') ? 1 : 0);
+    const u = (k.has('KeyE') || k.has('Space') ? 1 : 0) - (k.has('KeyQ') || k.has('ControlLeft') || k.has('ControlRight') ? 1 : 0);
     c.x += (fx * f + rx * r) * v; c.y += (fy * f + u) * v; c.z += (fz * f + rz * r) * v;
   }
   function bounds() {
@@ -149,14 +151,104 @@
     if (!S.d || !C.agents) return [];
     const out = [];
     for (const [i, path] of Object.entries(S.d.paths)) {
-      if (S.t > deadAt(+i)) continue;
-      if (S.mode === 'player' && +i === S.follow) continue;
-      const p = at(path, S.t); if (!p) continue;
       const pl = byI[i], url = C.agents[pl.agent];
       if (!url) continue;
-      out.push({key: +i, url, x: p[0], y: p[1], z: p[2], yaw: p[3], col: rgb(col(pl)).map(c => c * 0.85 + 0.1)});
+      const c = rgb(col(pl)).map(c => c * 0.85 + 0.1);
+      if (S.t > deadAt(+i)) {                   // 4.50: the body stays where he fell until the round is over
+        if (S.mode === 'player' && +i === S.follow) continue;      // (not under the camera of his own eyes)
+        const b = body(+i, path);
+        if (b) out.push({key: +i, url, col: c.map(v => v * 0.7), ...b});
+        continue;
+      }
+      if (S.mode === 'player' && +i === S.follow) continue;
+      const p = at(path, S.t); if (!p) continue;
+      const o = {key: +i, url, x: p[0], y: p[1], z: p[2], yaw: p[3], col: c};
+      if (C.anims) { const m = motion(path, S.t, p); o.anim = m.anim; o.y += m.lift; o.gun = gunOf(+i, S.t); }
+      out.push(o);
     }
     return out;
+  }
+
+  // ------------------------------------------------------------------------------------------ 4.50: how they move
+  // The animations come from the game (stats/agentanim.py); which ones play is read from the replay: how fast and
+  // which way a player moves compared to where he looks (walk/run in eight directions, blended), up or down fast
+  // (in the air), lower than the floor around him (crouching). The legs' phase follows the distance walked, so the
+  // feet don't slide and scrubbing back and forth gives the same pose. The upper body holds the gun.
+  const GAIT = {walk: 3.4, run: 5.5, cwalk: 1.8};      // m/s each clip moves at (measured from the clips)
+  const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  function prep(d) {                                    // per sample: the distance walked so far, the floor around (±2 s)
+    for (const path of Object.values(d.paths)) {
+      let s = 0;
+      for (let k = 0; k < path.length; k++) {
+        if (k) s += Math.hypot(path[k][1] - path[k - 1][1], path[k][3] - path[k - 1][3]);
+        path[k][5] = s;
+      }
+      for (let k = 0; k < path.length; k++) {
+        const ys = [];
+        for (let j = Math.max(0, k - 10); j <= Math.min(path.length - 1, k + 10); j++) ys.push(path[j][2]);
+        ys.sort((a, b) => a - b); path[k][6] = ys[ys.length >> 1];
+      }
+    }
+  }
+  function extra(path, t, n) {                          // a prep() value at time t
+    if (!path || !path.length) return 0;
+    if (t <= path[0][0]) return path[0][n] || 0;
+    if (t >= path[path.length - 1][0]) return path[path.length - 1][n] || 0;
+    let lo = 0, hi = path.length - 1;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (path[m][0] <= t) lo = m; else hi = m; }
+    const a = path[lo], b = path[hi], f = b[0] > a[0] ? (t - a[0]) / (b[0] - a[0]) : 0;
+    return (a[n] || 0) + ((b[n] || 0) - (a[n] || 0)) * f;
+  }
+  const clamp01 = v => Math.max(0, Math.min(1, v));
+  function motion(path, t, p) {                          // -> {anim: {lb, ub}, lift}
+    const t0 = path[0][0], t1 = path[path.length - 1][0];
+    const ta = Math.max(t0, t - 0.2), tb = Math.min(t1, t + 0.2), dt = tb - ta;
+    let vx = 0, vy = 0, vz = 0;
+    if (dt > 0.05) { const a = at(path, ta), b = at(path, tb); if (a && b) { vx = (b[0] - a[0]) / dt; vy = (b[1] - a[1]) / dt; vz = (b[2] - a[2]) / dt; } }
+    const sp = Math.hypot(vx, vz), M = window.nexusMap3D.map(), hand = (M && M.hand) || 1;
+    const f = [Math.sin(p[3]), -Math.cos(p[3])], r = [hand * f[1], -hand * f[0]];
+    const ang = Math.atan2(vx * r[0] + vz * r[1], vx * f[0] + vz * f[1]);       // 0 forward, + to the right
+    const s8 = ((ang / (Math.PI / 4)) % 8 + 8) % 8, i0 = Math.floor(s8), fr = s8 - i0;
+    const d0 = DIRS[i0 % 8], d1 = DIRS[(i0 + 1) % 8];
+    const walked = extra(path, t, 5), dip = extra(path, t, 6) - p[1];
+    const air = clamp01((Math.abs(vy) - 1.5) / 1.5), g = 1 - air;
+    const cr = sp < 3.2 && air < 0.5 ? clamp01((dip - 0.22) / 0.1) : 0;
+    const wIdle = sp < 0.3 ? 1 : clamp01(1 - (sp - 0.3) / 0.9), wRun = clamp01((sp - 4.6) / 1.2), wWalk = Math.max(0, 1 - wIdle - wRun);
+    const lb = [];
+    const add = (name, secs, w) => { if (w > 0.001) lb.push([name, secs, w]); };
+    add('idle', t, g * wIdle * (1 - cr)); add('crouch', t, g * wIdle * cr);
+    for (const [kind, w] of [['walk', g * wWalk * (1 - cr)], ['cwalk', g * wWalk * cr], ['run', g * wRun]]) {
+      const secs = walked / GAIT[kind];
+      add(`${kind}_${d0}`, secs, w * (1 - fr)); add(`${kind}_${d1}`, secs, w * fr);
+    }
+    add('fall', t, air);
+    if (!lb.length) lb.push(['idle', t, 1]);
+    return {anim: {lb, ub: [['hold', t, 1]]}, lift: cr * Math.max(0, dip)};
+  }
+  function body(i, path) {                               // a dead player: where he fell and how (away from the killer)
+    const k = S.d.kills.find(k => k.victim === i);
+    if (!k) return null;
+    const p = at(path, Math.min(k.t, path[path.length - 1][0])) || [k.x, k.y, k.z, 0];
+    const o = {x: p[0], y: p[1], z: p[2], yaw: p[3]};
+    if (!C.anims) return null;                           // without animations a standing body would look alive
+    let clip = 'death_front';
+    const kp = k.killer !== null && k.killer !== undefined ? at(S.d.paths[k.killer], k.t) : null;
+    if (kp) {
+      const M = window.nexusMap3D.map(), hand = (M && M.hand) || 1;
+      const f = [Math.sin(p[3]), -Math.cos(p[3])], r = [hand * f[1], -hand * f[0]];
+      const dx = kp[0] - p[0], dz = kp[2] - p[2], fw = dx * f[0] + dz * f[1], rt = dx * r[0] + dz * r[1];
+      if (Math.abs(fw) >= Math.abs(rt)) clip = fw > 0 ? 'death_back' : 'death_front';     // pushed away from the killer
+      else clip = rt > 0 ? 'death_left' : 'death_right';
+    }
+    o.anim = {lb: [[clip, S.t - k.t, 1]], ub: null};
+    return o;
+  }
+  function gunOf(i, t) {                                 // the gun in his hands: bought, then what he killed with
+    if (!C.guns) return null;
+    const seq = (S.d.guns || {})[i];
+    let name = 'Classic';
+    if (seq) for (const [t0, w] of seq) if (t0 <= t) name = w;
+    return C.guns[name] || null;
   }
   const headOf = p => [p[0], p[1] + 1.9, p[2]];
 
@@ -168,6 +260,7 @@
     if (S.util) for (const u of d.util) if (live(u, t)) drawUtil(g, project, u, dpr);
     for (const k of d.kills) {
       if (k.t > t) continue;
+      if (window.nexusMap3D.drawnModel(k.victim)) continue;          // 4.50: his body lies there (the X stays on the radar)
       const s = project(k.x, k.y + 0.1, k.z); if (!s) continue;
       const r = 6 * dpr, v = byI[k.victim];
       g.strokeStyle = col(v); g.lineWidth = 3 * dpr;
@@ -256,20 +349,37 @@
     const V = window.nexusMap3D, e = V.state().me;
     return V.zoneAt ? V.zoneAt(e.x, e.y, e.z) : '';
   }
+  // 4.50: the agents' portraits along the top like in the game (dead ones greyed out); the icons come from
+  // /agent-icon/ (valorant-api.com, cached on the server), the agent's first letters if there's none
+  const face = p => `<img src="/agent-icon/${encodeURIComponent(p.agent || '')}" alt="" draggable="false" ` +
+    `onerror="this.replaceWith(document.createTextNode(this.parentNode.dataset.s || ''))">`;
   function teams() {
-    const html = side => ORDER.filter(p => p.ours === side).map(p => {
-      const dead = S.t > deadAt(p.i), n = ORDER.indexOf(p) + 1;
-      return `<button type="button" class="rv-a ${dead ? 'dead' : ''} ${S.mode === 'player' && S.follow === p.i ? 'on' : ''}" data-p="${p.i}" ` +
-             `style="--c:${col(p)}" title="${esc(p.agent)} · ${esc(p.name)} (${n % 10})" translate="no">${esc(short(p.agent))}</button>`;
-    }).join('');
-    $('rv-ours').innerHTML = html(true); $('rv-theirs').innerHTML = html(false);
+    for (const [id, side] of [['rv-ours', true], ['rv-theirs', false]]) {
+      const box = $(id);
+      if (!box.dataset.built) {
+        box.innerHTML = ORDER.filter(p => p.ours === side).map(p => {
+          const n = ORDER.indexOf(p) + 1;
+          return `<button type="button" class="rv-a" data-p="${p.i}" data-s="${esc(short(p.agent))}" style="--c:${col(p)}" ` +
+                 `title="${esc(p.agent)} · ${esc(p.name)} (${n % 10})" translate="no">${face(p)}<i></i></button>`;
+        }).join('');
+        box.dataset.built = '1';
+      }
+      for (const b of box.querySelectorAll('.rv-a')) {
+        const i = +b.dataset.p;
+        b.classList.toggle('dead', S.t > deadAt(i));
+        b.classList.toggle('on', S.mode === 'player' && S.follow === i);
+      }
+    }
   }
+  let povFor = null;
   function pov() {
     const el = $('rv-pov'), p = byI[S.follow];
     el.hidden = !(S.mode === 'player' && p && S.ui);
     if (el.hidden) return;
-    const dead = S.t > deadAt(p.i);
-    el.innerHTML = `<span class="rv-a" style="--c:${col(p)}" translate="no">${esc(short(p.agent))}</span>` +
+    const dead = S.t > deadAt(p.i), key = `${p.i}:${dead}`;
+    if (povFor === key) return;
+    povFor = key;
+    el.innerHTML = `<span class="rv-a ${dead ? 'dead' : ''}" style="--c:${col(p)}" data-s="${esc(short(p.agent))}" translate="no">${face(p)}<i></i></span>` +
       `<span><b translate="no">${esc(p.name)}</b><small><span translate="no">${esc(p.agent)}</span>${dead ? ' · ' + T('dead') : ''} · ${T('click: next player')}</small></span>`;
   }
   function score() {                   // rounds won before this one
@@ -452,15 +562,22 @@
     document.querySelectorAll('[data-pane]').forEach(p => { p.hidden = p.dataset.pane !== name; });
   }
   const typing = e => /INPUT|TEXTAREA|SELECT/.test(e.target.tagName || '') && e.target.type !== 'checkbox' && e.target.type !== 'range';
+  const FLY_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyQ', 'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight'];
   document.addEventListener('keydown', e => {
-    if (typing(e) || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (typing(e)) return;
     const c = e.code;
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyE', 'KeyQ', 'ShiftLeft', 'ShiftRight'].includes(c)) {
+    // 4.50: Ctrl flies down in the free camera like in the game; the browser's own Ctrl shortcuts (save, bookmark,
+    // select all…) are kept away from WASD while it's held. Ctrl+W can't be stopped outside full screen.
+    if (c === 'ControlLeft' || c === 'ControlRight') { if (S.mode === 'free') S.keys.add(c); return; }
+    if (e.ctrlKey && S.mode === 'free' && /^Key[WASDEQ]$/.test(c)) { e.preventDefault(); S.keys.add(c); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (FLY_KEYS.includes(c)) {
       S.keys.add(c);
       if (S.mode === 'player' && /^Key[WASDEQ]$/.test(c)) { behind(S.follow); setMode('free'); }
       return;
     }
-    if (c === 'Space') { e.preventDefault(); play(); }
+    if (c === 'KeyP') { e.preventDefault(); play(); }                       // 4.50: P plays in both camera modes
+    else if (c === 'Space') { e.preventDefault(); if (S.mode === 'free') S.keys.add(c); else play(); }   // free camera: up
     else if (c === 'ArrowRight') { e.preventDefault(); seek(S.t + 5); }
     else if (c === 'ArrowLeft') { e.preventDefault(); seek(S.t - 5); }
     else if (c === 'KeyV') setMode(S.mode === 'player' ? 'free' : 'player');
@@ -525,7 +642,10 @@
   $('rv-full').addEventListener('click', () => {
     const el = $('rv');
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-    else if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+    else if (el.requestFullscreen) el.requestFullscreen().then(() => {
+      // 4.50: in full screen the page may keep Ctrl+W & co. for itself (Chrome, Edge): Ctrl is "down" in the free camera
+      try { if (navigator.keyboard && navigator.keyboard.lock) navigator.keyboard.lock(['KeyW', 'KeyA', 'KeyS', 'KeyD', 'KeyQ', 'KeyE']).catch(() => {}); } catch (err) {}
+    }).catch(() => {});
   });
   $('rv-rounds').addEventListener('click', e => { const b = e.target.closest('[data-r]'); if (b && !b.disabled) loadRound(+b.dataset.r); });
   document.addEventListener('click', e => {
@@ -543,10 +663,12 @@
   const layer = {tick, draw: drawAll, radar, models, objects, ready: () => { if (!S.placed) { overview(); S.placed = true; } camera(); }};
   window.nexusMap3D.setLayer(layer);
   window.nexusMap3D.setOpt('labels', false);
+  if (C.anims && window.nexusMap3D.anims) window.nexusMap3D.anims(C.anims);
   loadRound(C.start);
   loadComments();
   setMode('free');
   window.nexusReplay = {state: () => ({round: S.round, t: S.t, mode: S.mode, cam: S.mode, follow: S.follow, playing: S.playing, ui: S.ui,
                                         report: S.report, players: S.d ? Object.keys(S.d.paths).length : 0, comments: S.comments.length}),
-                        seek, loadRound, at, setMode, watch, play, setCam: m => setMode(m === 'follow' ? 'player' : 'free')};   // for tests
+                        seek, loadRound, at, setMode, watch, play, setCam: m => setMode(m === 'follow' ? 'player' : 'free'),
+                        models, keys: () => [...S.keys], cam: () => ({...S.cam}), place: c => { setMode('free'); Object.assign(S.cam, c); }};   // for tests
 })();
