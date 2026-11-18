@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.51.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.52.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -728,6 +728,12 @@ drills: you stand where you died and your killer comes out the way he did (his p
 gun, the round's smokes and walls). The drills of a match are worked out in the background the first time the page
 needs them (`data/drills/<match id>.json`); your runs are kept in `data/profiles/<pid>/stats/drills.json` and your
 keys in `data/aim/keys-<user id>.json`.
+
+**General drills (4.52).** The same page has four general drills on each map's real spots, worked out from the fights
+in all its replays (kept with the death drills in `data/drills/<match id>.json`): **hold an angle** (enemies wide
+swing, jiggle, crouch peek, jump peek or come two at once), **attacking** (you move with your keys and take the spot;
+shots while moving go wide), **tracking** (an ADAD-strafing enemy, % on his head) and **clear a site** (walk the
+attackers' route; crosshair placement on each hiding place as it opens).
 
 ### Run it permanently
 

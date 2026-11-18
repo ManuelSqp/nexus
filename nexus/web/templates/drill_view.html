@@ -18,11 +18,12 @@
 
     <div class="dr-top">
       <div class="dr-box" id="dr-info"></div>
-      <div class="dr-box dr-clockbox"><b id="dr-clock">–</b><small><span>his time</span> <b class="bad" id="dr-his">–</b></small></div>
+      <div class="dr-box dr-clockbox"><b id="dr-clock">–</b><small><span id="dr-his-l">his time</span> <b class="bad" id="dr-his">–</b></small></div>
       <div class="dr-box"><small id="dr-rep"></small><div class="dr-reps" id="dr-reps"></div></div>
     </div>
     <div class="dr-msg" id="dr-msg" hidden aria-live="polite"></div>
     <div class="dr-ammo dr-box" id="dr-ammo"></div>
+    <div class="dr-move dr-box" id="dr-move" hidden></div>
     <div class="dr-panel" id="dr-panel" hidden></div>
 
     <section class="dr-opts" id="dr-opts" hidden aria-label="Options and keys">
@@ -41,7 +42,7 @@
     <p data-legend="game"></p><p data-legend="replays"></p>
   </div>
 </div>
-<p class="small muted" style="margin-top:10px"><a href="{{ boot.list }}">All your drills</a> · <a href="{{ boot.watch }}">Watch this death in the replay</a></p>
+<p class="small muted" style="margin-top:10px"><a href="{{ boot.list }}">All your drills</a>{% if boot.watch %} · <a href="{{ boot.watch }}">Watch this death in the replay</a>{% endif %}</p>
 <script>window.NEXUS_MAP3D = {{ boot|tojson }};</script>
 <script src="{{ url_for('static', filename='map3d.js') }}?v={{ app_version }}"></script>
 <script src="{{ url_for('static', filename='motion.js') }}?v={{ app_version }}"></script>

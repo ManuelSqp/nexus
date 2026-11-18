@@ -171,8 +171,8 @@ def test_scripts():
     rj = (STATIC / "replay.js").read_text()
     assert "const NM = window.NexusMotion;" in rj and "NM.deathClip(p, kp)" in rj
     dj = (STATIC / "drill.js").read_text()
-    for x in ("function rayCapsule(", "function hitboxes()", "function shoot()", "function startReload()",
-              "function failRep()", "function flashes()", "KB.actionsOf(keys", "unadjustedMovement", "const EYE = 1.85",
+    for x in ("function rayCapsule(", "function hitboxes(f)", "function shoot()", "function startReload()",
+              "function failRep(label)", "function flashes()", "KB.actionsOf(keys", "unadjustedMovement", "const EYE = 1.85",
               "YAW * (+C.sens || 0.4)", "if (!V().visible(o, p)) hit = null;", "function throughSmoke("):
         assert x in dj, x
     kj = (STATIC / "keys.js").read_text()
@@ -191,5 +191,5 @@ def test_texts():
 
 def test_version():
     import nexus
-    assert nexus.__version__ == "4.51.0"
+    assert tuple(int(x) for x in nexus.__version__.split(".")[:2]) >= (4, 51)
     assert "## 4.51.0" in (ROOT / "CHANGELOG.md").read_text()

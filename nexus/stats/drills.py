@@ -14,13 +14,14 @@ zoom when aiming down sights). From the game's patch notes as of late 2026; the 
 their numbers rougher."""
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import os
 import time
 from pathlib import Path
 
-VERSION = 1
+VERSION = 2                   # 2 (4.52): the fights of every match too (the general drills' spots)
 LEAD_S = 1.5                  # the drill starts this long before the killer first had you in view
 MIN_LEAD_S = 2.5              # and at least this long before the kill
 SPOT_M = 3.0                  # deaths this close (and from the same callout) are one spot
@@ -138,6 +139,149 @@ def drills_of(ctx) -> dict[str, list[dict]]:
     return out
 
 
+# ------------------------------------------------------------------------------------------------ 4.52: fights, spots
+ROUTE_S = 15.0                # an attacker's route: this long before the fight (clear a site starts where
+ROUTE_STEP = 0.5              # the site can't be seen yet, see drill.js)
+PRE_S = 2.0                   # where the attacker came from: this long before
+DISTINCT_M = 1.5              # spots closer than this are one
+MAX_ANGLE_M = 50.0            # longer fights aren't an angle to hold
+
+
+ENTRY_WALK_M = 8.0            # clear a site: the attacker walked at least this far in the 15 s
+ENTRY_NEAR_M = 20.0           # and fought from this close
+
+
+def _walked(route: list) -> float:
+    return sum(math.hypot(b[0] - a[0], b[2] - a[2]) for a, b in zip(route, route[1:]))
+
+
+def _spawn(zone: str) -> bool:
+    """Fights in a spawn (the round's end, a flank) aren't spots to train."""
+    return "spawn" in (zone or "").lower()
+
+
+def fights_of(ctx) -> list[dict]:
+    """Every fight of a match (a kill between the two teams): where the attacker and the defender were, where the
+    attacker came from (2 s before) and his route (15 s), the callouts, who won. The general drills' spots."""
+    out: list[dict] = []
+    if ctx is None or ctx.zones is None or ctx.mi is None:
+        return out
+    m = ctx.match
+    for r in m.rounds:
+        if r.index not in ctx.offsets or not r.kills:
+            continue
+        view = None
+        rv = ctx.reviews(r.index)
+        for n, k in enumerate(r.kills):
+            if not k.killer or k.killer == k.victim or k.killer not in ctx.index or k.victim not in ctx.index:
+                continue
+            kt, vt = m.team_of(k.killer), m.team_of(k.victim)
+            if kt == vt or not kt:
+                continue
+            if view is None:
+                view = ctx.round_view(r.index) or {}
+            paths = view.get("paths") or {}
+            kp, vp = paths.get(ctx.index[k.killer]), paths.get(ctx.index[k.victim])
+            if not kp or not vp:
+                continue
+            killer_attacks = r.side_of(kt) == "attack"
+            ap, dp = (kp, vp) if killer_attacks else (vp, kp)
+            t = k.t_round_ms / 1000
+            a, d = _at(ap, t), _at(dp, t)
+            a0 = _at(ap, t - PRE_S)
+            info = rv.get(n) or {}
+            kz, vz = info.get("kwhere") or "", info.get("where") or ""
+            route = []
+            s_ = ROUTE_S
+            while s_ >= -1e-9:
+                q = _at(ap, t - s_)
+                if not route or math.hypot(q[0] - route[-1][0], q[2] - route[-1][2]) > 0.05:
+                    route.append([round(q[0], 2), round(q[1], 2), round(q[2], 2)])
+                s_ -= ROUTE_STEP
+            out.append({"a": [round(v, 2) for v in a[:3]], "d": [round(v, 2) for v in d[:3]],
+                        "a0": [round(v, 2) for v in a0[:3]], "az": kz if killer_attacks else vz,
+                        "dz": vz if killer_attacks else kz, "won": "attack" if killer_attacks else "defense",
+                        "route": route, "round": r.index})
+    return out
+
+
+def _distinct(points: list, n: int, gap: float = DISTINCT_M) -> list:
+    out: list = []
+    for p in points:
+        if all(math.hypot(p[0] - q[0], p[2] - q[2]) >= gap for q in out):
+            out.append(p)
+        if len(out) >= n:
+            break
+    return out
+
+
+def _medoid(points: list) -> list:
+    return min(points, key=lambda p: sum(math.hypot(p[0] - q[0], p[2] - q[2]) for q in points))
+
+
+def _yaw_to(a: list, b: list) -> float:
+    """The frame's yaw (0 = -z, + clockwise on the minimap: x = sin, z = -cos) from a looking at b."""
+    return round(math.atan2(b[0] - a[0], -(b[2] - a[2])), 4)
+
+
+def spots(map_name: str, fights: list[dict]) -> dict:
+    """The spots of a map from its fights: {"angles": [...], "sites": [...]}.
+    angles: per pair of callouts (where the defender was, where the attacker was): where to hold (the defender's
+    usual place, looking at the attackers'), the attackers' places (they peek from there), where attackers start
+    (2 s before), the defenders' places (attacking: you take them), the distance, a route, how often.
+    sites: per defender callout: the defenders' hiding places and the attackers' most used route in (clear a site)."""
+    groups: dict[tuple, list] = {}
+    for f in fights:
+        if f.get("az") and f.get("dz") and not _spawn(f["az"]) and not _spawn(f["dz"]):
+            groups.setdefault((f["dz"], f["az"]), []).append(f)
+    angles = []
+    for (dz, az), fs in groups.items():
+        D, A0 = [f["d"] for f in fs], [f["a0"] for f in fs]
+        hold = _medoid(D)
+        att = next(f["a"] for f in fs if f["d"] == hold)     # a real pair: they saw each other (the medoids may not)
+        A = [att] + [f["a"] for f in fs if f["a"] is not att]
+        start = _medoid(A0)
+        best = min(fs, key=lambda f: math.hypot(f["a0"][0] - start[0], f["a0"][2] - start[2]))
+        dist = math.hypot(hold[0] - att[0], hold[2] - att[2])
+        if dist > MAX_ANGLE_M:
+            continue
+        sid = hashlib.sha1(f"{map_name}|{dz}|{az}".encode()).hexdigest()[:10]
+        angles.append({"id": sid, "map": map_name, "dz": dz, "az": az, "count": len(fs),
+                       "won_def": sum(1 for f in fs if f["won"] == "defense"),
+                       "hold": hold, "hold_yaw": _yaw_to(hold, att),
+                       "peeks": _distinct(sorted(A, key=lambda p: math.hypot(p[0] - att[0], p[2] - att[2])), 5),
+                       "start": start, "start_yaw": _yaw_to(start, hold),
+                       "defs": _distinct(sorted(D, key=lambda p: math.hypot(p[0] - hold[0], p[2] - hold[2])), 4),
+                       "dist": round(dist, 1), "route": best["route"]})
+    angles.sort(key=lambda a: (-a["count"], a["dz"], a["az"]))
+    sites = []
+    by_dz: dict[str, list] = {}
+    for f in fights:
+        if f.get("dz") and not _spawn(f["dz"]):
+            by_dz.setdefault(f["dz"], []).append(f)
+    for dz, fs in by_dz.items():
+        # the way in: fights where the attacker walked a few metres and ended up close to the defender
+        ins = [f for f in fs if _walked(f["route"]) >= ENTRY_WALK_M
+               and math.hypot(f["a"][0] - f["d"][0], f["a"][2] - f["d"][2]) <= ENTRY_NEAR_M]
+        if not ins:
+            continue
+        az_count: dict[str, int] = {}
+        for f in ins:
+            az_count[f["az"] or "?"] = az_count.get(f["az"] or "?", 0) + 1
+        az = max(az_count, key=lambda z: (az_count[z], z))
+        ins = [f for f in ins if (f["az"] or "?") == az]
+        start = _medoid([f["route"][0] for f in ins])
+        best = min(ins, key=lambda f: math.hypot(f["route"][0][0] - start[0], f["route"][0][2] - start[2]))
+        hides = _distinct([f["d"] for f in sorted(fs, key=lambda f: f["round"])], 6, 2.0)
+        if len(best["route"]) < 2:
+            continue
+        sid = hashlib.sha1(f"{map_name}|site|{dz}|{az}".encode()).hexdigest()[:10]
+        sites.append({"id": sid, "map": map_name, "dz": dz, "az": az, "count": len(fs), "route": best["route"],
+                      "hides": hides, "start_yaw": _yaw_to(best["route"][0], best["route"][min(3, len(best["route"]) - 1)])})
+    sites.sort(key=lambda a: (-a["count"], a["dz"]))
+    return {"angles": angles, "sites": sites}
+
+
 def same_spot(a: dict, b: dict) -> bool:
     """Two deaths at the same spot: the same map and killer's callout, a few metres apart."""
     return (a["map"] == b["map"] and (a.get("kwhere") or "") == (b.get("kwhere") or "")
@@ -173,21 +317,34 @@ def cache_dir(data_dir) -> Path:
     return Path(data_dir) / "drills"
 
 
-def read_cached(data_dir, mid: str, sig: str) -> dict | None:
+def _read_cache(data_dir, mid: str, sig: str) -> dict | None:
     try:
         d = json.loads((cache_dir(data_dir) / f"{mid.lower()}.json").read_text())
     except (OSError, ValueError):
         return None
     if d.get("v") != VERSION or d.get("sig") != sig:
         return None
-    return d.get("players") or {}
+    return d
 
 
-def write_cached(data_dir, mid: str, sig: str, players: dict) -> None:
+def read_cached(data_dir, mid: str, sig: str) -> dict | None:
+    """The drills of a match per player (Riot ID), or None: not worked out (or outdated)."""
+    d = _read_cache(data_dir, mid, sig)
+    return None if d is None else d.get("players") or {}
+
+
+def read_fights(data_dir, mid: str, sig: str) -> list | None:
+    """4.52: the fights of a match, or None: not worked out (or outdated)."""
+    d = _read_cache(data_dir, mid, sig)
+    return None if d is None else d.get("fights") or []
+
+
+def write_cached(data_dir, mid: str, sig: str, players: dict, fights: list | None = None, map_name: str = "") -> None:
     d = cache_dir(data_dir)
     d.mkdir(parents=True, exist_ok=True)
     tmp = d / f"{mid.lower()}.json.tmp"
-    tmp.write_text(json.dumps({"v": VERSION, "sig": sig, "built": int(time.time()), "players": players}))
+    tmp.write_text(json.dumps({"v": VERSION, "sig": sig, "built": int(time.time()), "map": map_name,
+                               "players": players, "fights": fights or []}))
     os.replace(tmp, d / f"{mid.lower()}.json")
 
 
@@ -203,16 +360,23 @@ def read_runs(stats_dir: Path) -> dict:
         return {}
 
 
+KINDS = {"death": "s", "hold": "s", "attack": "s", "track": "%", "clear": "%"}     # what a rep's number is
+HIGHER = {"track", "clear"}                     # the bigger the better (the others: times, the smaller the better)
+
+
 def clean_run(body: dict) -> dict | None:
-    """A run as the page sends it -> what's kept, or None when it's no run."""
+    """A run as the page sends it -> what's kept, or None when it's no run. reps: a number per rep (seconds, or a
+    percentage for tracking and clearing), None for a rep you lost."""
     reps = body.get("reps")
+    kind = body.get("kind") if body.get("kind") in KINDS else "death"
+    top = 100.0 if KINDS[kind] == "%" else 120.0 if kind == "attack" else 30.0     # attacking: up to a minute
     if not isinstance(reps, list) or not 0 < len(reps) <= 50:
         return None
     out_reps = []
     for t in reps:
         if t is None:
             out_reps.append(None)
-        elif isinstance(t, (int, float)) and 0 <= t < 30:
+        elif isinstance(t, (int, float)) and 0 <= t <= top:
             out_reps.append(round(float(t), 3))
         else:
             return None
@@ -222,7 +386,12 @@ def clean_run(body: dict) -> dict | None:
     first = {k: int(first.get(k) or 0) for k in ("head", "body", "legs", "miss") if isinstance(first.get(k, 0), int)}
     off = body.get("off")
     off = round(float(off), 1) if isinstance(off, (int, float)) and 0 <= off <= 180 else None
-    return {"at": int(time.time()), "reps": out_reps, "his": his, "first": first, "off": off}
+    out = {"at": int(time.time()), "kind": kind, "reps": out_reps, "his": his, "first": first, "off": off}
+    detail = body.get("detail")
+    if isinstance(detail, dict):                 # a few numbers per kind (peek styles, counter-strafing, …)
+        out["detail"] = {str(k)[:24]: round(float(v), 3) for k, v in list(detail.items())[:20]
+                         if isinstance(v, (int, float)) and math.isfinite(v)}
+    return out
 
 
 def add_run(stats_dir: Path, drill_id: str, run: dict) -> dict:
@@ -238,15 +407,17 @@ def add_run(stats_dir: Path, drill_id: str, run: dict) -> dict:
     return data
 
 
-def summary(runs: list[dict]) -> dict:
-    """A drill's history: the median of each session (oldest first), the best time, the last session's numbers."""
+def summary(runs: list[dict], kind: str = "death") -> dict:
+    """A drill's history: the median of each session (oldest first), the best, the number of sessions. For
+    tracking and clearing (percentages) the best is the highest."""
     meds = []
     for r in runs:
-        times = sorted(t for t in r.get("reps", []) if isinstance(t, (int, float)))
-        if times:
-            meds.append(round(times[len(times) // 2], 3))
-    best = min((t for r in runs for t in r.get("reps", []) if isinstance(t, (int, float))), default=None)
-    return {"sessions": len(runs), "medians": meds, "best": best}
+        vals = sorted(t for t in r.get("reps", []) if isinstance(t, (int, float)))
+        if vals:
+            meds.append(round(vals[len(vals) // 2], 3))
+    vals = [t for r in runs for t in r.get("reps", []) if isinstance(t, (int, float))]
+    best = (max(vals) if kind in HIGHER else min(vals)) if vals else None
+    return {"sessions": len(runs), "medians": meds, "best": best, "kind": kind}
 
 
 # ------------------------------------------------------------------------------------------------ keys
@@ -260,6 +431,13 @@ ACTIONS = {
     "next": ("Next rep", "Space"),
     "watch": ("Watch how he did it", "KeyP"),
     "full": ("Full screen", "KeyF"),
+    # 4.52: moving (attacking, clearing a site). Crouch isn't on Ctrl: outside full screen Ctrl+W closes the tab.
+    "forward": ("Move forward", "KeyW"),
+    "back": ("Move back", "KeyS"),
+    "left": ("Strafe left", "KeyA"),
+    "right": ("Strafe right", "KeyD"),
+    "walk": ("Walk", "ShiftLeft"),
+    "crouch": ("Crouch", "KeyC"),
 }
 FIXED = {"Escape"}           # always stops a drill
 
