@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Drill · {{ d.map }} · {{ d.where }} · {{ p.riot_id }} · Nexus{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='map3d.css') }}?v={{ app_version }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='drills.css') }}?v={{ app_version }}">{% endblock %}
+{% block content %}
+<div class="dr" id="dr">
+  <div class="m3-stage dr-stage" id="m3-stage">
+    <canvas id="m3-canvas"></canvas><canvas id="m3-over"></canvas><canvas id="m3-radar" width="400" height="400"></canvas>
+    <div class="m3-pos" id="m3-pos" translate="no"></div>
+    <div class="m3-start" id="m3-start" hidden></div>
+    <div class="m3-msg" id="m3-msg" hidden></div>
+    <button type="button" class="m3-jump" id="m3-jump" hidden>Jump</button>
+    <div class="m3-help" id="m3-help" hidden></div>
+
+    <div class="dr-flash" id="dr-flash" aria-hidden="true"></div>
+    <div class="dr-xh" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="dr-hit" id="dr-hit" hidden></div>
+
+    <div class="dr-top">
+      <div class="dr-box" id="dr-info"></div>
+      <div class="dr-box dr-clockbox"><b id="dr-clock">–</b><small><span>his time</span> <b class="bad" id="dr-his">–</b></small></div>
+      <div class="dr-box"><small id="dr-rep"></small><div class="dr-reps" id="dr-reps"></div></div>
+    </div>
+    <div class="dr-msg" id="dr-msg" hidden aria-live="polite"></div>
+    <div class="dr-ammo dr-box" id="dr-ammo"></div>
+    <div class="dr-panel" id="dr-panel" hidden></div>
+
+    <section class="dr-opts" id="dr-opts" hidden aria-label="Options and keys">
+      <header><h2>Options &amp; keys</h2><button type="button" class="btn sm ghost" id="dr-opts-x">Close</button></header>
+      <label>Speed of the enemy <select id="dr-o-speed"><option value="0.75">0.75×</option><option value="1">as in the match</option><option value="1.25">1.25×</option></select></label>
+      <label>Reps <select id="dr-o-reps"><option value="5">5</option><option value="10">10</option><option value="20">20</option></select></label>
+      <label class="dr-check"><input type="checkbox" id="dr-o-heads"> Count only headshots</label>
+      <h3>Your keys</h3>
+      <div id="dr-keys"></div>
+    </section>
+  </div>
+  <div hidden>
+    <input type="checkbox" id="m3-xray"><input type="checkbox" id="m3-labels"><input type="checkbox" id="m3-radar-t">
+    <input type="checkbox" id="m3-roofs"><select id="m3-colors"><option value="one">One colour</option><option value="height">Height</option><option value="known">Known</option><option value="areas">Areas</option></select>
+    <span id="m3-info"></span><button type="button" id="m3-full"></button>
+    <p data-legend="game"></p><p data-legend="replays"></p>
+  </div>
+</div>
+<p class="small muted" style="margin-top:10px"><a href="{{ boot.list }}">All your drills</a> · <a href="{{ boot.watch }}">Watch this death in the replay</a></p>
+<script>window.NEXUS_MAP3D = {{ boot|tojson }};</script>
+<script src="{{ url_for('static', filename='map3d.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='motion.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='keys.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='drill.js') }}?v={{ app_version }}"></script>
+{% endblock %}

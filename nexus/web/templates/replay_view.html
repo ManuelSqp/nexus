@@ -203,5 +203,6 @@ button.rv-chip{cursor:pointer;font:inherit;font-weight:650;font-size:13px}
 {% if coach_url %}<p class="small" style="margin-top:12px"><a href="{{ coach_url }}">Coach this match</a></p>{% endif %}
 <script>window.NEXUS_MAP3D = {{ boot|tojson }};</script>
 <script src="{{ url_for('static', filename='map3d.js') }}?v={{ app_version }}"></script>
+<script src="{{ url_for('static', filename='motion.js') }}?v={{ app_version }}"></script>
 <script src="{{ url_for('static', filename='replay.js') }}?v={{ app_version }}"></script>
 {% endblock %}

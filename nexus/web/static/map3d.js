@@ -144,7 +144,7 @@
     gl.viewport(0, 0, w, h);
     gl.clearColor(0.55, 0.62, 0.72, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (!mesh) return;
-    VP = mul(persp(71 * D2R, w / h, 0.05, 600), viewM());
+    VP = mul(persp((me.fov || 71) * D2R, w / h, 0.05, 600), viewM());   // 4.51: me.fov (the drills zoom when aiming down sights)
     if (G && G.ready) drawGame();
     else {
       gl.useProgram(prog);
@@ -432,6 +432,9 @@
     for (let r = 0; r < 3; r++) out[oo + 12 + r] = -(out[oo + r] * m[mo + 12] + out[oo + 4 + r] * m[mo + 13] + out[oo + 8 + r] * m[mo + 14]);
     out[oo + 3] = out[oo + 7] = out[oo + 11] = 0; out[oo + 15] = 1;
   }
+  // 4.51: joints whose places the aim drills need for hits (head, body, arms, legs), in the map's frame
+  const HIT = ['Head', 'Neck', 'Spine2', 'Spine4', 'Pelvis', 'L_Shoulder', 'L_Elbow', 'L_Hand', 'R_Shoulder', 'R_Elbow',
+               'R_Hand', 'L_Hip', 'L_Knee', 'L_Foot', 'R_Hip', 'R_Knee', 'R_Foot'];
   function rig(m) {                                 // how the clips map onto this model's skeleton
     if (m.rig !== undefined) return m.rig;
     if (!A || !m.cpu || !m.cpu.bind) return (m.rig = A === null ? undefined : null) || null;
@@ -453,7 +456,8 @@
       if (b > 1e-6) ps = a / b;
     }
     const nv = m.cpu.nv;
-    return (m.rig = {nj, par, inv, local, aj, mv, scaled, up, ps, hand: names.indexOf(A.head.gun || 'R_Hand'),
+    const hit = HIT.map(n => names.indexOf(n));
+    return (m.rig = {nj, par, inv, local, aj, mv, scaled, up, ps, hit, hand: names.indexOf(A.head.gun || 'R_Hand'),
                      W: new Float32Array(nj * 16), S: new Float32Array(nj * 16), q: new Float32Array(4), t: new Float32Array(3),
                      L: new Float32Array(16), P: new Float32Array(nv * 3), N: new Float32Array(nv * 3), tmp});
   }
@@ -535,6 +539,15 @@
     let it = inst.get(o.key);
     if (!it) { it = {pb: gl.createBuffer(), nb: gl.createBuffer(), gb: gl.createBuffer(), gnb: gl.createBuffer(), gun: null}; inst.set(o.key, it); }
     dyn(it.pb, R.P); dyn(it.nb, R.N);
+    it.bones = {};                                  // 4.51: the hit joints on the map (model frame -> map frame)
+    {
+      const hd = (M && M.hand) || 1, f = [Math.sin(o.yaw), -Math.cos(o.yaw)], r = [hd * f[1], -hd * f[0]], sc = o.scale || 1;
+      HIT.forEach((n, k) => {
+        const j = R.hit[k]; if (j < 0) return;
+        const x = W[j * 16 + 12] * sc, y = W[j * 16 + 13] * sc, z = W[j * 16 + 14] * sc;
+        it.bones[n] = [o.x + x * f[0] + y * r[0], o.y + z, o.z + x * f[1] + y * r[1]];
+      });
+    }
     it.gun = null;
     const g = o.gun ? model(o.gun) : null;
     const grip = A.grips[o.hold] || A.grip;          // 4.50.1: a rifle or a pistol grip
@@ -832,21 +845,21 @@
     if (d.game && d.mesh) loadGame(d);
     [me.x, me.y, me.z] = d.start; me.vy = 0; me.ground = true; me.yaw = 0; me.pitch = 0;
     const fl = floorAt(me.x, me.z, me.y + 2); if (fl !== null) me.y = fl;
-    if (C.replay) { me.fly = true; if (layer && layer.ready) layer.ready(); }
+    if (C.replay || C.drill) { me.fly = true; if (layer && layer.ready) layer.ready(); }
     if (!raf) raf = requestAnimationFrame(frame);
   }
   // ---------------------------------------------------------------- input
   // 4.49: the replay viewer has its own controls (replay.js, like the game's replays): no walking, no pointer lock
-  const OWN = !C.replay;
+  const OWN = !C.replay && !C.drill;                 // 4.51: the aim drills (drill.js) drive the camera too
   canvas.addEventListener('click', () => { if (OWN && M && document.pointerLockElement !== canvas) canvas.requestPointerLock(); });
   document.addEventListener('pointerlockchange', () => { $('m3-start').hidden = !OWN || document.pointerLockElement === canvas; if (document.pointerLockElement !== canvas) keys.clear(); });
   document.addEventListener('mousemove', e => {
-    if (document.pointerLockElement !== canvas) return;
+    if (!OWN || document.pointerLockElement !== canvas) return;
     const k = 0.07 * (+C.sens || 0.4) * D2R;
     me.yaw += e.movementX * k; me.pitch = Math.max(-1.5, Math.min(1.5, me.pitch - e.movementY * k));
   });
   document.addEventListener('keydown', e => {
-    if (document.pointerLockElement !== canvas) return;
+    if (!OWN || document.pointerLockElement !== canvas) return;
     keys.add(e.code);
     if (['Space', 'ControlLeft', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) e.preventDefault();
     if (e.code === 'KeyC') { opt.labels = !opt.labels; saveOpt(); }
@@ -932,6 +945,7 @@
     setLayer: l => { layer = l; if (M && l && l.ready) l.ready(); }, project, recolor,
     visible, roofAt, zoneAt, drawnModel: k => drawn.has(k), eye: () => eyePos(),
     anims: url => setAnims(url), animsReady: () => !!A, clips: () => (A ? Object.keys(A.clips) : []),
+    bones: k => { const it = inst.get(k); return it && it.bones ? it.bones : null; },     // 4.51: for the drills' hits
     game: () => (G && G.ready ? {tris: G.n / 3, glass: G.glass ? G.glass.n / 3 : 0, vox: G.vox.shape} : null),
     view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; saveOpt(); }, opt: () => opt};
   if (C.map) load(C.map);

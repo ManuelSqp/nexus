@@ -87,5 +87,5 @@ def test_build_draws_open_doors_like_glass(tmp_path, synthetic):  # noqa: F811
 
 def test_version():
     import nexus
-    assert nexus.__version__ == "4.50.2"
+    assert nexus.__version__ >= "4.50.2"
     assert "## 4.50.2" in (ROOT / "CHANGELOG.md").read_text()

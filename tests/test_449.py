@@ -70,7 +70,7 @@ def test_replay_controls_like_the_game():
               "function marks()", "key !== 'X'", "function setReport(on)", "function setUi(on)"):
         assert s in js, s
     m3 = (STATIC / "map3d.js").read_text()
-    assert "const OWN = !C.replay;" in m3 and "if (OWN && M && document.pointerLockElement !== canvas)" in m3
+    assert "const OWN = !C.replay" in m3 and "if (OWN && M && document.pointerLockElement !== canvas)" in m3
     assert "if (OWN) canvas.addEventListener('touchstart'" in m3
 
 
