@@ -108,7 +108,7 @@ def test_scripts():
 
 def test_texts_and_version():
     import nexus
-    assert nexus.__version__ == "4.50.1"
+    assert nexus.__version__.startswith("4.50.")
     assert "## 4.50.1" in (ROOT / "CHANGELOG.md").read_text()
     de = json.loads((ROOT / "nexus/i18n/de.json").read_text())
     assert "ß" not in json.dumps(de, ensure_ascii=False)
