@@ -8,7 +8,7 @@
   const box = $('sb-form');
   if (!S || !TR || !box) return;
   const T = s => (window.vcT ? window.vcT(s) : s);
-  const esc = s => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const toast = (m, k) => (window.nexusToast ? window.nexusToast(m, k) : null);
   let editing = null;                       // the saved scenario being changed: {id, scope}
 

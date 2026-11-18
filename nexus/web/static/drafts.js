@@ -4,7 +4,9 @@
   const B = JSON.parse(document.getElementById('draft-boot').textContent);
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const icon = a => B.agent_icon.replace('__A__', encodeURIComponent(a));
+  // a URL of this site only (a path, or the same origin): never javascript: or another host
+  const local = u => { try { const x = new URL(String(u || ''), location.href); return x.origin === location.origin ? x.pathname + x.search : ''; } catch (e) { return ''; } };
+  const icon = a => local(B.agent_icon).replace('__A__', encodeURIComponent(a));
   const pct = v => v == null ? '–' : Math.round(v * 100) + '%';
   const ROLE = Object.fromEntries(B.agents.map(a => [a.name, a.role]));
   const AGENTS = new Set(B.agents.map(a => a.name));
@@ -12,7 +14,7 @@
   const ROLES = ['Duelist', 'Initiator', 'Controller', 'Sentinel'];
 
   const d = B.draft;
-  if (!d) return;
+  if (!d || !document.getElementById('dr-slots')) return;      // no editor on the page (no players yet)
   const data = d.data && typeof d.data === 'object' ? d.data : (d.data = {});
   if (!Array.isArray(data.slots)) data.slots = [];
   data.slots = data.slots.map(s => (s && typeof s === 'object') ? s : {pid: null, agent: '', alt: '', note: ''}).slice(0, 5);
@@ -48,7 +50,7 @@
     const it = document.querySelector(`.ditem[data-did="${d.id}"]`); if (!it) return;
     it.querySelector('.nm span').textContent = d.name;
     const st = it.querySelector('.st'); st.className = 'st ' + data.status; st.textContent = {idea: 'idea', try: 'trying', main: 'our comp'}[data.status];
-    it.querySelector('.icons').innerHTML = data.slots.map(s => s.agent ? `<img class="ai" src="${icon(s.agent)}" width="22" height="22" alt="${esc(s.agent)}" title="${esc(s.agent)}">` : '<i></i>').join('');
+    it.querySelector('.icons').innerHTML = data.slots.map(s => s.agent ? `<img class="ai" src="${esc(icon(s.agent))}" width="22" height="22" alt="${esc(s.agent)}" title="${esc(s.agent)}">` : '<i></i>').join('');
   }
 
   // ------------------------------------------------------------------ numbers
@@ -58,8 +60,8 @@
     if (s.pid == null) return '<span class="warn">no player yet</span>';
     const st = statOf(s.pid, s.agent), who = esc(PLAYER[s.pid] ? PLAYER[s.pid].name : '');
     if (!st || !st.n_all) return `<span class="warn">${who} hasn't played ${esc(s.agent)} (in the imported games)</span>`;
-    const map = st.n_map ? `<b>${st.n_map}</b> on ${esc(B.map)}, ${pct(st.wr_map)} won` : `<span class="warn">never on ${esc(B.map)}</span>`;
-    return `${map}<br>${st.n_all} games overall, ${pct(st.wr_all)} won`;
+    const map = st.n_map ? `<b>${esc(st.n_map)}</b> on ${esc(B.map)}, ${esc(pct(st.wr_map))} won` : `<span class="warn">never on ${esc(B.map)}</span>`;
+    return `${map}<br>${esc(st.n_all)} games overall, ${esc(pct(st.wr_all))} won`;
   }
   function bestPicks(pid) {
     const per = B.stats[String(pid)] || {};
@@ -71,17 +73,17 @@
     const box = $('#dr-slots');
     box.innerHTML = data.slots.map((s, i) => {
       const players = `<option value="">— player —</option>` + B.players.map(p =>
-        `<option value="${p.pid}" ${p.pid === s.pid ? 'selected' : ''}>${esc(p.name)}${p.kind === 'sub' ? ' (sub)' : ''}</option>`).join('');
+        `<option value="${esc(p.pid)}" ${p.pid === s.pid ? 'selected' : ''}>${esc(p.name)}${p.kind === 'sub' ? ' (sub)' : ''}</option>`).join('');
       const main = s.agent
         ? `<div class="drop main full" data-drop="agent" data-slot="${i}" data-has="${esc(s.agent)}"><button type="button" class="x" data-clear="agent" data-slot="${i}" title="Remove" aria-label="Remove ${esc(s.agent)}">×</button>
-             <span class="pf big"><b>${esc(s.agent[0])}</b><img src="${icon(s.agent)}" alt="" onerror="this.remove()"></span><span class="an">${esc(s.agent)}</span><span class="ar">${esc(ROLE[s.agent] || '')}</span></div>`
+             <span class="pf big"><b>${esc(s.agent[0])}</b><img src="${esc(icon(s.agent))}" alt="" onerror="this.remove()"></span><span class="an">${esc(s.agent)}</span><span class="ar">${esc(ROLE[s.agent] || '')}</span></div>`
         : `<div class="drop main" data-drop="agent" data-slot="${i}">Drop an agent</div>`;
       const alt = s.alt
-        ? `<div class="drop alt full" data-drop="alt" data-slot="${i}" data-has="${esc(s.alt)}"><span class="pf"><b>${esc(s.alt[0])}</b><img src="${icon(s.alt)}" alt="" onerror="this.remove()"></span><span>or <b>${esc(s.alt)}</b></span><button type="button" class="x" data-clear="alt" data-slot="${i}" title="Remove" aria-label="Remove backup ${esc(s.alt)}">×</button></div>`
+        ? `<div class="drop alt full" data-drop="alt" data-slot="${i}" data-has="${esc(s.alt)}"><span class="pf"><b>${esc(s.alt[0])}</b><img src="${esc(icon(s.alt))}" alt="" onerror="this.remove()"></span><span>or <b>${esc(s.alt)}</b></span><button type="button" class="x" data-clear="alt" data-slot="${i}" title="Remove" aria-label="Remove backup ${esc(s.alt)}">×</button></div>`
         : `<div class="drop alt" data-drop="alt" data-slot="${i}">backup pick</div>`;
       const picks = s.pid != null ? bestPicks(s.pid) : [];
       const qp = picks.length ? `<div class="qp">best:${picks.map(a => `<button type="button" data-pick="${esc(a)}" data-slot="${i}" title="${esc(a)}: ${esc(PLAYER[s.pid].name)}'s pick">` +
-        `<span class="pf"><b>${esc(a[0])}</b><img src="${icon(a)}" alt="${esc(a)}" onerror="this.remove()"></span></button>`).join('')}</div>` : '';
+        `<span class="pf"><b>${esc(a[0])}</b><img src="${esc(icon(a))}" alt="${esc(a)}" onerror="this.remove()"></span></button>`).join('')}</div>` : '';
       return `<div class="slot ${selSlot === i ? 'sel' : ''}" data-slotcard="${i}">
         <select data-player="${i}" aria-label="Player ${i + 1}">${players}</select>
         ${main}${alt}
@@ -98,14 +100,14 @@
       if (!list.length) continue;
       html += `<div class="prole">${esc(r)}</div><div class="pgrid">` + list.map(a =>
         `<button type="button" class="pa ${used.has(a.name) ? 'used' : ''}" data-agent="${esc(a.name)}" title="${esc(a.name)}${used.has(a.name) ? ' (in this draft)' : ''}" aria-label="${esc(a.name)}">` +
-        `${esc(a.name[0])}<img src="${icon(a.name)}" alt="" onerror="this.remove()"></button>`).join('') + '</div>';
+        `${esc(a.name[0])}<img src="${esc(icon(a.name))}" alt="" onerror="this.remove()"></button>`).join('') + '</div>';
     }
     $('#dr-pal').innerHTML = html;
   }
   function renderChecks() {
     const agents = data.slots.map(s => s.agent).filter(Boolean);
     const n = Object.fromEntries(ROLES.map(r => [r, agents.filter(a => ROLE[a] === r).length]));
-    $('#dr-mix').innerHTML = ROLES.map(r => `<span class="${n[r] ? '' : 'zero'}">${n[r]} ${r}${n[r] === 1 ? '' : 's'}</span>`).join('');
+    $('#dr-mix').innerHTML = ROLES.map(r => `<span class="${n[r] ? '' : 'zero'}">${esc(n[r])} ${esc(r)}${n[r] === 1 ? '' : 's'}</span>`).join('');
     const w = [];
     const dupA = agents.filter((a, i) => agents.indexOf(a) !== i);
     for (const a of new Set(dupA)) w.push(['bad', `${a} is picked twice: only one of each agent per team.`]);
@@ -124,7 +126,7 @@
     const empty = data.slots.filter(s => !s.agent).length;
     if (empty) w.push(['', `${empty} slot${empty === 1 ? '' : 's'} without an agent.`]);
     if (!w.length) w.push(['ok', 'Looks complete: one of each role or close, and everyone has played their agent.']);
-    $('#dr-warns').innerHTML = w.map(([k, t]) => `<li class="${k}">${esc(t)}</li>`).join('');
+    $('#dr-warns').innerHTML = w.map(([k, t]) => `<li class="${esc(k)}">${esc(t)}</li>`).join('');
   }
   function render() { renderSlots(); renderPalette(); renderChecks(); }
 

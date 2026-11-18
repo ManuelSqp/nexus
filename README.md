@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.52.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.52.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -575,7 +575,8 @@ so coaching them can fail.
   with their whole workspace) and the server settings (API key, Ollama, video
   analysis). There must always be at least one active admin.
 - Each user's **recordings folder** is set by an admin, because it's a path on
-  the server. Users without one upload their VODs.
+  the server. Users without one upload their VODs. To allow only some folders, set
+  `Environment=NEXUS_VOD_ROOTS=/mnt/recordings` (`:`-separated) in the service.
 - Drag the **⋮⋮** handle on a player card to set the order of your players (Home and the player picker in the menu).
   It's saved per account. On a phone drag the handle; with the keyboard, focus it and use the arrow keys.
 - All coaching jobs share **one queue** (*Settings → Coaching jobs at the same

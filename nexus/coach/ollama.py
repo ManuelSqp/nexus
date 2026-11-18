@@ -17,6 +17,14 @@ class OllamaError(RuntimeError):
     pass
 
 
+class OllamaUnreachable(OllamaError):
+    """The server didn't answer (check())."""
+
+
+class ModelMissing(OllamaError):
+    """The model isn't installed (check())."""
+
+
 # model requests made by this server (for the admin overview): (time, seconds, tokens written, model)
 RECENT: "deque[tuple[float, float, int, str]]" = deque(maxlen=5000)
 
@@ -40,12 +48,12 @@ class Ollama:
             r = requests.get(f"{self.url}/api/tags", timeout=10)
             r.raise_for_status()
         except requests.RequestException as e:
-            raise OllamaError(f"Ollama not reachable at {self.url}: {e}") from e
+            raise OllamaUnreachable(f"Ollama not reachable at {self.url}: {e}") from e
         names = [m.get("name") for m in r.json().get("models", []) if m.get("name")]
         wanted = {self.model.lower(), f"{self.model.lower()}:latest"}
         match = next((n for n in names if n.lower() in wanted), None)
         if match is None:
-            raise OllamaError(f"Model '{self.model}' is not installed in Ollama "
+            raise ModelMissing(f"Model '{self.model}' is not installed in Ollama "
                               f"(run: ollama pull {self.model}). Installed: {sorted(names)}")
         self.model = match           # use the exact installed spelling
 

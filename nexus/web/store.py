@@ -18,6 +18,7 @@ from pathlib import Path
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from ..safepath import safe_join
 from ..config import (ClaudeCfg, CoachCfg, Config, HenrikCfg, OllamaCfg, PathsCfg, PlayerCfg, ReplayCfg,
                       VideoCfg, load_config)
 
@@ -740,7 +741,7 @@ class Store:
         self._exec("DELETE FROM profiles WHERE id = ?", (pid,))
 
     def profile_dir(self, pid: int) -> Path:
-        return self.data_dir / "profiles" / str(pid)
+        return safe_join(self.data_dir / "profiles", str(int(pid)))      # a number, inside data/profiles
 
     def _write_playbook(self, pid: int, text: str) -> None:
         p = self.profile_dir(pid) / "playbook.yaml"

@@ -95,7 +95,7 @@ def cmd_coach(cfg: Config, args) -> None:
         if cfg.replay.source != "replay":
             log("! [replay] source is not \"replay\" in the config: the file is kept but not used")
     req = pipeline.CoachRequest(
-        match=args.match, vod=args.vod, mode=args.mode, player=args.player, queue=args.queue,
+        match=args.match, allow_file=True, vod=args.vod, mode=args.mode, player=args.player, queue=args.queue,
         no_llm=args.no_llm, no_minimap=args.no_minimap, recalibrate=args.recalibrate,
         anchor=_anchor(args), out_dir=Path(args.out) if args.out else None,
         team_review=args.team,
@@ -105,7 +105,7 @@ def cmd_coach(cfg: Config, args) -> None:
 
 
 def cmd_sync(cfg: Config, args) -> None:
-    match = pipeline.load_match(cfg, args.match)
+    match = pipeline.load_match(cfg, args.match, allow_file=True)
     res = pipeline.do_sync(cfg, match, args.vod, _anchor(args), log)
     out = Path(args.vod).with_suffix(".sync.json")
     res.save(out)
@@ -117,7 +117,7 @@ def cmd_calibrate(cfg: Config, args) -> None:
     from .video.io import crop, frame_at, open_video, video_info, video_roi
     from .video.minimap import detect_blobs
 
-    match = pipeline.load_match(cfg, args.match)
+    match = pipeline.load_match(cfg, args.match, allow_file=True)
     puuid = pipeline.focus_player(cfg, match, args.player)
     map_info = pipeline.get_map_info(cfg, match, log)
     info = video_info(args.vod)
@@ -159,7 +159,7 @@ def cmd_calibrate(cfg: Config, args) -> None:
 
 
 def cmd_notes(cfg: Config, args) -> None:
-    match = pipeline.load_match(cfg, args.match)
+    match = pipeline.load_match(cfg, args.match, allow_file=True)
     puuid = pipeline.focus_player(cfg, match, args.player)
     p = pipeline.notes_path(cfg, match.match_id)
     if p.exists() and not args.force:

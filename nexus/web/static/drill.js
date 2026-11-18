@@ -23,7 +23,7 @@
   const $ = id => document.getElementById(id);
   const T = s => (window.vcT ? window.vcT(s) : s);
   const V = () => window.nexusMap3D;
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const D2R = Math.PI / 180, YAW = 0.07, VFOV = 70.53;
   const EYE = 1.85, EYE_CROUCH = 1.35, MAP_EYE = 1.6;   // your eyes above your feet; map3d.js adds MAP_EYE
   const HEAD_R = 0.14, BODY_R = 0.2, ARM_R = 0.07, LEG_R = 0.1;

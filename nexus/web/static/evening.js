@@ -4,8 +4,10 @@
   const B = JSON.parse(document.getElementById('ev-boot').textContent);
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const icon = a => B.agent_icon.replace('__A__', encodeURIComponent(a));
-  const ai = (a, s = 20) => a ? `<img class="ai" src="${icon(a)}" width="${s}" height="${s}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : '';
+  // a URL of this site only (a path, or the same origin): never javascript: or another host
+  const local = u => { try { const x = new URL(String(u || ''), location.href); return x.origin === location.origin ? x.pathname + x.search : ''; } catch (e) { return ''; } };
+  const icon = a => local(B.agent_icon).replace('__A__', encodeURIComponent(a));
+  const ai = (a, s = 20) => a ? `<img class="ai" src="${esc(icon(a))}" width="${esc(s)}" height="${esc(s)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : '';
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
@@ -74,11 +76,11 @@
       let dot = '';
       if (ms.length) {
         const c = ms.some(m => m.m === 'fault') ? 'f' : ms.some(m => m.m === 'talk') ? 't' : 'g';
-        dot = `<span class="dot ${c}">${ms.length}</span>`;
+        dot = `<span class="dot ${c}">${esc(ms.length)}</span>`;
       }
       const cls = ['rn', r.won ? 'w' : 'l', r.n === cur ? 'on' : '', KEY.has(r.n) ? 'key' : '', keyOnly && !KEY.has(r.n) ? 'dim' : ''].join(' ');
       const title = `Round ${r.n}: ${r.won ? 'won' : 'lost'}, ${r.side}${KEY.has(r.n) ? ', key round' : ''}${ms.length ? `, ${ms.length} marked` : ''}`;
-      html += `<button type="button" class="${cls}" data-n="${r.n}" role="tab" aria-selected="${r.n === cur}" title="${esc(title)}">${r.n}${dot}${S.current === r.n && S.current !== cur ? '<span class="hostmark" title="The host is here"></span>' : ''}</button>`;
+      html += `<button type="button" class="${esc(cls)}" data-n="${esc(r.n)}" role="tab" aria-selected="${r.n === cur}" title="${esc(title)}">${esc(r.n)}${dot}${S.current === r.n && S.current !== cur ? '<span class="hostmark" title="The host is here"></span>' : ''}</button>`;
     });
     box.innerHTML = html;
   }
@@ -91,27 +93,27 @@
     const r = R[cur]; if (!r) return;
     const buy = r.buy;
     const facts = [];
-    if (buy) facts.push(['Buys', `${BUY[buy.us] || buy.us} (${buy.us_avg.toLocaleString()}) vs ${BUY[buy.them] || buy.them} (${buy.them_avg.toLocaleString()})`]);
-    if (r.first) facts.push(['First kill', `${r.first.ours ? esc(r.first.k) : esc(r.first.k) + ' (them)'} on ${esc(r.first.v)} at ${r.first.t}`]);
-    if (r.plant) facts.push([r.plant.ours ? 'You planted' : 'They planted', `${r.plant.site ? r.plant.site + ' site' : 'spike'} at ${r.plant.t}${r.defused ? ', defused' : ''}`]);
-    facts.push(['Alive at the end', `${r.alive[0]} of you, ${r.alive[1]} of them`]);
+    if (buy) facts.push(['Buys', `${esc(BUY[buy.us] || buy.us)} (${esc(buy.us_avg.toLocaleString())}) vs ${esc(BUY[buy.them] || buy.them)} (${esc(buy.them_avg.toLocaleString())})`]);
+    if (r.first) facts.push(['First kill', `${r.first.ours ? esc(r.first.k) : esc(r.first.k) + ' (them)'} on ${esc(r.first.v)} at ${esc(r.first.t)}`]);
+    if (r.plant) facts.push([r.plant.ours ? 'You planted' : 'They planted', `${r.plant.site ? esc(r.plant.site) + ' site' : 'spike'} at ${esc(r.plant.t)}${r.defused ? ', defused' : ''}`]);
+    facts.push(['Alive at the end', `${esc(r.alive[0])} of you, ${esc(r.alive[1])} of them`]);
     if (r.untraded.length) facts.push(['Not traded', r.untraded.map(esc).join(', ')]);
     $('#round').innerHTML = `
       <div class="rhead">
-        <div class="rbig ${r.won ? 'w' : 'l'}" aria-label="Round ${r.n}">${r.n}</div>
+        <div class="rbig ${r.won ? 'w' : 'l'}" aria-label="Round ${esc(r.n)}">${esc(r.n)}</div>
         <div class="rres">${r.won ? 'Won' : 'Lost'}<small>${esc(r.result)}</small></div>
-        <div class="rsub">${r.side === 'attack' ? 'Attack' : 'Defense'} · ${r.score} before the round${KEY.has(r.n) ? ' · key round' : ''} · round ${r.n} of ${N}</div>
+        <div class="rsub">${r.side === 'attack' ? 'Attack' : 'Defense'} · ${esc(r.score)} before the round${KEY.has(r.n) ? ' · key round' : ''} · round ${esc(r.n)} of ${esc(N)}</div>
       </div>
       ${r.why.length ? `<div class="tags">${r.why.map(w => `<span class="tag">${esc(w)}</span>`).join('')}</div>` : ''}
       <div class="facts">${facts.map(([k, v]) => `<div class="fact"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
     $('#kn').textContent = r.kills.length ? `${r.kills.length} kills` : '';
-    $('#kills').innerHTML = r.kills.map(k => `<div class="${k.ours ? 'us' : 'them'}"><span class="t">${k.t}</span>
+    $('#kills').innerHTML = r.kills.map(k => `<div class="${k.ours ? 'us' : 'them'}"><span class="t">${esc(k.t)}</span>
         <span class="n">${ai(k.ka)}${esc(k.k)}</span><span class="w">${esc(k.w)}</span><span class="n">${ai(k.va)}${esc(k.v)}</span></div>`).join('')
       || '<p class="muted small" style="margin:0">No kills in this round.</p>';
     const ps = Object.entries(r.players);
     $('#ours').innerHTML = '<tr><th>Player</th><th>Weapon</th><th class="x">Kills</th><th class="x">Damage</th><th class="x">Buy</th><th></th></tr>' +
       ps.map(([n, p]) => `<tr class="${p.died ? 'dead' : ''}"><td>${ai(p.agent)} ${esc(n)}</td><td>${esc(p.weapon || '–')}</td>
-        <td class="x">${p.k}</td><td class="x">${p.dmg}</td><td class="x">${p.loadout.toLocaleString()}</td>
+        <td class="x">${esc(p.k)}</td><td class="x">${esc(p.dmg)}</td><td class="x">${esc(p.loadout.toLocaleString())}</td>
         <td><span class="st ${p.died ? '' : 'alive'}">${p.afk ? 'AFK' : p.died ? 'died' : 'alive'}</span></td></tr>`).join('');
     $('#prev').disabled = !step(-1);
     $('#next').disabled = !step(1);
@@ -226,7 +228,7 @@
     loading = Promise.all([
       fetch(B.replay).then(r => { if (!r.ok) throw new Error('no replay'); return r.json(); }),
       window.nexusBuild ? Promise.resolve() : new Promise((ok, no) => {
-        const s = document.createElement('script'); s.src = B.replay_js; s.onload = ok; s.onerror = no; document.head.appendChild(s);
+        const s = document.createElement('script'); s.src = local(B.replay_js); s.onload = ok; s.onerror = no; document.head.appendChild(s);
       }),
     ]).then(([d]) => { replayData = d; });
     return loading;

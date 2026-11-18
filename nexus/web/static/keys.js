@@ -5,7 +5,7 @@
 (function () {
   'use strict';
   const T = s => (window.vcT ? window.vcT(s) : s);
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const NAMES = {Mouse0: 'Mouse 1', Mouse2: 'Mouse 2', Mouse1: 'Mouse 3', Mouse3: 'Mouse 4', Mouse4: 'Mouse 5',
                  WheelUp: 'Wheel up', WheelDown: 'Wheel down', Space: 'Space', Backspace: 'Backspace', Enter: 'Enter',
                  Tab: 'Tab', ControlLeft: 'Ctrl', ControlRight: 'Right Ctrl', ShiftLeft: 'Shift', ShiftRight: 'Right Shift',

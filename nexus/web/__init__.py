@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import re
 import secrets
 import shutil
@@ -17,7 +18,7 @@ import sqlite3
 import tempfile
 import time
 import uuid
-from urllib.parse import urlparse, urlsplit
+from urllib.parse import urlsplit
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from .. import __version__, pipeline
 from ..henrik import HenrikError
 from .jobs import JobRunner
 from .statsjobs import StatsRunner
+from .urls import safe_next, same_page
 from .store import (MIN_PASSWORD, MODES, PLATFORMS, REGIONS, Store, parse_roi, validate_password,
                     validate_username)
 from .uploads import CHUNK_BYTES, MAX_REQUEST_BYTES, UploadError, Uploads
@@ -134,6 +136,19 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
             return view(*a, **k)
         return wrapped
 
+    def vod_dir_error(text: str) -> str | None:
+        """A recordings folder an admin typed in: an existing folder on this server, and when NEXUS_VOD_ROOTS is set
+        (folders separated by the system's path separator) inside one of those. The message doesn't echo the path."""
+        if not text:
+            return None
+        p = os.path.realpath(os.path.expanduser(text))
+        roots = [os.path.realpath(os.path.expanduser(r)) for r in os.environ.get("NEXUS_VOD_ROOTS", "").split(os.pathsep) if r.strip()]
+        if roots and not any(p == r or p.startswith(r.rstrip(os.sep) + os.sep) for r in roots):
+            return "This recordings folder isn't allowed on this server."
+        if not os.path.isdir(p):
+            return "Recordings folder not found on this server."
+        return None
+
     def vod_root(user) -> Path | None:
         d = (user.vod_dir or "").strip()
         if not d:
@@ -190,11 +205,7 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
 
     def redirect_next(default: str = "/"):
         """Redirect to ?next= when it's a page of this site, else to default (see urls.local_path)."""
-        from .urls import local_path
-        target = (request.args.get("next") or "").replace("\\", "")
-        if local_path(target) and not urlparse(target).netloc and not urlparse(target).scheme:
-            return redirect(target)
-        return redirect(default)
+        return redirect(safe_next(request.args.get("next"), default))
 
     def form_int(name: str, default: int, lo: int, hi: int) -> int | None:
         """Integer form field in [lo, hi]; None if it isn't one."""
@@ -794,8 +805,8 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
             return jsonify(error="expected {\"order\": [ids]}"), 400
         try:
             store.reorder_profiles(g.user.id, [int(x) for x in data["order"]])
-        except (TypeError, ValueError) as e:
-            return jsonify(error=str(e)), 400
+        except (TypeError, ValueError):
+            return jsonify(error="the order must be a list of your players' ids"), 400
         return jsonify(ok=True)
 
     @app.get("/profiles/<int:pid>")
@@ -903,7 +914,7 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
         if request.method == "POST":
             if err := job_quota_error(g.user.id):
                 flash(err, "error")
-                return redirect(request.url)
+                return redirect(same_page())
             f = request.form
             mode = f.get("mode", p.mode)
             if mode not in MODES:
@@ -912,28 +923,28 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
             anchor_kill = form_int("anchor_kill", 1, 1, 50)
             if anchor_round is None or anchor_kill is None:
                 flash(f"Anchor round must be 1-{len(match.rounds)} and anchor kill a number from 1.", "error")
-                return redirect(request.url)
+                return redirect(same_page())
             anchor_time = f.get("anchor_time", "").strip()
             if anchor_time:
                 try:
                     pipeline.parse_ts(anchor_time)
                 except ValueError:
                     flash("Anchor time must look like 2:13.4", "error")
-                    return redirect(request.url)
+                    return redirect(same_page())
             choice = f.get("vod", "")
             vod_path = vod_name = ""
             uploaded = False
             if choice == "upload":
                 if not f.get("upload_id"):
                     flash("Choose a video file to upload.", "error")
-                    return redirect(request.url)
+                    return redirect(same_page())
                 dest_dir = store.upload_dir(g.user.id)
                 dest_dir.mkdir(parents=True, exist_ok=True)
                 try:
                     dest, vod_name = uploads.finish(g.user.id, f["upload_id"], dest_dir)
                 except UploadError as e:
                     flash(str(e), "error")
-                    return redirect(request.url)
+                    return redirect(same_page())
                 vod_path, uploaded = str(dest), True
             elif choice == "companion":                    # the clip the companion app cut and uploaded
                 from .companion import clip_for
@@ -946,7 +957,7 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
                 path = resolve_vod(g.user, choice)
                 if path is None:
                     flash("That recording is not in your recordings folder anymore.", "error")
-                    return redirect(request.url)
+                    return redirect(same_page())
                 vod_path, vod_name = str(path), path.name
             opts = {
                 "no_llm": bool(f.get("no_llm")),
@@ -1005,7 +1016,7 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
                   "and as style examples for your other matches.", "ok")
             if request.form.get("then") == "coach":
                 return redirect(url_for("coach", pid=pid, match_id=match_id))
-            return redirect(request.url)
+            return redirect(same_page())
         team = match.team_of(puuid)
         own = match.team_rounds_won.get(team, 0)
         opp = match.team_rounds_won.get(match.other_team(team), 0)
@@ -1261,8 +1272,8 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
             err = validate_username(username) or validate_password(pw)
             if not err and store.user_by_name(username):
                 err = "This username is taken."
-            if not err and vod_dir and not Path(vod_dir).expanduser().is_dir():
-                err = f"Recordings folder not found on this server: {vod_dir}"
+            if not err:
+                err = vod_dir_error(vod_dir)
             if err:
                 flash(err, "error")
             else:
@@ -1288,8 +1299,8 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
                 errors.append("You can't remove your own admin rights or disable yourself.")
             if u.is_admin and (not is_admin or disabled) and store.admin_count() <= 1:
                 errors.append("There must be at least one active admin.")
-            if vod_dir and not Path(vod_dir).expanduser().is_dir():
-                errors.append(f"Recordings folder not found on this server: {vod_dir}")
+            if e := vod_dir_error(vod_dir):
+                errors.append(e)
             new_pw = f.get("new_password", "")
             if new_pw and (e := validate_password(new_pw)):
                 errors.append(e)
@@ -1500,10 +1511,16 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
                         return jsonify(ok=True, msg=f"Works: found {ps[0].riot_id}.")
                     cl._get("/valorant/v1/status/eu")
                     return jsonify(ok=True, msg="Works: HenrikDev answered.")
-                except HenrikError as e:
+                except HenrikError as e:              # fixed messages: the raw error goes to the server log
+                    app.logger.info("HenrikDev key test: %s", e)
                     m = str(e)
-                    hint = " The key was refused." if " 401 " in m or " 403 " in m else ""
-                    return jsonify(ok=False, msg=m[:200] + hint)
+                    if " 401 " in m or " 403 " in m:
+                        return jsonify(ok=False, msg="The key was refused (HTTP 401/403).")
+                    if " 429 " in m:
+                        return jsonify(ok=False, msg="HenrikDev is rate limiting this key right now: try again in a minute.")
+                    if " 404 " in m:
+                        return jsonify(ok=False, msg="The key works, but HenrikDev didn't find your first player (check the name and tag).")
+                    return jsonify(ok=False, msg="HenrikDev answered with an error (details in the server log).")
             if what == "vrfkit":
                 from .. import replayfile
                 path = replayfile.vrfkit_path(store.get("vrfkit_path"))
@@ -1544,13 +1561,22 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
                 ok = any(x["ok"] for x in parts)
                 return jsonify(ok=ok, parts=parts, msg=" · ".join(x["msg"] for x in parts)[:300])
             if what == "ollama":
-                from ..coach.ollama import Ollama
-                Ollama(store.get("ollama_url"), store.get("ollama_model")).check()
-                return jsonify(ok=True, msg=f"Works: {store.get('ollama_model')} is installed.")
-        except requests.RequestException as e:
-            return jsonify(ok=False, msg=f"Not reachable ({e.__class__.__name__}).")
-        except Exception as e:
-            return jsonify(ok=False, msg=str(e)[:200])
+                from ..coach.ollama import ModelMissing, Ollama, OllamaUnreachable
+                model = store.get("ollama_model")
+                try:
+                    Ollama(store.get("ollama_url"), model).check()
+                except OllamaUnreachable:
+                    return jsonify(ok=False, msg="Ollama isn't reachable at that URL.")
+                except ModelMissing:
+                    return jsonify(ok=False, msg=f"The model {model} isn't installed in Ollama (run: ollama pull {model}).")
+                return jsonify(ok=True, msg=f"Works: {model} is installed.")
+        except requests.Timeout:
+            return jsonify(ok=False, msg="Not reachable (timed out).")
+        except requests.RequestException:
+            return jsonify(ok=False, msg="Not reachable (no connection).")
+        except Exception:
+            app.logger.exception("settings test %s", what)
+            return jsonify(ok=False, msg="The test failed (details in the server log).")
         abort(404)
 
     @app.errorhandler(403)
