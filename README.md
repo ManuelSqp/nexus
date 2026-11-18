@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.50.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.50.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -715,6 +715,8 @@ two more folders the same way and copy them anywhere into `data/game/` too:
 - the animations of the core skeleton: `Characters/_Core` (with its `3P/Anims` and `Death/3P/Anims`; an export of
   all of `Characters` with animations, like `Characters_with_animation/`, works as it is),
 - the guns: `Equippables/Guns` (only the default skins `…/<gun>/S0/1P/Models/GN_<gun>_S0_Skelmesh` are used).
+- optional, the game's pistol pose: `TP_Core_BasePistol_S0_IdlePose` (in `Characters/Cashew/S0/Ability_E/3P/Anims`);
+  without it the pistol pose is made from the rifle pose.
 
 `nexus build-game` then writes `data/agents3d/anims.bin.gz` (about 200 KB, shared by every agent) and
 `data/agents3d/guns/`. Without them the agents stand in their default pose as before. Which animation plays is

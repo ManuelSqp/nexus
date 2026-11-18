@@ -244,9 +244,9 @@ def test_scripts():
     assert m3.count("function mul(") == 1                                    # the view's matrix product stays
     rj = (STATIC / "replay.js").read_text()
     for s in ("c === 'KeyP'", "if (S.mode === 'free') S.keys.add(c); else play();", "'ControlLeft', 'ControlRight'",
-              "k.has('Space')", "function motion(path, t, p)", "function body(i, path)", "function gunOf(i, t)",
+              "k.has('Space')", "function motion(path, t, p, hold = 'hold')", "function body(i, path)", "function weaponOf(i, t)",
               "/agent-icon/", "navigator.keyboard.lock", "prep(d);", "window.nexusMap3D.anims(C.anims)",
-              "'death_back'", "'death_left'", "['hold', t, 1]"):
+              "'death_back'", "'death_left'", "[[hold, t, 1]]"):
         assert s in rj, s
     html = (TEMPLATES / "replay_view.html").read_text()
     assert ".rv-a img{" in html and ".rv-a.dead::after" in html
@@ -262,8 +262,8 @@ def test_version():
     import re
     import nexus
     v = nexus.__version__
-    assert v == "4.50.0"
+    assert v.startswith("4.50.")
     assert f'version = "{v}"' in (ROOT / "pyproject.toml").read_text()
     assert f'__version__ = "{v}"' in (ROOT / "desktop/nexus_desktop/__init__.py").read_text()
     assert f"**Version {v}**" in (ROOT / "README.md").read_text()
-    assert re.search(r"^## 4\.50\.0$", (ROOT / "CHANGELOG.md").read_text(), re.M)
+    assert re.search(rf"^## {re.escape(v)}$", (ROOT / "CHANGELOG.md").read_text(), re.M)

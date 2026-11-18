@@ -401,7 +401,8 @@
   // clip, the bone lengths of the agent (its bind pose), the root and the pelvis moved by the clip (scaled to the
   // agent's size). The legs and the upper body ("Spine1" and below) can come from different clips. Skinned on the
   // CPU (a few thousand vertices per agent) into a buffer per player; the gun follows the right hand.
-  // A pose: {lb: [[clip, seconds, weight], …], ub: [[clip, seconds, weight], …] | null}.
+  // A pose: {lb: [[clip, seconds, weight], …], ub: [[clip, seconds, weight], …] | null}; o.hold: which grip
+  // the gun sits in ("hold" a rifle, "pistol" both hands on a sidearm).
   let A = null, animUrl = null;
   function setAnims(url) {
     if (!url || url === animUrl) return;
@@ -413,7 +414,9 @@
       for (const [k, c] of Object.entries(head.clips)) clips[k] = {...c, R: sec(c.rot, Int16Array, 2), T: sec(c.move, Float32Array, 4)};
       const ji = {}; head.joints.forEach((n, i) => { ji[n] = i; });
       const mi = {}; head.move.forEach((n, i) => { mi[n] = i; });
-      A = {head, nj, nm, clips, ji, mi, fps: head.fps, rest: sec(head.sections.rest, Float32Array, 4), grip: head.grip ? new Float32Array(head.grip) : null};
+      const grips = {};
+      for (const [k, g] of Object.entries(head.grips || {})) grips[k] = new Float32Array(g);
+      A = {head, nj, nm, clips, ji, mi, fps: head.fps, rest: sec(head.sections.rest, Float32Array, 4), grip: head.grip ? new Float32Array(head.grip) : null, grips};
       for (const m of models.values()) m.rig = undefined;
     }).catch(() => { A = false; });
   }
@@ -534,8 +537,9 @@
     dyn(it.pb, R.P); dyn(it.nb, R.N);
     it.gun = null;
     const g = o.gun ? model(o.gun) : null;
-    if (g && g.cpu && R.hand >= 0 && A.grip) {      // the gun: hand · grip · its vertices
-      const G = R.tmp; mulAt(G, 0, W, R.hand * 16, A.grip, 0);
+    const grip = A.grips[o.hold] || A.grip;          // 4.50.1: a rifle or a pistol grip
+    if (g && g.cpu && R.hand >= 0 && grip) {        // the gun: hand · grip · its vertices
+      const G = R.tmp; mulAt(G, 0, W, R.hand * 16, grip, 0);
       const n = g.cpu.nv;
       if (!it.gp || it.gp.length !== n * 3) { it.gp = new Float32Array(n * 3); it.gn = new Float32Array(n * 3); }
       for (let i = 0; i < n; i++) {
