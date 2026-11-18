@@ -4,6 +4,35 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.52.0
+- **Practice › Aim on maps: general drills on the real spots.** Four new tabs next to "Your deaths". The spots come
+  from the fights in all replays of a map (up to the last 60): where defenders and attackers were, where attackers
+  came from and the way they walked in. Pick a map, then a spot on the plan or in the list (the most fought-over
+  first, with how often defenders won and your best), set the options and play.
+  - **Hold an angle**: you stand where defenders hold, looking where the attackers come from. Enemies (random agents,
+    animated, with rifles) peek from the real corner: **wide swing, jiggle peek, crouch peek, jump peek, two at
+    once** (pick any). Kill each before he has you for his reaction time: Easy 0.9 s, Medium 0.6, Hard 0.42, Pro
+    0.3. The result shows your time per kind of peek.
+  - **Attacking: you peek**: you move, with Valorant's speeds (run 6.75 m/s, walk, crouch) and stopping, through the
+    real map (walls, stairs). Up to three defenders on the places they held, each seeing ahead of him. Shots while
+    moving go wide; a meter shows when you're still enough to be accurate, and the result how many of your shots
+    were stopped and how fast you stopped (counter-strafing).
+  - **Tracking**: an enemy strafes left and right (ADAD) where the fights happen, as far as the floor and your view
+    go; how fast and how often he turns by difficulty. Stay on his head for 30 s: % on his head, % on him at all,
+    second by second.
+  - **Clear a site**: walk the attackers' most used route onto a site (drawn on the minimap). Each hiding place
+    defenders used is checked the moment it opens: was your crosshair on it at head height (within 7°)? Two of them
+    have an enemy. Score: crosshair placement in %. Hiding places you can see from the start don't count; you start
+    where the route still hides the site.
+  - Where you stand is checked against the map's walls: holding, you stand where the corner can be seen (a step out
+    from behind a box if need be); attacking, you start on the attackers' route out of the defenders' sight.
+  - Your gun, difficulty and reps per drill; your runs and best are kept per spot like the death drills.
+- **Your keys**: moving (W A S D), walk (Shift) and crouch (C, not Ctrl: outside full screen Ctrl+W would close the
+  tab) for the moving drills.
+- The drills of each match are worked out once more in the background (they now keep the match's fights too).
+- The 3D map's options (radar, callouts) aren't changed by the drills any more.
+- German texts.
+
 ## 4.51.0
 - **Practice › Aim on maps: your deaths as drills.** Every death in a match with a replay file, on a map built from
   the game's files, can be played again as an aim drill. You stand where you died, looking where you looked; your

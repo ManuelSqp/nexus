@@ -946,7 +946,8 @@
     visible, roofAt, zoneAt, drawnModel: k => drawn.has(k), eye: () => eyePos(),
     anims: url => setAnims(url), animsReady: () => !!A, clips: () => (A ? Object.keys(A.clips) : []),
     bones: k => { const it = inst.get(k); return it && it.bones ? it.bones : null; },     // 4.51: for the drills' hits
+    blocked: (x, z, y) => (M ? blocked(x, z, y) : true),                               // 4.52: walking in the drills
     game: () => (G && G.ready ? {tris: G.n / 3, glass: G.glass ? G.glass.n / 3 : 0, vox: G.vox.shape} : null),
-    view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; saveOpt(); }, opt: () => opt};
+    view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; if (OWN) saveOpt(); }, opt: () => opt};
   if (C.map) load(C.map);
 })();

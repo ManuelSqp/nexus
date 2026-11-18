@@ -5,10 +5,14 @@ in the 3D map of map3d.js, with the animated agents and guns of 4.50); the runs 
 drills.json. The drills of a match are worked out once in the background (it needs the replay lined up, line of
 sight and callouts: a few seconds per match) and kept in data/drills/<match id>.json.
 
-Your keys (Settings in a drill, or the Keys button on the list): per user in data/aim/keys-<uid>.json."""
+Your keys (Settings in a drill, or the Keys button on the list): per user in data/aim/keys-<uid>.json.
+
+4.52: general drills on the map's real spots: /profiles/<pid>/aim/play/<mode>/<map>/<spot> (hold an angle, attacking,
+tracking, clear a site); the spots come from the fights in all replays of the map (stats/drills.py spots())."""
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from pathlib import Path
 
@@ -16,11 +20,17 @@ from flask import abort, g, jsonify, render_template, request, url_for
 
 from .. import replayfile
 from ..stats import drills as dr
+from ..stats import map3d as m3
 from .aim import _lock, _read, _write
 from .replays import match_brief, replays_dir
 
 log = logging.getLogger(__name__)
 MATCHES = {"10": 10, "30": 30, "all": 400}     # "From" on the page: the last this-many matches with a replay
+SPOT_MATCHES = 60                               # 4.52: the spots of a map come from its last this-many replays
+GENERAL_ID = re.compile(r"^g-(hold|attack|track|clear)-[0-9a-f]{10}$")
+PEEKS = ("wide", "jiggle", "crouch", "jump", "two")
+DIFFS = {"easy": 0.9, "medium": 0.6, "hard": 0.42, "pro": 0.3}   # the enemies' reaction time (s)
+DEFAULT_REPS = {"hold": 20, "attack": 5, "track": 1, "clear": 3}
 
 
 def keys_file(data_dir, uid: int) -> Path:
@@ -89,7 +99,7 @@ def register(app, store, sr, view_profile) -> None:
             return
         by = dr.drills_of(c)
         players = {f"{pl.name}#{pl.tag}".lower(): by.get(q, []) for q, pl in c.match.players.items()}
-        dr.write_cached(data_dir, mid, signature(mid, c.match.map_name), players)
+        dr.write_cached(data_dir, mid, signature(mid, c.match.map_name), players, dr.fights_of(c), c.match.map_name)
 
     def start_job(p, mids: list[str]) -> None:
         with jobs_lock:
@@ -139,7 +149,11 @@ def register(app, store, sr, view_profile) -> None:
         p, can_edit = view_profile(pid)
         boot = {"api": url_for("aim_drills_api", pid=pid), "keys": read_keys(data_dir, g.user.id),
                 "actions": [[a, lbl] for a, (lbl, _d) in dr.ACTIONS.items()], "defaults": dr.default_keys(),
-                "keys_api": url_for("aim_keys"), "pid": pid}
+                "keys_api": url_for("aim_keys"), "pid": pid,
+                # 4.52: the general drills
+                "spots_api": url_for("aim_spots_api", pid=pid),
+                "play": url_for("aim_play", pid=pid, mode="MODE", map_name="MAP", sid="SID"),
+                "guns": list(dr.GUNS), "diffs": list(DIFFS), "peeks": list(PEEKS), "reps": DEFAULT_REPS}
         return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot)
 
     @app.get("/api/profiles/<int:pid>/aim/drills")
@@ -176,7 +190,7 @@ def register(app, store, sr, view_profile) -> None:
         runs = dr.read_runs(stats_dir(pid)).get(drill_id, [])
         nxt = [x for x in (request.args.get("queue") or "").split(",") if x and x != drill_id][:40]
         ext = app.extensions["nexus"]
-        boot = {"map": d["map"], "api": "/api/maps3d/", "drill": d, "pid": pid, "replay": False,
+        boot = {"map": d["map"], "api": "/api/maps3d/", "drill": d, "pid": pid, "replay": False, "mode": "death",
                 "round_api": f"/api/replay/{d['mid']}/round/{d['round']}?pid={pid}",
                 "runs_api": url_for("aim_drill_runs", pid=pid, drill_id=drill_id), "can_save": can_edit,
                 "sens": setup.get("sens") or 0.4, "dpi": setup.get("dpi") or 800, "scale": setup.get("scale") or 1,
@@ -197,14 +211,100 @@ def register(app, store, sr, view_profile) -> None:
         p, can_edit = view_profile(pid)
         if not can_edit:
             abort(403)
-        if find_drill(p, drill_id) is None:
+        g_id = GENERAL_ID.match(drill_id)
+        if not g_id and find_drill(p, drill_id) is None:
             abort(404)
         run = dr.clean_run(request.get_json(silent=True) or {})
         if run is None:
             return jsonify(error="That's no run."), 400
+        if g_id:
+            run["kind"] = g_id.group(1)
         with _lock:
             data = dr.add_run(stats_dir(pid), drill_id, run)
-        return jsonify(ok=True, history=dr.summary(data.get(drill_id, [])))
+        return jsonify(ok=True, history=dr.summary(data.get(drill_id, []), run["kind"]))
+
+    # ---------------------------------------------------------------- 4.52: general drills on the map's real spots
+    def map_matches() -> dict[str, list[str]]:
+        game = app.extensions["nexus"].get("game")
+        if game is None:
+            return {}
+        try:
+            by = m3.replays_by_map(replays_dir(store), game.map_of)
+        except Exception:
+            return {}
+        return {m: ids for m, ids in by.items() if game.meta(m)}
+
+    def map_spots(p, name: str, mids: list[str], build_missing: bool) -> tuple[dict, int]:
+        fights, todo = [], []
+        for mid in sorted(mids)[-SPOT_MATCHES:]:
+            got = dr.read_fights(data_dir, mid, signature(mid, name))
+            if got is None:
+                todo.append(mid)
+            else:
+                fights += got
+        if todo and build_missing:
+            start_job(p, todo)
+        return dict(dr.spots(name, fights), fights=len(fights)), len(todo)
+
+    @app.get("/api/profiles/<int:pid>/aim/spots")
+    def aim_spots_api(pid: int):
+        p, _e = view_profile(pid)
+        by = map_matches()
+        maps = sorted(by, key=lambda m: (-len(by[m]), m))
+        name = request.args.get("map") or (maps[0] if maps else "")
+        if name not in by:
+            return jsonify(maps=[{"name": m, "matches": len(by[m])} for m in maps], map="", angles=[], sites=[],
+                           fights=0, pending=0, working=False)
+        sp, pending = map_spots(p, name, by[name], True)
+        runs = dr.read_runs(stats_dir(pid))
+        for a in sp["angles"] + sp["sites"]:
+            a["best"] = {k: dr.summary(runs.get(f"g-{k}-{a['id']}", []), k)["best"]
+                         for k in (("clear",) if "hides" in a else ("hold", "attack", "track"))}
+        j = jobs.get(p.id) or {}
+        return jsonify(maps=[{"name": m, "matches": len(by[m])} for m in maps], map=name, pending=pending,
+                       working=bool(j.get("running")), **sp)
+
+    @app.get("/profiles/<int:pid>/aim/play/<mode>/<map_name>/<sid>")
+    def aim_play(pid: int, mode: str, map_name: str, sid: str):
+        p, can_edit = view_profile(pid)
+        if mode not in ("hold", "attack", "track", "clear") or not sid.isalnum() or len(sid) > 20:
+            abort(404)
+        by = map_matches()
+        name = next((m for m in by if m.lower() == map_name.lower()), None)
+        if name is None:
+            abort(404)
+        sp, _pending = map_spots(p, name, by[name], False)
+        spot = next((a for a in (sp["sites"] if mode == "clear" else sp["angles"]) if a["id"] == sid), None)
+        if spot is None:
+            abort(404)
+        a = request.args
+        styles = [x for x in (a.get("styles") or "wide,jiggle,crouch").split(",") if x in PEEKS] or ["wide"]
+        diff = a.get("diff") if a.get("diff") in DIFFS else "medium"
+        gun_name = a.get("gun") if a.get("gun") in dr.GUNS else "Vandal"
+        try:
+            reps = max(1, min(40, int(a.get("reps") or DEFAULT_REPS[mode])))
+        except ValueError:
+            reps = DEFAULT_REPS[mode]
+        did = f"g-{mode}-{sid}"
+        setup = _read(stats_dir(pid) / "trainer.json", {}).get("setup", {})
+        runs = dr.read_runs(stats_dir(pid)).get(did, [])
+        ext = app.extensions["nexus"]
+        def frm(a: str, b: str) -> str:
+            return a if a == b else f"{a} from {b}"
+        title = {"hold": f"Hold: {frm(spot['az'], spot['dz'])}", "attack": f"Take: {frm(spot['dz'], spot['az'])}",
+                 "track": f"Tracking at {spot['az']}", "clear": f"Clear: {frm(spot['dz'], spot['az'])}"}[mode]
+        boot = {"map": name, "api": "/api/maps3d/", "pid": pid, "mode": mode, "spot": spot, "title": title,
+                "drill": {"id": did, "map": name, "mode": mode, "where": spot["dz"]},
+                "opts": {"styles": styles, "diff": diff, "reps": reps, "react": DIFFS[diff]},
+                "runs_api": url_for("aim_drill_runs", pid=pid, drill_id=did), "can_save": can_edit,
+                "sens": setup.get("sens") or 0.4, "dpi": setup.get("dpi") or 800, "scale": setup.get("scale") or 1,
+                "keys": read_keys(data_dir, g.user.id), "actions": [[k, lbl] for k, (lbl, _d) in dr.ACTIONS.items()],
+                "keys_api": url_for("aim_keys"), "defaults": dr.default_keys(), "gun": dr.gun(gun_name),
+                "guns": {n: dr.gun(n) for n in dr.GUNS}, "hp": dr.HP, "history": dr.summary(runs, mode),
+                "list": url_for("aim_maps", pid=pid) + f"#{mode}", "util_col": COLS, "queue": [], "next": "",
+                "agents": ext.get("agents_boot", dict)(),
+                **ext.get("motion_boot", lambda: {"anims": None, "guns": {}})()}
+        return render_template("drill_view.html", p=p, active_pid=pid, d={"map": name, "where": title}, boot=boot)
 
     @app.route("/api/aim/keys", methods=["GET", "POST"])
     def aim_keys():
