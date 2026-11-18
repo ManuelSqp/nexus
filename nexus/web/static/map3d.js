@@ -347,13 +347,13 @@
   }
 
   // ---------------------------------------------------------------- 4.48: agent models
-  // stats/agentmesh.py pack(): millimetres (x forward, y right, z up), normals, skin (kept for animations later).
+  // stats/agentmesh.py pack(): millimetres (x forward, y right, z up), normals, skin (4.50: animated, see below).
   // Placed per player: forward f = (sin yaw, -cos yaw) on the map, right = hand · (f.z, −f.x) (the map's minimap
   // may be mirrored: hand comes with the map). Drawn in the team's colour; walls hide them unless "see through
   // walls" is on (then the hidden parts show as a faint outline).
-  const AVS = `attribute vec3 p; attribute vec3 nn; uniform mat4 vp; uniform vec3 at; uniform vec2 f; uniform vec2 r; uniform float sc;
+  const AVS = `attribute vec3 p; attribute vec3 nn; uniform mat4 vp; uniform vec3 at; uniform vec2 f; uniform vec2 r; uniform float sc; uniform float pu;
     varying vec3 vn; varying vec3 wp;
-    void main(){ vec3 q = p * 0.001 * sc; wp = at + vec3(q.x * f.x + q.y * r.x, q.z, q.x * f.y + q.y * r.y);
+    void main(){ vec3 q = p * pu * sc; wp = at + vec3(q.x * f.x + q.y * r.x, q.z, q.x * f.y + q.y * r.y);
       vn = vec3(nn.x * f.x + nn.y * r.x, nn.z, nn.x * f.y + nn.y * r.y); gl_Position = vp * vec4(wp, 1.0); }`;
   const AFS = `precision mediump float; uniform vec3 col; uniform float alpha; uniform vec3 eye; varying vec3 vn; varying vec3 wp;
     void main(){ vec3 n = normalize(vn); vec3 L = normalize(vec3(0.3, 1.0, 0.2));
@@ -366,25 +366,192 @@
     const sh = (t, src) => { const x = gl.createShader(t); gl.shaderSource(x, src); gl.compileShader(x); return x; };
     aprog = gl.createProgram(); gl.attachShader(aprog, sh(gl.VERTEX_SHADER, AVS)); gl.attachShader(aprog, sh(gl.FRAGMENT_SHADER, AFS)); gl.linkProgram(aprog);
     if (!gl.getProgramParameter(aprog, gl.LINK_STATUS)) { console.error('agent shader:', gl.getProgramInfoLog(aprog)); aprog = false; return false; }
-    for (const u of ['vp', 'at', 'f', 'r', 'sc', 'col', 'alpha', 'eye']) aloc[u] = gl.getUniformLocation(aprog, u);
+    for (const u of ['vp', 'at', 'f', 'r', 'sc', 'pu', 'col', 'alpha', 'eye']) aloc[u] = gl.getUniformLocation(aprog, u);
     aloc.p = gl.getAttribLocation(aprog, 'p'); aloc.nn = gl.getAttribLocation(aprog, 'nn');
     return true;
   }
-  function model(url) {
+  const head8 = buf => { const dv = new DataView(buf), n = dv.getUint32(4, true); return [JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, n))), 8 + n]; };
+  function model(url) {                            // an agent or a gun (the same file format; guns have no skeleton)
     let m = models.get(url);
     if (m) return m.state === 'ready' ? m : null;
     m = {state: 'loading'}; models.set(url, m);
     fetch(url, {credentials: 'same-origin'}).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(buf => {
-      const dv = new DataView(buf), n = dv.getUint32(4, true), head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 8, n))), base = 8 + n;
+      const [head, base] = head8(buf);
       const sec = (k, Tp, size) => { const [o, l] = head.sections[k]; return new Tp(buf, base + o, l / size); };
       const b = (target, data) => { const x = gl.createBuffer(); gl.bindBuffer(target, x); gl.bufferData(target, data, gl.STATIC_DRAW); return x; };
       if (head.u32 && !gl.getExtension('OES_element_index_uint')) throw new Error('index');
-      Object.assign(m, {state: 'ready', head, pos: b(gl.ARRAY_BUFFER, sec('pos', Int16Array, 2)), nrm: b(gl.ARRAY_BUFFER, sec('nrm', Int8Array, 1)),
+      const pos = sec('pos', Int16Array, 2), nrm = sec('nrm', Int8Array, 1);
+      Object.assign(m, {state: 'ready', head, pos: b(gl.ARRAY_BUFFER, pos), nrm: b(gl.ARRAY_BUFFER, nrm),
                         idx: b(gl.ELEMENT_ARRAY_BUFFER, head.u32 ? sec('idx', Uint32Array, 4) : sec('idx', Uint16Array, 2)), n: head.nt * 3, u32: head.u32});
+      // 4.50: a copy for the CPU (skinning, the gun in the hand)
+      const nv = head.nv, P = new Float32Array(nv * 3), N = new Float32Array(nv * 3);
+      for (let i = 0; i < nv; i++) for (let c = 0; c < 3; c++) { P[i * 3 + c] = pos[i * 3 + c] * 0.001; N[i * 3 + c] = nrm[i * 4 + c] / 127; }
+      m.cpu = {P, N, nv};
+      if (head.joints && head.joints.length && head.sections.bind && head.sections.bind[1] === head.joints.length * 64) {
+        const W = sec('weight', Uint8Array, 1), Wf = new Float32Array(W.length);
+        for (let i = 0; i < W.length; i++) Wf[i] = W[i] / 255;
+        Object.assign(m.cpu, {J: sec('joint', Uint8Array, 1), W: Wf, bind: new Float32Array(sec('bind', Float32Array, 4))});
+      }
     }).catch(() => { m.state = 'failed'; });
     return null;
   }
-  // list: [{url, x, y, z, yaw, col: [r, g, b]}] -> which of them were drawn as models (the rest need a marker)
+
+  // ---------------------------------------------------------------- 4.50: animations
+  // stats/agentanim.py pack(): the core skeleton's clips, played on every agent by joint name: rotations from the
+  // clip, the bone lengths of the agent (its bind pose), the root and the pelvis moved by the clip (scaled to the
+  // agent's size). The legs and the upper body ("Spine1" and below) can come from different clips. Skinned on the
+  // CPU (a few thousand vertices per agent) into a buffer per player; the gun follows the right hand.
+  // A pose: {lb: [[clip, seconds, weight], …], ub: [[clip, seconds, weight], …] | null}.
+  let A = null, animUrl = null;
+  function setAnims(url) {
+    if (!url || url === animUrl) return;
+    animUrl = url; A = null;
+    fetch(url, {credentials: 'same-origin'}).then(r => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); }).then(buf => {
+      const [head, base] = head8(buf), nj = head.joints.length, nm = head.move.length;
+      const sec = (ol, Tp, size) => new Tp(buf, base + ol[0], ol[1] / size);
+      const clips = {};
+      for (const [k, c] of Object.entries(head.clips)) clips[k] = {...c, R: sec(c.rot, Int16Array, 2), T: sec(c.move, Float32Array, 4)};
+      const ji = {}; head.joints.forEach((n, i) => { ji[n] = i; });
+      const mi = {}; head.move.forEach((n, i) => { mi[n] = i; });
+      A = {head, nj, nm, clips, ji, mi, fps: head.fps, rest: sec(head.sections.rest, Float32Array, 4), grip: head.grip ? new Float32Array(head.grip) : null};
+      for (const m of models.values()) m.rig = undefined;
+    }).catch(() => { A = false; });
+  }
+  // 4x4 column-major helpers on Float32Arrays (o: offset in floats)
+  function mulAt(out, oo, a, ao, b, bo) {
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      out[oo + c * 4 + r] = a[ao + r] * b[bo + c * 4] + a[ao + 4 + r] * b[bo + c * 4 + 1] + a[ao + 8 + r] * b[bo + c * 4 + 2] + a[ao + 12 + r] * b[bo + c * 4 + 3];
+    }
+  }
+  function invRigid(out, oo, m, mo) {              // the inverse of rotation (+ uniform scale) and translation
+    const s2 = m[mo] * m[mo] + m[mo + 1] * m[mo + 1] + m[mo + 2] * m[mo + 2] || 1;
+    for (let c = 0; c < 3; c++) for (let r = 0; r < 3; r++) out[oo + c * 4 + r] = m[mo + r * 4 + c] / s2;
+    for (let r = 0; r < 3; r++) out[oo + 12 + r] = -(out[oo + r] * m[mo + 12] + out[oo + 4 + r] * m[mo + 13] + out[oo + 8 + r] * m[mo + 14]);
+    out[oo + 3] = out[oo + 7] = out[oo + 11] = 0; out[oo + 15] = 1;
+  }
+  function rig(m) {                                 // how the clips map onto this model's skeleton
+    if (m.rig !== undefined) return m.rig;
+    if (!A || !m.cpu || !m.cpu.bind) return (m.rig = A === null ? undefined : null) || null;
+    const names = m.head.joints, par = m.head.parents, nj = names.length, bind = m.cpu.bind;
+    const inv = new Float32Array(nj * 16), local = new Float32Array(nj * 16), tmp = new Float32Array(16);
+    for (let j = 0; j < nj; j++) invRigid(inv, j * 16, bind, j * 16);
+    for (let j = 0; j < nj; j++) {
+      if (par[j] >= 0) mulAt(local, j * 16, inv, par[j] * 16, bind, j * 16);
+      else local.set(bind.subarray(j * 16, j * 16 + 16), j * 16);
+    }
+    const aj = names.map(n => (n in A.ji ? A.ji[n] : -1)), mv = names.map(n => (n in A.mi ? A.mi[n] : -1));
+    const scaled = names.map(n => (A.head.scaled || []).includes(n));
+    const up = names.map((n, j) => { for (let p = j; p >= 0; p = par[p]) if (names[p] === A.head.upper) return true; return false; });
+    let ps = 1;
+    const sp = names.indexOf('Splitter'), as = A.ji.Splitter;
+    if (sp >= 0 && as !== undefined) {
+      const a = Math.hypot(local[sp * 16 + 12], local[sp * 16 + 13], local[sp * 16 + 14]);
+      const b = Math.hypot(A.rest[as * 16 + 12], A.rest[as * 16 + 13], A.rest[as * 16 + 14]);
+      if (b > 1e-6) ps = a / b;
+    }
+    const nv = m.cpu.nv;
+    return (m.rig = {nj, par, inv, local, aj, mv, scaled, up, ps, hand: names.indexOf(A.head.gun || 'R_Hand'),
+                     W: new Float32Array(nj * 16), S: new Float32Array(nj * 16), q: new Float32Array(4), t: new Float32Array(3),
+                     L: new Float32Array(16), P: new Float32Array(nv * 3), N: new Float32Array(nv * 3), tmp});
+  }
+  function frameOf(c, secs) {                       // -> [f0, f1, frac]
+    const n = c.frames;
+    if (n <= 1) return [0, 0, 0];
+    let f = Math.max(0, secs) * A.fps;
+    if (c.loop) f %= (n - 1); else f = Math.min(f, n - 1);
+    const f0 = Math.floor(f), f1 = Math.min(f0 + 1, n - 1);
+    return [f0, f1, f - f0];
+  }
+  function blend(list, a, mi, q, t) {               // the weighted rotation (and move) of anim joint a from a list of clips
+    q[0] = q[1] = q[2] = q[3] = 0; t[0] = t[1] = t[2] = 0;
+    let wsum = 0;
+    for (const [name, secs, w] of list) {
+      const c = A.clips[name]; if (!c || w <= 0) continue;
+      const [f0, f1, k] = frameOf(c, secs), o0 = (f0 * A.nj + a) * 4, o1 = (f1 * A.nj + a) * 4;
+      let x0 = c.R[o0], y0 = c.R[o0 + 1], z0 = c.R[o0 + 2], w0 = c.R[o0 + 3];
+      let x1 = c.R[o1], y1 = c.R[o1 + 1], z1 = c.R[o1 + 2], w1 = c.R[o1 + 3];
+      if (x0 * x1 + y0 * y1 + z0 * z1 + w0 * w1 < 0) { x1 = -x1; y1 = -y1; z1 = -z1; w1 = -w1; }
+      let qw = x0 + (x1 - x0) * k, qx = y0 + (y1 - y0) * k, qy = z0 + (z1 - z0) * k, qz = w0 + (w1 - w0) * k;  // stored (w, x, y, z)
+      if (wsum > 0 && qw * q[0] + qx * q[1] + qy * q[2] + qz * q[3] < 0) { qw = -qw; qx = -qx; qy = -qy; qz = -qz; }
+      q[0] += qw * w; q[1] += qx * w; q[2] += qy * w; q[3] += qz * w;
+      if (mi >= 0) for (let i = 0; i < 3; i++) t[i] += (c.T[(f0 * A.nm + mi) * 3 + i] * (1 - k) + c.T[(f1 * A.nm + mi) * 3 + i] * k) * w;
+      wsum += w;
+    }
+    if (wsum <= 0) return false;
+    const n = Math.hypot(q[0], q[1], q[2], q[3]) || 1;
+    for (let i = 0; i < 4; i++) q[i] /= n;
+    for (let i = 0; i < 3; i++) t[i] /= wsum;
+    return true;
+  }
+  function pose(R, spec) {                          // world matrices of the model's joints
+    const {q, t, L, W, local} = R;
+    for (let j = 0; j < R.nj; j++) {
+      L.set(local.subarray(j * 16, j * 16 + 16));
+      const a = R.aj[j];
+      if (a >= 0) {
+        const list = (R.up[j] && spec.ub) ? spec.ub : spec.lb;
+        if (blend(list, a, R.mv[j], q, t)) {
+          const [w, x, y, z] = q;
+          L[0] = 1 - 2 * (y * y + z * z); L[1] = 2 * (x * y + w * z); L[2] = 2 * (x * z - w * y);
+          L[4] = 2 * (x * y - w * z); L[5] = 1 - 2 * (x * x + z * z); L[6] = 2 * (y * z + w * x);
+          L[8] = 2 * (x * z + w * y); L[9] = 2 * (y * z - w * x); L[10] = 1 - 2 * (x * x + y * y);
+          if (R.mv[j] >= 0) { const s = R.scaled[j] ? R.ps : 1; L[12] = t[0] * s; L[13] = t[1] * s; L[14] = t[2] * s; }
+        }
+      }
+      if (R.par[j] >= 0) mulAt(W, j * 16, W, R.par[j] * 16, L, 0); else W.set(L, j * 16);
+    }
+    return W;
+  }
+  function skin(m, R) {                             // the posed vertices (model frame, metres)
+    const {S, W, inv, P, N} = R, cpu = m.cpu;
+    for (let j = 0; j < R.nj; j++) mulAt(S, j * 16, W, j * 16, inv, j * 16);
+    const VP0 = cpu.P, VN0 = cpu.N, J = cpu.J, Wt = cpu.W;
+    for (let i = 0; i < cpu.nv; i++) {
+      const x = VP0[i * 3], y = VP0[i * 3 + 1], z = VP0[i * 3 + 2], nx = VN0[i * 3], ny = VN0[i * 3 + 1], nz = VN0[i * 3 + 2];
+      let px = 0, py = 0, pz = 0, qx = 0, qy = 0, qz = 0;
+      for (let k = 0; k < 4; k++) {
+        const w = Wt[i * 4 + k]; if (w <= 0) continue;
+        const o = J[i * 4 + k] * 16;
+        px += w * (S[o] * x + S[o + 4] * y + S[o + 8] * z + S[o + 12]);
+        py += w * (S[o + 1] * x + S[o + 5] * y + S[o + 9] * z + S[o + 13]);
+        pz += w * (S[o + 2] * x + S[o + 6] * y + S[o + 10] * z + S[o + 14]);
+        qx += w * (S[o] * nx + S[o + 4] * ny + S[o + 8] * nz);
+        qy += w * (S[o + 1] * nx + S[o + 5] * ny + S[o + 9] * nz);
+        qz += w * (S[o + 2] * nx + S[o + 6] * ny + S[o + 10] * nz);
+      }
+      P[i * 3] = px; P[i * 3 + 1] = py; P[i * 3 + 2] = pz; N[i * 3] = qx; N[i * 3 + 1] = qy; N[i * 3 + 2] = qz;
+    }
+  }
+  const inst = new Map();                          // player key -> {pb, nb, gb, gnb, gp, gn}: buffers of the posed model
+  function dyn(buf, data) { gl.bindBuffer(gl.ARRAY_BUFFER, buf); gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW); }
+  function animate(o, m) {                          // -> the instance with fresh buffers, or null (draw it standing)
+    if (!o.anim || !A) return null;
+    const R = rig(m); if (!R) return null;
+    const W = pose(R, o.anim);
+    skin(m, R);
+    let it = inst.get(o.key);
+    if (!it) { it = {pb: gl.createBuffer(), nb: gl.createBuffer(), gb: gl.createBuffer(), gnb: gl.createBuffer(), gun: null}; inst.set(o.key, it); }
+    dyn(it.pb, R.P); dyn(it.nb, R.N);
+    it.gun = null;
+    const g = o.gun ? model(o.gun) : null;
+    if (g && g.cpu && R.hand >= 0 && A.grip) {      // the gun: hand · grip · its vertices
+      const G = R.tmp; mulAt(G, 0, W, R.hand * 16, A.grip, 0);
+      const n = g.cpu.nv;
+      if (!it.gp || it.gp.length !== n * 3) { it.gp = new Float32Array(n * 3); it.gn = new Float32Array(n * 3); }
+      for (let i = 0; i < n; i++) {
+        const x = g.cpu.P[i * 3], y = g.cpu.P[i * 3 + 1], z = g.cpu.P[i * 3 + 2], a = g.cpu.N[i * 3], b = g.cpu.N[i * 3 + 1], c = g.cpu.N[i * 3 + 2];
+        for (let r = 0; r < 3; r++) {
+          it.gp[i * 3 + r] = G[r] * x + G[4 + r] * y + G[8 + r] * z + G[12 + r];
+          it.gn[i * 3 + r] = G[r] * a + G[4 + r] * b + G[8 + r] * c;
+        }
+      }
+      dyn(it.gb, it.gp); dyn(it.gnb, it.gn);
+      it.gun = g;
+    }
+    return it;
+  }
+  const GUN_COL = [0.16, 0.17, 0.19];
+  // list: [{key, url, x, y, z, yaw, col: [r, g, b], anim?, gun?}] -> which of them were drawn as models (the rest need a marker)
   const drawn = new Set();
   function drawModels(list) {
     drawn.clear();
@@ -392,17 +559,29 @@
     const hand = (M && M.hand) || 1, e = eyePos();
     gl.useProgram(aprog);
     gl.uniformMatrix4fv(aloc.vp, false, VP); gl.uniform3fv(aloc.eye, e);
+    const ready = [];
+    for (const o of list) {
+      const m = o.url ? model(o.url) : null;
+      if (m) ready.push([o, m, animate(o, m)]);
+    }
+    const mesh = (pb, ptype, pstride, pu, nb, ntype, nnorm, nstride, idx, n, u32) => {
+      gl.uniform1f(aloc.pu, pu);
+      gl.bindBuffer(gl.ARRAY_BUFFER, pb); gl.enableVertexAttribArray(aloc.p); gl.vertexAttribPointer(aloc.p, 3, ptype, false, pstride, 0);
+      gl.bindBuffer(gl.ARRAY_BUFFER, nb); gl.enableVertexAttribArray(aloc.nn); gl.vertexAttribPointer(aloc.nn, 3, ntype, nnorm, nstride, 0);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idx);
+      gl.drawElements(gl.TRIANGLES, n, u32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+    };
     const pass = (alpha) => {
-      for (const o of list) {
-        const m = o.url ? model(o.url) : null;
-        if (!m) continue;
+      for (const [o, m, it] of ready) {
         const f = [Math.sin(o.yaw), -Math.cos(o.yaw)];
         gl.uniform3f(aloc.at, o.x, o.y, o.z); gl.uniform2fv(aloc.f, f); gl.uniform2f(aloc.r, hand * f[1], -hand * f[0]);
         gl.uniform1f(aloc.sc, o.scale || 1); gl.uniform3fv(aloc.col, o.col); gl.uniform1f(aloc.alpha, alpha);
-        gl.bindBuffer(gl.ARRAY_BUFFER, m.pos); gl.enableVertexAttribArray(aloc.p); gl.vertexAttribPointer(aloc.p, 3, gl.SHORT, false, 6, 0);
-        gl.bindBuffer(gl.ARRAY_BUFFER, m.nrm); gl.enableVertexAttribArray(aloc.nn); gl.vertexAttribPointer(aloc.nn, 3, gl.BYTE, true, 4, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.idx);
-        gl.drawElements(gl.TRIANGLES, m.n, m.u32 ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, 0);
+        if (it) mesh(it.pb, gl.FLOAT, 12, 1, it.nb, gl.FLOAT, false, 12, m.idx, m.n, m.u32);
+        else mesh(m.pos, gl.SHORT, 6, 0.001, m.nrm, gl.BYTE, true, 4, m.idx, m.n, m.u32);
+        if (it && it.gun) {
+          gl.uniform3fv(aloc.col, GUN_COL);
+          mesh(it.gb, gl.FLOAT, 12, 1, it.gnb, gl.FLOAT, false, 12, it.gun.idx, it.gun.n, it.gun.u32);
+        }
         drawn.add(o.key);
       }
     };
@@ -748,6 +927,7 @@
     // 4.44: the replay viewer draws on top and moves the camera
     setLayer: l => { layer = l; if (M && l && l.ready) l.ready(); }, project, recolor,
     visible, roofAt, zoneAt, drawnModel: k => drawn.has(k), eye: () => eyePos(),
+    anims: url => setAnims(url), animsReady: () => !!A, clips: () => (A ? Object.keys(A.clips) : []),
     game: () => (G && G.ready ? {tris: G.n / 3, glass: G.glass ? G.glass.n / 3 : 0, vox: G.vox.shape} : null),
     view: o => { Object.assign(me, o); }, map: () => M, setOpt: (k, v) => { opt[k] = v; saveOpt(); }, opt: () => opt};
   if (C.map) load(C.map);

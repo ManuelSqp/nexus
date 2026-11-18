@@ -13,8 +13,11 @@
 .rv-stage canvas#m3-canvas{cursor:grab}.rv-stage.drag canvas#m3-canvas{cursor:grabbing}
 .rv-hud{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;pointer-events:none;z-index:3}
 .rv-team{display:flex;gap:5px;pointer-events:auto}
-.rv-a{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;font:inherit;font-weight:750;font-size:11.5px;letter-spacing:.02em;color:#e8e9f2;background:#22324a;border:2px solid var(--c);cursor:pointer;padding:0;text-transform:uppercase}
-.rv-a.dead{background:#20222c;color:#5d6275;border-color:#3a3d4a}
+.rv-a{position:relative;width:46px;height:46px;border-radius:6px;display:flex;align-items:center;justify-content:center;font:inherit;font-weight:750;font-size:11.5px;letter-spacing:.02em;color:#e8e9f2;background:linear-gradient(180deg,#2b3550,#161b2b);border:0;cursor:pointer;padding:0;text-transform:uppercase;overflow:hidden}
+.rv-a img{width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+.rv-a i{position:absolute;left:0;right:0;bottom:0;height:4px;background:var(--c)}
+.rv-a.dead img{filter:grayscale(1) brightness(.45)}.rv-a.dead{color:#5d6275}.rv-a.dead i{background:#3a3d4a}
+.rv-a.dead::after{content:"";position:absolute;inset:0;background:linear-gradient(45deg,transparent 47%,rgba(255,90,106,.75) 48%,rgba(255,90,106,.75) 52%,transparent 53%)}
 .rv-a.on{box-shadow:0 0 0 2px #fff}
 .rv-score{display:flex;flex-direction:column;align-items:center;background:rgba(13,14,23,.86);border-radius:10px;padding:5px 14px;min-width:128px;color:#e8e9f2}
 .rv-score b{font-size:21px;display:flex;gap:12px;font-variant-numeric:tabular-nums}.rv-score small{font-size:11px;color:#b6bbd0}
@@ -78,7 +81,7 @@ button.rv-chip{cursor:pointer;font:inherit;font-weight:650;font-size:13px}
 .dsum{display:flex;flex-wrap:wrap;gap:8px 18px;font-size:13px}.dsum b{font-size:18px;display:block}
 .dwhere{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.dwhere span{font-size:12.5px;padding:2px 9px;border-radius:99px;background:#23273a}
 @media (max-width:1400px){.rv-tr{top:62px}}
-@media (max-width:700px){.rv .m3-stage.rv-stage{height:62vh}.rv-a{width:30px;height:30px;font-size:9px}.rv-keys{display:none}}
+@media (max-width:700px){.rv .m3-stage.rv-stage{height:62vh}.rv-a{width:32px;height:32px;font-size:9px}.rv-keys{display:none}}
 </style>{% endblock %}
 {% block content %}
 {{ vc.pagehead('Replay', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
@@ -175,7 +178,7 @@ button.rv-chip{cursor:pointer;font:inherit;font-weight:650;font-size:13px}
       <select id="rv-speed" aria-label="Speed"><option value="0.1">0.1×</option><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option><option value="8">8×</option></select>
       <span class="rv-seg" role="group" aria-label="Camera mode (V)">
         <button type="button" data-mode="player" title="Player view: through a player's eyes (V, 1–0)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="9" cy="8" r="3.5"></circle><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"></path><circle cx="17" cy="9" r="2.6"></circle><path d="M17 14.5c2.2 0 4 1.4 4.5 4"></path></svg>Player</button>
-        <button type="button" data-mode="free" title="Free camera: WASD, E/Q up and down, drag to look (V)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2.5" y="6.5" width="14" height="11" rx="2"></rect><path d="M16.5 10.5l5-3v9l-5-3"></path></svg>Free camera</button>
+        <button type="button" data-mode="free" title="Free camera: WASD, Space/Ctrl (or E/Q) up and down, drag to look (V)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="2.5" y="6.5" width="14" height="11" rx="2"></rect><path d="M16.5 10.5l5-3v9l-5-3"></path></svg>Free camera</button>
       </span>
       <label title="Players behind walls as outlines"><input type="checkbox" id="m3-xray"> Outlines</label>
       <label><input type="checkbox" id="m3-labels"> Callouts</label>
@@ -193,7 +196,7 @@ button.rv-chip{cursor:pointer;font:inherit;font-weight:650;font-size:13px}
       </details>
       <button type="button" class="btn sm ghost" id="rv-full">Fullscreen</button>
       <button type="button" id="m3-full" hidden></button>
-      <span class="rv-keys"><span translate="no">Space</span> <span>play</span> · <span translate="no">← →</span> <span translate="no">5 s</span> · <span translate="no">V</span> <span>camera</span> · <span translate="no">1–0</span> <span>player</span> · <span translate="no">T</span> <span>hide</span> · <span translate="no">N</span> <span>report</span> · <span translate="no">WASD E Q</span> <span>fly</span></span>
+      <span class="rv-keys"><span translate="no">P</span> <span>play</span> · <span translate="no">← →</span> <span translate="no">5 s</span> · <span translate="no">V</span> <span>camera</span> · <span translate="no">1–0</span> <span>player</span> · <span translate="no">T</span> <span>hide</span> · <span translate="no">N</span> <span>report</span> · <span translate="no">WASD</span> <span>fly</span> · <span translate="no">Space / Ctrl</span> <span>up / down</span></span>
     </div>
   </div>
 </div>

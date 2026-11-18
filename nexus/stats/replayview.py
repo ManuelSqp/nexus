@@ -182,7 +182,27 @@ class Ctx:
         casts = [[round(t / 1000, 2), self.index[p], keys.get(int(s), f"#{s}") if keys else f"#{s}"]
                  for t, p, s in self.cast_events().get(idx) or [] if p in self.index]
         return {"i": idx, "n": idx + 1, "end": round(end, 2), "paths": paths, "kills": kills, "spike": spike,
-                "util": util, "casts": casts, "result": r.result, "winner": r.winning_team}
+                "util": util, "casts": casts, "result": r.result, "winner": r.winning_team, "guns": self.guns(idx)}
+
+    def guns(self, idx: int) -> dict[int, list]:
+        """4.50: which gun each player holds in a round: {player: [[from s, weapon name], …]}: what he bought (the
+        round's economy), then the weapon of each of his kills (picked up guns). Names the 3D viewer doesn't know
+        (abilities, "Melee") are left out."""
+        from .agentmesh import WEAPONS
+        r = self.match.rounds[idx]
+        out: dict[int, list] = {}
+        for p, st in (r.stats or {}).items():
+            if p in self.index and st.weapon in WEAPONS:
+                out[self.index[p]] = [[0.0, st.weapon]]
+        for k in sorted(r.kills, key=lambda k: k.t_round_ms):
+            if k.killer not in self.index or k.weapon not in WEAPONS:
+                continue
+            seq = out.setdefault(self.index[k.killer], [])
+            if not seq:
+                seq.append([0.0, k.weapon])
+            elif seq[-1][1] != k.weapon:
+                seq.append([round(max(0.0, k.t_round_ms / 1000 - 1.0), 2), k.weapon])
+        return out
 
     # -------------------------------------------------------------------------------------------- 4.48: deaths
     def tracks(self) -> sg.Tracks:

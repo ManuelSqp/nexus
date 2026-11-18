@@ -6,8 +6,8 @@ MB of memory; the agents take a few seconds together); `nexus build-game` does t
 A map is built again when its layout files change, when mapmesh.VERSION changes, and once when the first replays of
 it arrive (they check the axes and measure where the replays put the feet).
 
-Routes: /api/maps3d/<map>/mesh (the browser's binary mesh, gzipped, cached for a year by its hash) and
-/api/agents3d/<code> (an agent model)."""
+Routes: /api/maps3d/<map>/mesh (the browser's binary mesh, gzipped, cached for a year by its hash),
+/api/agents3d/<code> (an agent model), 4.50: /api/guns3d/<code> (a gun) and /api/anims3d (the animations)."""
 from __future__ import annotations
 
 import logging
@@ -19,6 +19,7 @@ from flask import abort, jsonify, make_response, request
 
 from .. import gamefiles as gf
 from ..maps import MapRegistry
+from ..stats import agentanim as aa
 from ..stats import agentmesh as am
 from ..stats import map3d as m3
 from ..stats import mapmesh as mm
@@ -136,6 +137,14 @@ class GameBuilder:
                 am.build_all(self._files(), self.agents, log=say or log.info)
             except Exception:
                 log.exception("building the agent models")
+            try:                                     # 4.50: the guns and the animations
+                am.build_guns(self._files(), self.agents, log=say or log.info)
+            except Exception:
+                log.exception("building the gun models")
+            try:
+                aa.save(self.agents, self._files(), log=say or log.info)
+            except Exception:
+                log.exception("building the animations")
 
     def start(self) -> None:
         """Builds in the background (one thread at a time)."""
@@ -183,6 +192,12 @@ class GameBuilder:
     def agent_index(self) -> dict:
         return am.read_index(self.agents)
 
+    def gun_index(self) -> dict:
+        return am.read_index(am.guns_dir(self.agents))
+
+    def anims(self) -> dict:
+        return aa.read_meta(self.agents)
+
 
 def _gz_file(path: Path, h: str):
     if not path.is_file():
@@ -221,7 +236,25 @@ def register(app, store, builder: GameBuilder) -> None:
             abort(404)
         return _gz_file(builder.agents / f"{key.lower()}.bin.gz", idx[key].get("hash", ""))
 
+    @app.get("/api/guns3d/<code>")
+    def guns3d(code: str):
+        if not code.isalnum() or len(code) > 30:
+            abort(404)
+        idx = builder.gun_index()
+        key = next((k for k in idx if k.lower() == code.lower()), None)
+        if key is None:
+            abort(404)
+        return _gz_file(am.guns_dir(builder.agents) / f"{key.lower()}.bin.gz", idx[key].get("hash", ""))
+
+    @app.get("/api/anims3d")
+    def anims3d():
+        meta = builder.anims()
+        if not meta:
+            abort(404)
+        return _gz_file(builder.agents / "anims.bin.gz", meta.get("hash", ""))
+
     @app.get("/api/game/status")
     def game_status():
         return jsonify(available=builder.available(), running=builder.running, maps=builder.status,
-                       agents=len(builder.agent_index()))
+                       agents=len(builder.agent_index()), guns=len(builder.gun_index()),
+                       animations=len(builder.anims().get("clips", [])))

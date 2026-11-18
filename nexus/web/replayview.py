@@ -133,7 +133,8 @@ def register(app, store, view_profile) -> None:
                 f"/api/replay/{c.match.match_id.lower()}/comments?pid={pid}", "rounds": rounds,
                 "players": c.players(me), "start": start, "replay": True, "user": g.user.username,
                 "sens": 0.4, "util_col": UTIL_COL,
-                "agents": app.extensions["nexus"].get("agents_boot", dict)(), "game_map": c.game is not None}
+                "agents": app.extensions["nexus"].get("agents_boot", dict)(), "game_map": c.game is not None,
+                **app.extensions["nexus"].get("motion_boot", lambda: {"anims": None, "guns": {}})()}
         util = c.utility_check()
         deaths = c.death_summary(me) if me else None
         ours = {x["i"] for x in boot["players"] if x["ours"]}

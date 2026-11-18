@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.49.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.50.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -706,7 +706,20 @@ Nexus doesn't ship any of the game's files. You export them yourself on a PC wit
 Maps are matched by codename (Bind = Duality, Haven = Triad, Split = Bonsai, Icebox = Port, Breeze = Foxtrot,
 Fracture = Canyon, Pearl = Pitt, Lotus = Jam, Sunset = Juliett, Abyss = Infinity, Corrode = Rook, Summit = Plummet),
 agents by valorant-api.com's developer names (Jett = Wushu, …). Maps without files stay rebuilt from the replays.
-Animations aren't used yet: the agents stand in their default pose (the skeleton is kept for later).
+
+**Animations and guns (4.50).** The replay viewer animates the agents with the game's own third-person animations
+(standing, walking and running in eight directions, crouching, in the air, deaths: the bodies stay where they fell)
+and puts each player's gun in his hands (what he bought that round, then what he killed with). For that, export
+two more folders the same way and copy them anywhere into `data/game/` too:
+
+- the animations of the core skeleton: `Characters/_Core` (with its `3P/Anims` and `Death/3P/Anims`; an export of
+  all of `Characters` with animations, like `Characters_with_animation/`, works as it is),
+- the guns: `Equippables/Guns` (only the default skins `…/<gun>/S0/1P/Models/GN_<gun>_S0_Skelmesh` are used).
+
+`nexus build-game` then writes `data/agents3d/anims.bin.gz` (about 200 KB, shared by every agent) and
+`data/agents3d/guns/`. Without them the agents stand in their default pose as before. Which animation plays is
+read from the replay (speed, direction compared to where the player looks, up or down, crouching from the height
+when the replay shows it); the legs follow the distance walked, so the feet don't slide.
 
 ### Run it permanently
 
