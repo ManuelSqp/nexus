@@ -4,6 +4,11 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.53.3
+- The last two code scanning alerts: the review evening puts each player's mark into the page escaped, and the roster
+  drafts' picture that follows the pointer while dragging an agent is a copy of the picture you picked up (no
+  address built from the page).
+
 ## 4.53.2
 - **3D maps from the game's files: no frame round the spike sites.** The low "fence" round where the spike can be
   planted is the game's site marker (`BombsiteMarker_0_BombsiteA` and its glow: a glowing line on the floor in the
