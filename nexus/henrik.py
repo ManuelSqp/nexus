@@ -11,6 +11,8 @@ from pathlib import Path
 
 import requests
 
+from .safepath import safe_join, valid_match_id
+
 
 class HenrikError(RuntimeError):
     pass
@@ -93,7 +95,9 @@ class HenrikClient:
     # ------------------------------------------------------------------
     def match(self, region: str, match_id: str, use_cache: bool = True) -> dict:
         """Full v4 match payload. Completed matches never change, so cache forever."""
-        cp = self.cache / "matches" / f"{match_id}.json"
+        if not valid_match_id(match_id):
+            raise HenrikError(f"Not a valid match ID: {match_id!r}")
+        cp = safe_join(self.cache, "matches", f"{match_id}.json")
         if use_cache and cp.exists():
             return json.loads(cp.read_text())
         data = self._get(f"/valorant/v4/match/{region}/{match_id}")
@@ -218,5 +222,5 @@ def premier_seasons(client: "HenrikClient", region: str) -> list[dict]:
 
 
 def load_match_file(path: str | Path) -> dict:
-    """Load a saved v4 match JSON (for offline use / tests)."""
+    """Load a saved v4 match JSON (the CLI and tests only: never call it with request data)."""
     return json.loads(Path(path).read_text())

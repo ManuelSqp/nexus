@@ -4,6 +4,29 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.52.1
+Security fixes from GitHub's code scanning (CodeQL). Nothing changes in how Nexus is used.
+- **Paths from outside data**: one helper (`nexus/safepath.py`) joins a folder and a name and refuses anything that
+  would end up outside the folder (`..`, absolute names, links pointing out).
+  - The web app loads matches by **match ID only**. Before, a "match" ending in `.json` that existed as a file was
+    read before the ID was checked (the web routes checked IDs first, but the loader itself didn't). Loading a saved
+    match file is now the command line's own path (`load_match_from_file`, `CoachRequest.match_file`).
+  - The HenrikDev client checks a match ID before it becomes a cache file name; a player's folder is always a number.
+  - Translations are looked up by language code, never by building a file name from the request.
+  - **Recordings folder** (admin, Users): the error no longer shows the path back, and with `NEXUS_VOD_ROOTS` set
+    (folders separated by `:`) only folders inside those can be chosen.
+- **Pages built from data**: the review evening, the roster drafts and the strat board escape every value they put
+  into HTML (numbers from the server too), and only load icons and scripts from this site (never `javascript:` or
+  another host). The strat board's element helper sets text by default; HTML only where the page builds it itself,
+  and it drops `on…` attributes and `javascript:` links. Every copy of the escaping helper also escapes `'`.
+- **Lineup links**: only youtube.com, www./m./music.youtube.com count as YouTube (`evilyoutube.com` doesn't).
+- **Redirects**: "back to" targets from forms go through one check (pages of this site only); after saving, a page
+  sends you back to itself built from its route instead of the request's URL.
+- The review evening loads the playback script from its own known address, not from the page's data.
+- **Error messages**: clips, Discord posts, the settings tests and the player order give fixed messages; the
+  details go to the server log instead of the page.
+- Roster drafts: no script error on a team without players yet.
+
 ## 4.52.0
 - **Practice › Aim on maps: general drills on the real spots.** Four new tabs next to "Your deaths". The spots come
   from the fights in all replays of a map (up to the last 60): where defenders and attackers were, where attackers

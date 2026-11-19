@@ -389,7 +389,7 @@
   function feedNow() {
     document.querySelectorAll('#rv-feed .rv-k').forEach(b => b.classList.toggle('past', +b.dataset.kt <= S.t));
   }
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   function syncPlay() { $('rv-play').textContent = S.playing ? T('Pause') : T('Play'); }
 
   // ------------------------------------------------------------------------------------------ comments

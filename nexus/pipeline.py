@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -19,6 +18,7 @@ from .henrik import HenrikClient, HenrikError, load_match_file
 from .maps import MapInfo, MapRegistry
 from .models import Match
 from .parse import parse_match
+from .safepath import MATCH_ID_RE, safe_join, valid_match_id  # noqa: F401  (MATCH_ID_RE: kept for importers)
 
 Log = Callable[[str], None]
 
@@ -30,15 +30,10 @@ def _noop(_: str) -> None:
 # ---------------------------------------------------------------------------
 # match data
 # ---------------------------------------------------------------------------
-MATCH_ID_RE = re.compile(r"[A-Za-z0-9-]{1,64}")
 # modes with rounds, sides and an economy; deathmatch / TDM / Gauntlet have none of these
 COACHABLE_MODE_TYPES = {"standard", "swiftplay", "spike rush"}
 # queue ids / names (history lists have no mode_type) that are never coachable
 NON_ROUND_QUEUES = {"deathmatch", "team deathmatch", "teamdeathmatch", "hurm", "abilitydraftarena"}
-
-
-def valid_match_id(ref: str) -> bool:
-    return bool(MATCH_ID_RE.fullmatch(ref))
 
 
 def coachable(match: Match) -> str | None:
@@ -55,15 +50,13 @@ def get_client(cfg: Config) -> HenrikClient:
 
 
 def load_match(cfg: Config, ref: str, queue: str | None = None) -> Match:
-    """`ref` = match id, 'latest', or a path to a saved v4 match .json."""
-    p = Path(ref)
-    if p.suffix == ".json" and p.exists():
-        return parse_match(load_match_file(p))
+    """`ref` = match id or 'latest'. A saved v4 match .json is load_match_from_file's (the CLI's) job."""
     if ref != "latest" and not valid_match_id(ref):
         raise ValueError(f"Not a valid match ID: {ref!r}")
-    cached = cfg.path(cfg.paths.cache_dir) / "matches" / f"{ref}.json"
-    if cached.exists():
-        return parse_match(json.loads(cached.read_text()))
+    if ref != "latest":
+        cached = safe_join(cfg.path(cfg.paths.cache_dir), "matches", f"{ref}.json")
+        if cached.exists():
+            return parse_match(json.loads(cached.read_text()))
     client = get_client(cfg)
     if ref == "latest":
         hist = client.match_history(cfg.player.region, cfg.player.platform, cfg.player.name,
@@ -72,6 +65,14 @@ def load_match(cfg: Config, ref: str, queue: str | None = None) -> Match:
             raise HenrikError("No matches found for this player")
         return parse_match({"data": hist[0]})
     return parse_match(client.match(cfg.player.region, ref))
+
+
+def load_match_from_file(path: str | Path) -> Match:
+    """A saved v4 match .json named on the command line (the CLI and tests; never request data)."""
+    p = Path(path)
+    if p.suffix != ".json" or not p.is_file():
+        raise ValueError(f"Not a saved match file: {str(path)!r}")
+    return parse_match(load_match_file(p))
 
 
 def history(cfg: Config, queue: str | None = None, size: int = 10, start: int = 0) -> list[dict]:
@@ -374,6 +375,7 @@ class CoachRequest:
     vod_url: str | None = None         # how the report references the VOD (web app)
     team_review: bool = False          # review every player of your team, not only you
     team_roles: dict | None = None     # 'name#tag' lower -> assigned team roles
+    match_file: str | None = None      # a saved match .json instead of `match` (the CLI only, never the web app)
 
 
 @dataclass
@@ -391,7 +393,7 @@ def run(cfg: Config, req: CoachRequest, log: Log = _noop) -> CoachResult:
     from .coach.ollama import OllamaError
     from .report import render_report
 
-    match = load_match(cfg, req.match, req.queue)
+    match = load_match_from_file(req.match_file) if req.match_file else load_match(cfg, req.match, req.queue)
     if why := coachable(match):
         raise ValueError(why)
     puuid = focus_player(cfg, match, req.player)

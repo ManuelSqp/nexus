@@ -307,6 +307,7 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             text += "\n" + notes[:1500]
         try:
             post_file(url, text, f"{re.sub(r'[^A-Za-z0-9]+', '-', s['name'])[:40] or 'strat'}.png", data)
-        except Exception as e:
-            return jsonify(error=str(e)), 502
+        except Exception:
+            app.logger.exception("posting a strat to Discord")
+            return jsonify(error="Discord didn't take the picture (details in the server log)."), 502
         return jsonify(ok=True)

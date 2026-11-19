@@ -16,6 +16,10 @@ TYPE_TITLE = {"smoke": "Smoke", "damage": "Molly", "slow": "Slow", "recon": "Rec
               "trap": "Trap"}
 
 
+# exactly these hosts (not "…youtube.com": evilyoutube.com would pass that)
+YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com"}
+
+
 def clip_info(url: str) -> dict | None:
     """Only http(s) links; YouTube gets a thumbnail (the ID is checked, nothing else from the URL is used)."""
     try:
@@ -28,7 +32,7 @@ def clip_info(url: str) -> dict | None:
     vid = None
     if host in ("youtu.be",):
         vid = u.path.strip("/").split("/")[0]
-    elif host.endswith("youtube.com"):
+    elif host in YOUTUBE_HOSTS:
         if u.path == "/watch":
             vid = (parse_qs(u.query).get("v") or [""])[0]
         elif u.path.startswith(("/shorts/", "/embed/", "/live/")):

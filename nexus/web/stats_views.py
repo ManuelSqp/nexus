@@ -13,6 +13,7 @@ from ..stats.comp import META_EXAMPLE, Pool, parse_meta, pick_helper
 from ..stats.compmodes import METHODS as COMP_METHODS, method_of, plan as comp_plan, top as comp_top
 from .models import picked
 from .statsjobs import StatsRunner, slug
+from .urls import safe_next
 
 def week_map_of(app, t) -> str | None:
     """This Premier week's map for a team (None if not a Premier team or not known)."""
@@ -1275,7 +1276,7 @@ def register_team_extras(app, store, sr: StatsRunner, helpers: dict) -> None:
         else:
             sr.submit_post_prep(tid, prep_post(b, maps))
             flash(f"Posting comps{' and game plans' if any(sr.read_plans(tid, m) for m in maps) else ''} for {', '.join(maps)} to Discord.", "ok")
-        return redirect(request.form.get("next") or url_for("team_plans", tid=tid))
+        return redirect(safe_next(request.form.get("next"), url_for("team_plans", tid=tid)))
 
     # ------------------------------------------------------------------ weekly focus
     @app.get("/teams/<int:tid>/focus")

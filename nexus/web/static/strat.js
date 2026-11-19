@@ -20,10 +20,23 @@
     if (parent) parent.appendChild(e);
     return e;
   };
-  const h = (tag, attrs, html) => { const e = document.createElement(tag); for (const k in attrs || {}) e.setAttribute(k, attrs[k]); if (html !== undefined) e.innerHTML = html; return e; };
+  // an element: attributes (no on… handlers, no javascript: URLs) and its text; trusted HTML only through hHtml
+  const h = (tag, attrs, text) => {
+    const e = document.createElement(tag);
+    for (const k in attrs || {}) {
+      const v = String(attrs[k]);
+      if (/^on/i.test(k) || (/^(href|src|action|formaction|xlink:href)$/i.test(k) && /^\s*(javascript|data|vbscript):/i.test(v))) continue;
+      e.setAttribute(k, v);
+    }
+    if (text !== undefined) e.textContent = text;
+    return e;
+  };
+  const hHtml = (tag, attrs, trusted) => { const e = h(tag, attrs); e.innerHTML = trusted; return e; };   // built here, values escaped
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const agentIcon = a => B.agent_icon.replace('__A__', encodeURIComponent(a));
-  const abilityIcon = (a, s) => B.ability_icon.replace('__A__', encodeURIComponent(a)).replace('__S__', encodeURIComponent(s));
+  // a URL of this site only (a path, or the same origin): never javascript: or another host
+  const local = u => { try { const x = new URL(String(u || ''), location.href); return x.origin === location.origin ? x.pathname + x.search : ''; } catch (e) { return ''; } };
+  const agentIcon = a => local(B.agent_icon).replace('__A__', encodeURIComponent(a));
+  const abilityIcon = (a, s) => local(B.ability_icon).replace('__A__', encodeURIComponent(a)).replace('__S__', encodeURIComponent(s));
   const uid = () => Math.random().toString(36).slice(2, 9);
   const AG = Object.fromEntries(B.assets.agents.map(a => [a.name, a]));
   const abInfo = i => ((AG[i.a] || {}).abilities || []).find(x => x.slot === i.s) || null;
@@ -213,9 +226,9 @@
     pal.innerHTML = '';
     let role = null;
     for (const a of B.assets.agents) {
-      if (a.role !== role) { role = a.role; pal.appendChild(h('div', {class: 'sb-role'}, esc(role || 'Other'))); }
-      const b = h('button', {class: 'sb-pal agent' + (activeAgent === a.name ? ' on' : ''), 'data-kind': 'agent', 'data-a': a.name, title: `${a.name}: drag onto the map, click for abilities`},
-                  `<span class="ini">${esc(a.name[0])}</span><img src="${agentIcon(a.name)}" alt="" onerror="this.remove()">`);
+      if (a.role !== role) { role = a.role; pal.appendChild(h('div', {class: 'sb-role'}, role || 'Other')); }
+      const b = hHtml('button', {class: 'sb-pal agent' + (activeAgent === a.name ? ' on' : ''), 'data-kind': 'agent', 'data-a': a.name, title: `${a.name}: drag onto the map, click for abilities`},
+                      `<span class="ini">${esc(a.name[0])}</span><img src="${esc(agentIcon(a.name))}" alt="" onerror="this.remove()">`);
       pal.appendChild(b);
     }
     const abl = $('#sb-abilities');
@@ -229,9 +242,9 @@
     const box = h('div', {class: 'sb-abar'});
     for (const ab of ag.abilities) {
       const sh = ab.shape, size = sh ? (sh.r ? `${sh.r} m` : `${sh.min === sh.max ? sh.len : sh.min + '–' + sh.max} m`) : '';
-      const b = h('button', {class: 'sb-pal ab', 'data-kind': 'ab', 'data-a': ag.name, 'data-s': ab.slot, style: `border-color:${ag.color || '#333b4a'}`,
+      const b = hHtml('button', {class: 'sb-pal ab', 'data-kind': 'ab', 'data-a': ag.name, 'data-s': ab.slot, style: `border-color:${ag.color || '#333b4a'}`,
                              title: `${ab.name}${sh ? ` · ${KIND[sh.k]} ${size}${sh.approx ? ' (approx.)' : ''}` : ''}: drag onto the map, or click to place it at ${ag.name}`},
-        `<span class="ini">${esc(ab.slot.replace('Ability', '').slice(0, 2))}</span><img src="${abilityIcon(ag.name, ab.slot)}" alt="" onerror="this.remove()"><small>${esc(ab.name)}</small>`);
+        `<span class="ini">${esc(ab.slot.replace('Ability', '').slice(0, 2))}</span><img src="${esc(abilityIcon(ag.name, ab.slot))}" alt="" onerror="this.remove()"><small>${esc(ab.name)}</small>`);
       box.appendChild(b);
     }
     return box;
@@ -251,7 +264,7 @@
   function renderShapes() {
     const sh = $('#sb-shapes');
     sh.innerHTML = '';
-    for (const [k, label] of SHAPES) sh.appendChild(h('button', {class: 'sb-pal shape ' + k, 'data-kind': k, title: `${label}: drag onto the map`}, `<i></i><small>${label.split(' ')[0]}</small>`));
+    for (const [k, label] of SHAPES) sh.appendChild(hHtml('button', {class: 'sb-pal shape ' + k, 'data-kind': k, title: `${label}: drag onto the map`}, `<i></i><small>${esc(label.split(' ')[0])}</small>`));
     const tl = $('#sb-tools');
     tl.innerHTML = '';
     for (const [k, icon, label] of TOOLS) {
@@ -402,18 +415,18 @@
                                  <input type="text" id="sb-label-custom" placeholder="name" value="${esc(i.label && !B.lineup.includes(i.label) ? i.label : '')}" ${i.label && !B.lineup.includes(i.label) ? '' : 'hidden'} maxlength="20">`;
     if (i.t === 'text') html += `<label>Text</label><input type="text" id="sb-text" value="${esc(i.s)}" maxlength="60">`;
     if (i.t === 'mark') html += `<label>Symbol</label><select id="sb-mark">${['!', '?', 'X', '★', '👁'].map(s => `<option ${s === i.s ? 'selected' : ''}>${s}</option>`).join('')}</select>`;
-    if (i.t === 'num') html += `<label>Number</label><input type="number" id="sb-num" value="${num(i.n, 1) || 1}" min="1" max="99">`;
+    if (i.t === 'num') html += `<label>Number</label><input type="number" id="sb-num" value="${esc(num(i.n, 1) || 1)}" min="1" max="99">`;
     if (['smoke', 'molly', 'zone'].includes(i.t) || (i.t === 'ab' && (!sh || sh.k === 'smoke' || sh.k === 'area')))
-      html += `<label>${i.t === 'ab' && !sh ? 'Show area (radius m, 0 = icon only)' : 'Radius (m)'}</label><div class="row" style="gap:4px;flex-wrap:nowrap"><input type="number" id="sb-r" value="${i.t === 'ab' ? abR(i, sh) : num(i.r, 0)}" step="0.1" min="0" max="60">${sh && i.r != null && i.r !== sh.r ? `<button class="btn sm ghost" id="sb-reset" title="Back to ${sh.r} m">↺ ${sh.r} m</button>` : ''}</div>`;
+      html += `<label>${i.t === 'ab' && !sh ? 'Show area (radius m, 0 = icon only)' : 'Radius (m)'}</label><div class="row" style="gap:4px;flex-wrap:nowrap"><input type="number" id="sb-r" value="${esc(i.t === 'ab' ? abR(i, sh) : num(i.r, 0))}" step="0.1" min="0" max="60">${sh && i.r != null && i.r !== sh.r ? `<button class="btn sm ghost" id="sb-reset" title="Back to ${esc(sh.r)} m">↺ ${esc(sh.r)} m</button>` : ''}</div>`;
     if (sh && 'len' in sh) {
-      html += `<label>${sh.min === sh.max ? 'Length' : `Length (${sh.min}–${sh.max} m)`}</label><input type="number" id="sb-len" value="${abLen(i, sh)}" step="0.5" min="${sh.min}" max="${sh.max}" ${sh.min === sh.max ? 'disabled' : ''}>
-               <label>Direction (°)</label><input type="number" id="sb-ang" value="${num(i.ang, 0)}" step="5">
+      html += `<label>${sh.min === sh.max ? 'Length' : `Length (${esc(sh.min)}–${esc(sh.max)} m)`}</label><input type="number" id="sb-len" value="${esc(abLen(i, sh))}" step="0.5" min="${esc(sh.min)}" max="${esc(sh.max)}" ${sh.min === sh.max ? 'disabled' : ''}>
+               <label>Direction (°)</label><input type="number" id="sb-ang" value="${esc(num(i.ang, 0))}" step="5">
                <div class="muted small" style="margin-top:4px">Drag the yellow handle to aim${sh.min === sh.max ? '' : ' and stretch'} it.</div>`;
     }
-    if (i.t === 'ab') html += `<div class="muted small" style="margin-top:6px">${sh ? `${KIND[sh.k]}${sh.w ? `, ${sh.w} m wide` : ''}${sh.off ? `, starts ${sh.off} m ahead` : ''} · ${sh.approx ? 'size ≈ estimated, adjust if needed' : 'size from the Valorant wiki'}` : 'no size data: icon only'}</div>`;
+    if (i.t === 'ab') html += `<div class="muted small" style="margin-top:6px">${sh ? `${esc(KIND[sh.k])}${sh.w ? `, ${esc(sh.w)} m wide` : ''}${sh.off ? `, starts ${esc(sh.off)} m ahead` : ''} · ${sh.approx ? 'size ≈ estimated, adjust if needed' : 'size from the Valorant wiki'}` : 'no size data: icon only'}</div>`;
     if (i.t === 'ab' && B.lineups) {               // lineups from the library for this ability on this map
       const ls = B.lineups.filter(l => l.agent === i.a && (!l.ability || !ai || l.ability === ai.name));
-      html += `<label>Lineups (${ls.length})</label>` + (ls.length
+      html += `<label>Lineups (${esc(ls.length)})</label>` + (ls.length
         ? ls.slice(0, 6).map(l => /^https?:\/\//.test(l.url) ? `<a class="small" style="display:block" href="${esc(l.url)}" target="_blank" rel="noopener">▶ ${esc(l.title)}</a>`
                                                                : `<span class="small" style="display:block">${esc(l.title)}</span>`).join('')
         : `<a class="small" href="${esc(B.lineups_url)}" target="_blank" rel="noopener">add one to the library</a>`);
@@ -459,7 +472,7 @@
     const box = $('#sb-steps');
     box.innerHTML = '';
     data.steps.forEach((s, n) => {
-      const b = h('button', {class: 'sb-step' + (n === step ? ' on' : ''), title: 'Open this step'}, `<b>${n + 1}</b> ${esc(s.name || 'Step ' + (n + 1))} <span class="muted">${s.items.length}</span>`);
+      const b = hHtml('button', {class: 'sb-step' + (n === step ? ' on' : ''), title: 'Open this step'}, `<b>${n + 1}</b> ${esc(s.name || 'Step ' + (n + 1))} <span class="muted">${esc(s.items.length)}</span>`);
       b.onclick = () => { step = n; sel = null; draw(); };
       box.appendChild(b);
     });
@@ -531,7 +544,7 @@
   function caption(n, waiting) {
     const st2 = data.steps[n];
     cap.hidden = false;
-    cap.innerHTML = `${n + 1}/${data.steps.length} · ${esc(st2.name || 'Step ' + (n + 1))}` + (st2.call ? `<span class="call">${esc(st2.call)}</span>` : '') +
+    cap.innerHTML = `${n + 1}/${esc(data.steps.length)} · ${esc(st2.name || 'Step ' + (n + 1))}` + (st2.call ? `<span class="call">${esc(st2.call)}</span>` : '') +
                     (waiting ? '<span class="wait">click the map or press Space for the next step</span>' : '');
   }
   function stopPlay(at) {

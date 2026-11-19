@@ -15,15 +15,13 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from pathlib import Path
 
-from urllib.parse import urlparse
-
 from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from ..coach import websearch as ws
 from ..stats import aim as am
 from ..stats import aimweek as aw
 from ..stats import kovaaks as kv
-from .urls import local_path
+from .urls import safe_next
 
 MAX_ROUTINES = 60
 MAX_SCENARIOS = 300                  # people's own scenarios, per user and per team
@@ -228,10 +226,7 @@ def register(app, store, sr, view_profile, filter_rows) -> None:
                                shared_groups=kv.SHARED_GROUPS, n_shared=len(kv.SHARED), search_on=bool(ws.provider(store)))
 
     def back(pid: int):
-        target = (request.form.get("next") or "").replace("\\", "")
-        if local_path(target) and not urlparse(target).netloc and not urlparse(target).scheme:
-            return redirect(target)
-        return redirect(url_for("aim", pid=pid))
+        return redirect(safe_next(request.form.get("next"), url_for("aim", pid=pid)))
 
     def aim_post(p, can_edit: bool, uid: int):
         f = request.form

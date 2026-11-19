@@ -87,13 +87,37 @@ def ffmpeg() -> str | None:
     return shutil.which("ffmpeg")
 
 
+class ClipError(RuntimeError):
+    """A clip couldn't be made; the page gets a fixed message (CLIP_MESSAGES), the details go to the server log."""
+
+
+class NoFfmpeg(ClipError):
+    pass
+
+
+class ClipTimeout(ClipError):
+    pass
+
+
+class ClipFailed(ClipError):
+    pass
+
+
+def clip_message(e: ClipError) -> str:
+    if isinstance(e, NoFfmpeg):
+        return "ffmpeg isn't installed on the server (sudo apt install ffmpeg)"
+    if isinstance(e, ClipTimeout):
+        return "cutting the clip took too long"
+    return "ffmpeg couldn't cut the clip (details in the server log)"
+
+
 def make_clip(vod: Path, out: Path, start: float, length: float) -> Path:
     """MP4 (H.264 720p + AAC) of `length` seconds from `start`. Cached."""
     if out.exists() and out.stat().st_size > 0:
         return out
     exe = ffmpeg()
     if not exe:
-        raise RuntimeError("ffmpeg isn't installed on the server (sudo apt install ffmpeg)")
+        raise NoFfmpeg()
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(".part.mp4")
     cmd = [exe, "-y", "-loglevel", "error", "-ss", f"{max(0.0, start):.2f}", "-i", str(vod), "-t", f"{length:.2f}",
@@ -103,10 +127,11 @@ def make_clip(vod: Path, out: Path, start: float, length: float) -> Path:
         p = subprocess.run(cmd, capture_output=True, timeout=180)
     except subprocess.TimeoutExpired:
         tmp.unlink(missing_ok=True)
-        raise RuntimeError("cutting the clip took too long") from None
+        raise ClipTimeout() from None
     if p.returncode != 0 or not tmp.exists() or tmp.stat().st_size == 0:
         tmp.unlink(missing_ok=True)
-        raise RuntimeError("ffmpeg couldn't cut the clip: " + (p.stderr.decode(errors="replace")[-300:] or "no output"))
+        log.warning("ffmpeg couldn't cut a clip: %s", p.stderr.decode(errors="replace")[-300:] or "no output")
+        raise ClipFailed()
     tmp.replace(out)
     return out
 
@@ -204,8 +229,8 @@ def register(app, store, get_job, llm_for, discord_url_for):
         t, n = clip_args()
         try:
             f = clip_for(j, t, n)
-        except RuntimeError as e:
-            return jsonify(error=str(e)), 500
+        except ClipError as e:
+            return jsonify(error=clip_message(e)), 500
         name = re.sub(r"[^A-Za-z0-9]+", "-", f"{j.map or 'match'}-{int(t // 60)}m{int(t % 60):02d}s").strip("-")
         return send_file(f, mimetype="video/mp4", as_attachment=bool(request.args.get("dl")), download_name=f"{name}.mp4")
 
@@ -223,10 +248,11 @@ def register(app, store, get_job, llm_for, discord_url_for):
                 return jsonify(error=f"the clip is {f.stat().st_size / 1048576:.1f} MB, Discord takes about 10"), 400
             label = str(request.values.get("label") or "")[:80]
             post_file(url, f"🎬 {j.map or ''} {label}".strip(), f"{j.map or 'clip'}.mp4", f.read_bytes(), content_type="video/mp4")
-        except RuntimeError as e:
-            return jsonify(error=str(e)), 500
-        except Exception as e:
-            return jsonify(error=f"Discord: {e}"), 502
+        except ClipError as e:
+            return jsonify(error=clip_message(e)), 500
+        except Exception:
+            app.logger.exception("posting a clip to Discord")
+            return jsonify(error="Discord didn't take the clip (details in the server log)."), 502
         return jsonify(ok=True)
 
     # ---- 4.20: notes on the playback (only the report's owner sees them), a moment as a picture on Discord

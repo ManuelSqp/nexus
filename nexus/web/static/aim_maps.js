@@ -10,7 +10,7 @@
   if (!C) return;
   const $ = id => document.getElementById(id);
   const T = s => (window.vcT ? window.vcT(s) : s);
-  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const TABS = ['deaths', 'hold', 'attack', 'track', 'clear'];
   // the tab from the address or a button: always one of our own names (never the text itself)
   const tabOf = v => {

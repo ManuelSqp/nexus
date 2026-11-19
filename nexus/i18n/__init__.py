@@ -25,6 +25,8 @@ from pathlib import Path
 LANGS = {"en": "English", "de": "Deutsch"}
 DEFAULT = "en"
 _DIR = Path(__file__).resolve().parent
+# the catalog file of each language, looked up by code (a request's language never becomes part of a path)
+_FILES = {code: _DIR / f"{code}.json" for code in LANGS if code != DEFAULT}
 NUM_SEPS = ".,'’"
 
 
@@ -192,9 +194,9 @@ class Catalog:
 
 @lru_cache(maxsize=None)
 def catalog(lang: str) -> Catalog | None:
-    if lang == DEFAULT or lang not in LANGS:
+    p = _FILES.get(lang)
+    if p is None:
         return None
-    p = _DIR / f"{lang}.json"
     try:
         return Catalog(json.loads(p.read_text(encoding="utf-8")))
     except (OSError, ValueError):
