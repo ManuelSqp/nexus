@@ -25,6 +25,10 @@ from . import sight as sg
 from .map3d import CELL, FOOT_CM, Frame
 
 PATH_MS = 200                     # one point per player every 200 ms (the viewer moves smoothly between them)
+REVIVE_AFTER = 1.0                # s after a death: from then on the replay having him again means he lives again
+REVIVE_GAP = 1.0                  # s without positions (parked off the map while dead), then positions again
+REVIVE_AWAY_CM = 150              # or moving this far from where he fell
+REVIVE_FOR = 1.0                  # and his positions go on at least this long
 KEYS = ("C", "Q", "E", "X")
 MATCH_KEY = {"grenade": "C", "ability1": "Q", "ability_1": "Q", "ability2": "E", "ability_2": "E", "ultimate": "X"}
 FIT_SHARE = 0.25                  # the slot numbering is used when it misses at most this share of all casts
@@ -48,6 +52,7 @@ class Ctx:
         self.index = {p: i for i, p in enumerate(self.order)}
         self.starts = {int(n): int(t) for n, t in data.get("rounds") or []}
         self._casts = None
+        self._lives: dict[int, dict] = {}
         self._effects = None
         if mi is not None:
             # view direction: the world -> minimap transform is linear for directions
@@ -120,6 +125,68 @@ class Ctx:
     def round_end_s(self, idx: int) -> float:
         return replayfile._round_end(self.match, idx, self.offsets, self.starts)
 
+    # -------------------------------------------------------------------------------------------- 4.53.1: lives
+    def lives(self, idx: int) -> dict[str, list[list[float]]]:
+        """Per player: when he's alive in a round, [[from s, to s], …] in round time. Usually one stretch up to his
+        death, but a player can live again: Clove's ult (she comes back after dying), Sage's resurrection. He's
+        back when, after a death, the replay has him again after a pause (dead players are parked off the map),
+        or moving away from where he fell, or (Clove) casting his ult; and his positions go on for a while."""
+        if idx in self._lives:
+            return self._lives[idx]
+        r = self.match.rounds[idx]
+        off = self.offsets.get(idx)
+        out: dict[str, list[list[float]]] = {}
+        if off is None:
+            return out
+        end = self.round_end_s(idx)
+        known = {p.lower(): p for p in self.match.players}
+        deaths: dict[str, list[float]] = {}
+        for k in r.kills:
+            deaths.setdefault(k.victim, []).append(k.t_round_ms / 1000)
+        for t_ms, _killer, victim in self.data.get("deaths") or []:      # the replay's own (Clove's ult running out)
+            p = known.get(str(victim).lower())
+            t = (t_ms - off) / 1000
+            if p and 0 <= t <= end and not any(abs(t - x) < 2.0 for x in deaths.get(p, [])):
+                deaths.setdefault(p, []).append(t)
+        ults: dict[str, list[float]] = {}
+        keys = self.slot_keys()
+        for t_ms, p, s in self.cast_events().get(idx) or []:
+            if keys and keys.get(int(s)) == "X":
+                ults.setdefault(p, []).append(t_ms / 1000)            # round time (ms)
+        pos = {known.get(sub.lower()): pts for sub, pts in (self.data.get("pos") or {}).items()}
+        for p in self.match.players:
+            ds = sorted(deaths.get(p, []))
+            pts = [((row[0] - off) / 1000, row[1], row[2]) for row in pos.get(p) or []]
+            pts = [q for q in pts if -1 <= q[0] <= end]
+            spans, start = [], -1.0
+            for n, d in enumerate(ds):
+                if start is None or d < start:
+                    continue
+                spans.append([start, d])
+                start = None
+                nxt = ds[n + 1] if n + 1 < len(ds) else end
+                fell = next(((x, y) for t, x, y in reversed(pts) if t <= d), None)
+                after = [q for q in pts if d + REVIVE_AFTER < q[0] < nxt]
+                back = None
+                prev = next((t for t, _x, _y in reversed(pts) if t <= d + REVIVE_AFTER), d)
+                for t, x, y in after:
+                    away = fell is not None and math.hypot(x - fell[0], y - fell[1]) > REVIVE_AWAY_CM
+                    if t - prev >= REVIVE_GAP or away:
+                        back = t
+                        break
+                    prev = t
+                ult = next((u for u in sorted(ults.get(p, [])) if d < u < nxt), None)
+                if ult is not None and (back is None or ult < back):
+                    back = ult
+                if back is not None and sum(1 for q in after if q[0] >= back) >= 3 and \
+                        max(q[0] for q in after) - back >= REVIVE_FOR:
+                    start = round(back, 2)
+            if start is not None:
+                spans.append([start, end])
+            out[p] = [[round(a, 2), round(b, 2)] for a, b in spans]
+        self._lives[idx] = out
+        return out
+
     def round_view(self, idx: int) -> dict | None:
         if self.mi is None or idx not in self.offsets or not 0 <= idx < len(self.match.rounds):
             return None
@@ -127,15 +194,14 @@ class Ctx:
         off = self.offsets[idx]
         end = self.round_end_s(idx)
         known = {p.lower(): p for p in self.match.players}
-        died = {}
-        for k in r.kills:
-            died.setdefault(k.victim, k.t_round_ms / 1000)
+        lives = self.lives(idx)
         paths: dict[int, list] = {}
         for sub, pts in (self.data.get("pos") or {}).items():
             puuid = known.get(sub.lower())
             if puuid is None:
                 continue
-            stop = min(end, died.get(puuid, math.inf) + 0.3)
+            spans = lives.get(puuid) or [[-1.0, end]]
+            stop = min(end, spans[-1][1] + 0.3)
             seq, last_b = [], None
             for row in pts:
                 t_ms = row[0]
@@ -144,6 +210,8 @@ class Ctx:
                     continue
                 if t > stop:
                     break
+                if not any(a - 0.05 <= t <= b + 0.3 for a, b in spans):
+                    continue                              # dead in between (before living again)
                 b = int(t_ms // PATH_MS)
                 if b == last_b:
                     continue
@@ -181,8 +249,10 @@ class Ctx:
         keys = self.slot_keys()
         casts = [[round(t / 1000, 2), self.index[p], keys.get(int(s), f"#{s}") if keys else f"#{s}"]
                  for t, p, s in self.cast_events().get(idx) or [] if p in self.index]
+        again = {self.index[p]: v for p, v in lives.items() if p in self.index and len(v) > 1}
         return {"i": idx, "n": idx + 1, "end": round(end, 2), "paths": paths, "kills": kills, "spike": spike,
-                "util": util, "casts": casts, "result": r.result, "winner": r.winning_team, "guns": self.guns(idx)}
+                "util": util, "casts": casts, "result": r.result, "winner": r.winning_team, "guns": self.guns(idx),
+                "lives": {i: lives[p] for p in lives if p in self.index for i in [self.index[p]] if lives[p]} if again else {}}
 
     def guns(self, idx: int) -> dict[int, list]:
         """4.50: which gun each player holds in a round: {player: [[from s, weapon name], …]}: what he bought (the
@@ -223,10 +293,12 @@ class Ctx:
             return out
         r, off = self.match.rounds[idx], self.offsets[idx]
         tr = self.tracks()
-        died = {}
-        for k in r.kills:
-            died.setdefault(k.victim, off + k.t_round_ms)
-        alive = lambda p, ms: died.get(p, math.inf) > ms          # noqa: E731
+        lives = self.lives(idx)
+
+        def alive(p, ms):                                 # 4.53.1: alive again after Clove's ult or Sage's res
+            t = (ms - off) / 1000
+            spans = lives.get(p)
+            return True if not spans else any(a <= t < b or (b >= self.round_end_s(idx) and t >= a) for a, b in spans)
         for n, k in enumerate(r.kills):
             t = off + k.t_round_ms
             d = {}

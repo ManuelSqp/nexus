@@ -13,6 +13,13 @@ every report, and with `nexus --version` (`valcoach --version` up to 4.4). Updat
 - **The fence round the spike sites** (the glowing site border, an effect) is left out.
 - **No floor behind thin walls**: the floors of the geometry are only joined to where you can walk without going
   through anything (the ground behind a map's outer walls isn't part of it).
+- **Replays: living again in a round.** Clove's ult (she comes back after dying) and Sage's resurrection: the
+  replay showed the player dead from the first death on, so you lost Clove, her kills looked like the other player
+  just falling over, and you couldn't watch through her eyes. Each player now has his lives in a round: he's back
+  when the replay has him again after dying (after a pause, or moving away from where he fell, or casting his ult),
+  and dead again at his next death (the match's kills, or the replay's own when the ult runs out). The 3D replay
+  draws him, follows him, puts him on the minimap and in the top bar again; his body and the X only stay while
+  he's dead. The Combat Report's "who saw whom" counts him as alive again too.
 - The maps are built again once by themselves (`nexus build-game` to do it now).
 
 ## 4.53.0

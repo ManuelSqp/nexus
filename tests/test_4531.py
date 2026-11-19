@@ -56,3 +56,57 @@ def test_version():
     assert "## 4.53.1" in (ROOT / "CHANGELOG.md").read_text()
     assert "**Version 4.53.1**" in (ROOT / "README.md").read_text()
     assert json.loads((ROOT / "nexus/i18n/de.json").read_text())
+
+
+# ------------------------------------------------------------------------------------------------ living again
+def _view(pos: dict, kills: list, deaths=(), casts=(), keys=None, end=40.0):
+    from types import SimpleNamespace
+
+    from nexus.stats.replayview import Ctx as ReplayView
+    v = object.__new__(ReplayView)
+    rnd = SimpleNamespace(kills=[SimpleNamespace(victim=p, t_round_ms=int(t * 1000)) for p, t in kills])
+    v.match = SimpleNamespace(rounds=[rnd], players={"clove": None, "jett": None})
+    v.offsets = {0: 100_000}
+    v.data = {"pos": pos, "deaths": [[100_000 + int(t * 1000), "", p] for p, t in deaths]}
+    v._lives, v._casts, v._keys = {}, {0: [[int(t * 1000), p, s] for t, p, s in casts]}, keys or {}
+    v.round_end_s = lambda idx: end
+    return v
+
+
+def _walk(t0, t1, x0=0.0, dx=0.0, every=0.25):
+    out, t = [], t0
+    while t <= t1 + 1e-9:
+        out.append([100_000 + int(t * 1000), x0 + dx * (t - t0), 0.0, 0.0, 0.0])
+        t += every
+    return out
+
+
+def test_lives_clove_ult_and_plain_deaths():
+    # Clove dies at 10 s, lies there 1.5 s, is back (her ult) and walks off until the round ends; Jett dies at 20 s
+    clove = _walk(0, 10.2, 0, 100) + _walk(10.4, 11.5, 1020, 0) + _walk(11.75, 40, 1020, 300)
+    jett = _walk(0, 20.3, 0, 50)
+    v = _view({"Clove": clove, "Jett": jett}, [("clove", 10.0), ("jett", 20.0)])
+    lv = v.lives(0)
+    assert lv["jett"] == [[-1.0, 20.0]]
+    assert lv["clove"][0] == [-1.0, 10.0] and lv["clove"][1][1] == 40.0 and 11.5 < lv["clove"][1][0] < 12.5
+    # her ult cast says exactly when
+    v = _view({"Clove": clove, "Jett": jett}, [("clove", 10.0)], casts=[(11.2, "clove", 3)], keys={3: "X"})
+    assert v.lives(0)["clove"][1][0] == 11.2
+    # parked while dead, then back (Sage's resurrection): a pause in the positions, then he's there again
+    sage = _walk(0, 10.3, 0, 0) + _walk(16, 40, 0, 0)
+    v = _view({"Clove": sage}, [("clove", 10.0)])
+    assert v.lives(0)["clove"] == [[-1.0, 10.0], [16.0, 40.0]]
+    # back, then dead for good when the ult runs out (the replay's own death, no kill in the match data)
+    v = _view({"Clove": _walk(0, 10.2, 0, 100) + _walk(12, 20.2, 2000, 300)}, [("clove", 10.0)], deaths=[("Clove", 20.0)])
+    assert v.lives(0)["clove"] == [[-1.0, 10.0], [12.0, 20.0]]
+    # a body that just lies there isn't alive again
+    v = _view({"Clove": _walk(0, 10.0, 0, 100) + _walk(10.25, 14, 1000, 0)}, [("clove", 10.0)])
+    assert v.lives(0)["clove"] == [[-1.0, 10.0]]
+
+
+def test_replay_viewer_knows_lives():
+    js = (ROOT / "nexus/web/static/replay.js").read_text()
+    for x in ("const livesOf = i =>", "function aliveAt(i, t)", "function lastAlive(i, t)", "const deathOf = (i, t) =>",
+              "lastAlive(S.follow, S.t)", "!aliveAt(+i, S.t)"):
+        assert x in js, x
+    assert "S.t > deadAt" not in js and "t > deadAt" not in js
