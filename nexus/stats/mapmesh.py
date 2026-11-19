@@ -37,7 +37,7 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 7                      # 7 (4.53.1): clutter by name words, no effects; 6 (4.53): floors from the geometry too, nothing from replays; 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
+VERSION = 8                      # 8 (4.53.2): no spike site frames, no spawn barriers; 7 (4.53.1): clutter by name words, no effects; 6 (4.53): floors from the geometry too, nothing from replays; 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
 TARGET_TRIS = 450_000            # after simplifying (a soft target: see per_object)
 MIN_KEEP = 0.35                  # a simplified object keeps at least this share of its triangles
 SIMPLIFY_MIN = 300               # objects with fewer triangles aren't simplified
@@ -89,8 +89,10 @@ def clutter(name: str, size_cm: float) -> bool:
     return bool(keys & VISUAL) or (bool(keys & SMALL) and size_cm < SMALL_CM)
 
 
-TECH = re.compile(r"(TargetingMeshes|MapMarkup|/Utilities/|EditorShapes|EditorMeshes|NavMesh|Rift_Bombsite)",
-                  re.I)   # helpers, not walls; 4.53.1: effects (the glowing border round a spike site, Rift_Bombsite_*)
+TECH = re.compile(r"(TargetingMeshes|MapMarkup|/Utilities/|EditorShapes|EditorMeshes|NavMesh|Rift_Bombsite|BombsiteMarker|"
+                  r"/Barrier/Meshes/SM_Barrier)", re.I)
+# helpers, not walls; 4.53.1: effects (Rift_Bombsite_*); 4.53.2: the glowing frame round where the spike can be
+# planted (BombsiteMarker_0_BombsiteA, …_Glow), the spawn barriers (gone when the round starts)
 FLIPS = {"none": (1, 1), "y": (1, -1), "x": (-1, 1), "xy": (-1, -1)}
 
 
@@ -1109,12 +1111,16 @@ def save(out_dir: Path, name: str, meta: dict, blob: bytes, vox: dict) -> None:
     tmp.replace(p["meta"])
 
 
-def load_meta(out_dir: Path, name: str) -> dict | None:
+def load_meta(out_dir: Path, name: str, any_version: bool = False) -> dict | None:
+    """The built map's meta; None when it isn't built, or (any_version False) built by an older version.
+    4.53.2: the pages take an older build while the new one is being made (any_version)."""
     try:
         d = json.loads(paths(out_dir, name)["meta"].read_text())
     except (OSError, ValueError):
         return None
-    return d if d.get("version") == VERSION else None
+    if not isinstance(d, dict) or not d.get("cells") or not paths(out_dir, name)["bin"].is_file():
+        return None
+    return d if any_version or d.get("version") == VERSION else None
 
 
 def load_vox(out_dir: Path, name: str) -> dict | None:

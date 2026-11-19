@@ -153,6 +153,9 @@ def register(app, store, sr, view_profile, known_maps: list[str]) -> None:
             out.update(mesh=f"/api/maps3d/{real}/mesh?h={meta.get('hash', '')}", matches=len(by.get(real, [])),
                        game=True)
             return jsonify(out)
+        if game.pending(real):                            # 4.53.2: not the map from the replays: wait for the real one
+            game.start()
+            return jsonify(building=True, error="The map is being built from the game's files (a minute or two)…"), 202
         d = built(real, by.get(real, []))                # 4.45: without replays: flat, from the minimap
         if d is None or not d["cells"]:
             return jsonify(error="The map data isn't loaded yet (valorant-api.com)."), 404

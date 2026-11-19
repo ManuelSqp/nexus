@@ -4,6 +4,16 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.53.2
+- **3D maps from the game's files: no frame round the spike sites.** The low "fence" round where the spike can be
+  planted is the game's site marker (`BombsiteMarker_0_BombsiteA` and its glow: a glowing line on the floor in the
+  game). It's left out now, and so are the spawn barriers (they're gone once the round starts).
+- **While a map is built again** (a new version, like this one), the pages keep showing the map from the game's
+  files built before, instead of the rough one from the replays; a map from the game's files that isn't built yet
+  shows "being built" and loads by itself when it's ready. The one from the replays is only used where the game's
+  files don't have the map (or it can't be built).
+- The maps are built again once (`nexus build-game --force` to do it now).
+
 ## 4.53.1
 - **3D maps from the game's files: missing floors.** Objects were left out as clutter when a word for clutter was
   anywhere in their name: Haven's Bird House (the floors and walls of "Floor_8_BirdHouse…" read as a bird), planters,
