@@ -145,6 +145,8 @@ def test_scripts_escape_and_check_urls():
         assert "const local = u =>" in js and "x.origin === location.origin" in js
     assert "s.src = REPLAY_JS" in ev and "new URL('../replay.js', document.currentScript.src)" in ev and "B.replay_js" not in ev and "${esc(icon(a))}" in ev and "${esc(p.k)}" in ev
     assert "${icon(" not in dr and "${esc(st.n_all)}" in dr
+    assert '<span class="m ${esc(m.m || \'\')}">' in ev                                  # 4.53.3
+    assert "drag.img.cloneNode(false)" in dr and "g.src = icon(" not in dr
     assert "e.textContent = text" in st and "const hHtml = " in st and "/^on/i.test(k)" in st
     assert "e.innerHTML = html" not in st
     for f in STATIC.glob("*.js"):

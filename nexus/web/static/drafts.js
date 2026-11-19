@@ -170,14 +170,16 @@
     if (!pa && !(full && !e.target.closest('.x'))) return;
     e.preventDefault();
     const agent = pa ? pa.dataset.agent : full.dataset.has;
-    drag = {agent, from: pa ? null : {slot: +full.dataset.slot, kind: full.dataset.drop}, x0: e.clientX, y0: e.clientY, moved: false, ghost: null, hot: null};
+    const img = (pa || full).querySelector('img');     // the picture under the pointer follows it (a copy of the element)
+    drag = {agent, img, from: pa ? null : {slot: +full.dataset.slot, kind: full.dataset.drop}, x0: e.clientX, y0: e.clientY, moved: false, ghost: null, hot: null};
   });
   window.addEventListener('pointermove', e => {
     if (!drag) return;
     if (!drag.moved && Math.abs(e.clientX - drag.x0) + Math.abs(e.clientY - drag.y0) < 5) return;
     if (!drag.moved) {
       drag.moved = true;
-      const g = document.createElement('img'); g.className = 'dr-ghost'; g.src = icon(drag.agent); g.alt = '';
+      const g = drag.img ? drag.img.cloneNode(false) : document.createElement('img');
+      g.className = 'dr-ghost'; g.alt = ''; g.removeAttribute('id'); g.removeAttribute('onerror');
       document.body.appendChild(g); drag.ghost = g;
     }
     drag.ghost.style.left = e.clientX + 'px'; drag.ghost.style.top = e.clientY + 'px';

@@ -137,7 +137,7 @@
     $('#all').innerHTML = B.players.map(p => {
       const m = ms[p.name] || {};
       return `<div><span>${ai(p.agent, 24)}</span><span class="nm">${esc(p.name)}${p.name === me ? '<span class="youtag">you</span>' : ''}</span>
-        <span class="m ${m.m || ''}">${m.m ? esc(B.marks[m.m]) : 'not yet'}</span>
+        <span class="m ${esc(m.m || '')}">${m.m ? esc(B.marks[m.m]) : 'not yet'}</span>
         ${m.note ? `<span class="nt">${esc(m.note)}${m.by && m.by.split('#')[0] !== p.name ? ` (${esc(m.by)})` : ''}</span>` : ''}</div>`;
     }).join('');
   }
