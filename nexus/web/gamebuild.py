@@ -65,6 +65,7 @@ class GameBuilder:
         self.last = 0.0
         self._vox: dict[str, tuple[str, dict]] = {}   # map -> (hash, grid) for line of sight
         self._meta: dict[str, tuple[int, dict | None]] = {}
+        self._has: dict[str, bool] = {}
 
     def available(self) -> bool:
         return self.root.is_dir() and any(self.root.iterdir())
@@ -78,6 +79,22 @@ class GameBuilder:
         """Not built yet, or built by an older version (load_meta: None). 4.53: replays don't matter."""
         meta = mm.load_meta(self.out, mi.name)
         return meta is None or not mm.paths(self.out, mi.name)["bin"].is_file()
+
+    def pending(self, name: str) -> bool:
+        """4.53.2: is this map going to be built from the game's files (no build yet, not missing, no error)?"""
+        if not self.available() or self.meta(name) is not None:
+            return False
+        st = self.status.get(name, "")
+        if st == "missing" or st.startswith("error"):
+            return False
+        if name not in self._has:                      # its layout is in the export
+            try:
+                mi = MapRegistry(self.data / "cache").get(name=name)
+                code = mm.codename(mi.name, getattr(mi, "map_url", "")) if mi else None
+                self._has[name] = bool(code) and self._files().layout(code) is not None
+            except Exception:
+                self._has[name] = False
+        return self._has[name]
 
     def build_map(self, mi, force: bool = False, say=None) -> dict | None:
         code = mm.codename(mi.name, getattr(mi, "map_url", ""))
@@ -155,7 +172,7 @@ class GameBuilder:
             return None
         hit = self._meta.get(name)
         if hit is None or hit[0] != mt:
-            hit = (mt, mm.load_meta(self.out, name))
+            hit = (mt, mm.load_meta(self.out, name, any_version=True))     # 4.53.2: an older build until the new one
             self._meta[name] = hit
         return hit[1]
 

@@ -805,6 +805,11 @@
     try {
       const r = await fetch(C.api + encodeURIComponent(name), {credentials: 'same-origin'});
       const d = await r.json();
+      if (d.building) {                              // 4.53.2: the map from the game's files is on its way: ask again
+        $('m3-msg').textContent = T(d.error); $('m3-msg').hidden = false;
+        setTimeout(() => load(name), 15000);
+        return;
+      }
       if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
       $('m3-msg').hidden = true;
       use(d);
