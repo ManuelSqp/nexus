@@ -47,6 +47,25 @@
   const NM = window.NexusMotion;           // 4.51: shared with the aim drills (motion.js)
   const at = NM.at;                       // [x, y, z, yaw] at time t (between two samples), or null
   const deadAt = i => { const k = S.d && S.d.kills.find(k => k.victim === i); return k ? k.t : Infinity; };
+  // 4.53.1: a player can live again in a round (Clove's ult, Sage's resurrection): S.d.lives[i] = [[from, to], …]
+  // (round seconds); without it he's alive until his first death
+  const livesOf = i => (S.d && S.d.lives && S.d.lives[i]) || null;
+  function aliveAt(i, t) {
+    const L = livesOf(i);
+    return L ? L.some(([a, b]) => t >= a && t <= b) : t <= deadAt(i);
+  }
+  function lastAlive(i, t) {                // the time to take his place from: now, or when he died last
+    const L = livesOf(i);
+    if (!L) return Math.min(t, deadAt(i));
+    let best = null;
+    for (const [a, b] of L) { if (t >= a && t <= b) return t; if (b <= t) best = b; }
+    return best === null ? t : best;
+  }
+  const deathOf = (i, t) => {               // the kill he died of last, at t
+    let best = null;
+    for (const k of (S.d ? S.d.kills : [])) if (k.victim === i && k.t <= t && (!best || k.t > best.t)) best = k;
+    return best;
+  };
 
   // ------------------------------------------------------------------------------------------ the clock and the camera
   const FLY = 9, FAST = 3, LOOK = 0.0045;
@@ -81,7 +100,7 @@
   function camera() {
     const V = window.nexusMap3D;
     if (S.mode === 'player' && S.d) {
-      const p = at(S.d.paths[S.follow], Math.min(S.t, deadAt(S.follow)));
+      const p = at(S.d.paths[S.follow], lastAlive(S.follow, S.t));
       if (p) V.view({x: p[0], y: p[1], z: p[2], yaw: p[3], pitch: 0, fly: true});
     } else {
       const c = S.cam;
@@ -93,7 +112,7 @@
     Object.assign(S.cam, {x: b.x, y: b.y + Math.max(b.w, b.h) * 0.62, z: b.z + Math.max(b.w, b.h) * 0.42, yaw: 0, pitch: -0.95});
   }
   function behind(i) {                  // the free camera a few metres behind and above a player
-    const p = S.d && at(S.d.paths[i], Math.min(S.t, deadAt(i)));
+    const p = S.d && at(S.d.paths[i], lastAlive(i, S.t));
     if (!p) return;
     Object.assign(S.cam, {x: p[0] - Math.sin(p[3]) * 6, y: p[1] + 5, z: p[2] + Math.cos(p[3]) * 6, yaw: p[3], pitch: -0.45});
   }
@@ -124,7 +143,7 @@
       const pl = byI[i], url = C.agents[pl.agent];
       if (!url) continue;
       const c = rgb(col(pl)).map(c => c * 0.85 + 0.1);
-      if (S.t > deadAt(+i)) {                   // 4.50: the body stays where he fell until the round is over
+      if (!aliveAt(+i, S.t)) {                  // 4.50: the body stays where he fell until the round is over
         if (S.mode === 'player' && +i === S.follow) continue;      // (not under the camera of his own eyes)
         const b = body(+i, path);
         if (b) out.push({key: +i, url, col: c.map(v => v * 0.7), ...b});
@@ -147,7 +166,7 @@
   const prep = d => NM.prep(d.paths);
   const motion = (path, t, p, hold = 'hold') => NM.motion(path, t, p, hold);
   function body(i, path) {                               // a dead player: where he fell and how (away from the killer)
-    const k = S.d.kills.find(k => k.victim === i);
+    const k = deathOf(i, S.t);
     if (!k) return null;
     const p = at(path, Math.min(k.t, path[path.length - 1][0])) || [k.x, k.y, k.z, 0];
     const o = {x: p[0], y: p[1], z: p[2], yaw: p[3]};
@@ -168,7 +187,7 @@
     const t = S.t, d = S.d;
     if (S.util) for (const u of d.util) if (live(u, t)) drawUtil(g, project, u, dpr);
     for (const k of d.kills) {
-      if (k.t > t) continue;
+      if (k.t > t || aliveAt(k.victim, t) || deathOf(k.victim, t) !== k) continue;   // he lives again / died again
       if (window.nexusMap3D.drawnModel(k.victim)) continue;          // 4.50: his body lies there (the X stays on the radar)
       const s = project(k.x, k.y + 0.1, k.z); if (!s) continue;
       const r = 6 * dpr, v = byI[k.victim];
@@ -184,7 +203,7 @@
     g.textAlign = 'center'; g.font = `650 ${Math.round(12 * dpr)}px system-ui, sans-serif`;
     const list = [];
     for (const [i, path] of Object.entries(d.paths)) {
-      if (t > deadAt(+i)) continue;
+      if (!aliveAt(+i, t)) continue;
       if (S.mode === 'player' && +i === S.follow) continue;         // you're looking through his eyes
       const p = at(path, t); if (!p) continue;
       const s = project(p[0], p[1] + 0.2, p[2]); if (!s) continue;
@@ -227,12 +246,12 @@
       g.beginPath(); g.arc(x, y, Math.max(2, (R_UTIL[u.type] || 1.5) * k), 0, 2 * Math.PI); g.fill(); g.globalAlpha = 1;
     }
     for (const kl of d.kills) {
-      if (kl.t > t) continue;
+      if (kl.t > t || aliveAt(kl.victim, t) || deathOf(kl.victim, t) !== kl) continue;
       const [x, y] = toR(kl.x, kl.z); g.strokeStyle = col(byI[kl.victim]); g.lineWidth = 2;
       g.beginPath(); g.moveTo(x - 4, y - 4); g.lineTo(x + 4, y + 4); g.moveTo(x + 4, y - 4); g.lineTo(x - 4, y + 4); g.stroke();
     }
     for (const [i, path] of Object.entries(d.paths)) {
-      if (t > deadAt(+i)) continue;
+      if (!aliveAt(+i, t)) continue;
       const p = at(path, t); if (!p) continue;
       const [x, y] = toR(p[0], p[2]), pl = byI[i];
       g.fillStyle = col(pl); g.strokeStyle = pl.me ? '#fff' : '#000'; g.lineWidth = 1.5;
@@ -275,7 +294,7 @@
       }
       for (const b of box.querySelectorAll('.rv-a')) {
         const i = +b.dataset.p;
-        b.classList.toggle('dead', S.t > deadAt(i));
+        b.classList.toggle('dead', !aliveAt(i, S.t));
         b.classList.toggle('on', S.mode === 'player' && S.follow === i);
       }
     }
@@ -285,7 +304,7 @@
     const el = $('rv-pov'), p = byI[S.follow];
     el.hidden = !(S.mode === 'player' && p && S.ui);
     if (el.hidden) return;
-    const dead = S.t > deadAt(p.i), key = `${p.i}:${dead}`;
+    const dead = !aliveAt(p.i, S.t), key = `${p.i}:${dead}`;
     if (povFor === key) return;
     povFor = key;
     el.innerHTML = `<span class="rv-a ${dead ? 'dead' : ''}" style="--c:${col(p)}" data-s="${esc(short(p.agent))}" translate="no">${face(p)}<i></i></span>` +
@@ -448,7 +467,7 @@
   }
   function watch(i) { if (byI[i] === undefined) return; S.follow = i; S.sight = null; setMode('player'); }
   function cycle(dir) {                  // the next / previous player still alive (all of them once everyone's dead)
-    const alive = ORDER.filter(p => S.t <= deadAt(p.i));
+    const alive = ORDER.filter(p => aliveAt(p.i, S.t));
     const list = alive.length ? alive : ORDER;
     const k = list.findIndex(p => p.i === S.follow);
     watch(list[(k + dir + list.length) % list.length].i);
