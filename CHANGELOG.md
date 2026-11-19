@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.53.1
+- **3D maps from the game's files: missing floors.** Objects were left out as clutter when a word for clutter was
+  anywhere in their name: Haven's Bird House (the floors and walls of "Floor_8_BirdHouse…" read as a bird), planters,
+  Corrode's castle wall (…Wall**CUp**per read as a cup), Split's and Ascent's scaffolding. Now the name's words count,
+  a floor, wall, roof or stairs is never clutter, and things like pipes, plants or debris are only left out when
+  they're small (under 6 m). On Haven 1,530 cells of walkable floor had nothing below them; now 55.
+- **The fence round the spike sites** (the glowing site border, an effect) is left out.
+- **No floor behind thin walls**: the floors of the geometry are only joined to where you can walk without going
+  through anything (the ground behind a map's outer walls isn't part of it).
+- The maps are built again once by themselves (`nexus build-game` to do it now).
+
 ## 4.53.0
 - **3D maps from the game's files: solid boxes and bridges.** Where a map is built from the game's files, where you
   can walk now comes from the files alone, no replays:
