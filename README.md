@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.52.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.53.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -244,7 +244,8 @@ kills, deaths, ultimates and the spike; a click on one jumps 3 s before it.
 game's files* below) the 3D maps and the replay viewer use the real maps: every wall, floor, ramp and box at its real
 size, in one colour (*Floor* › *Height* or *Map areas*: the game's callout zones), roofs cut away for the view from
 above (*Roofs* shows them). Agents are their real models in the team's colour; walls hide them and their names
-(*Outlines* shows them again). Kills name the game's callout where they happened, and with line of sight from
+(*Outlines* shows them again). Where you can walk (4.53) is the game's navigation mesh plus the floors of the
+geometry you can get onto (box tops, bridges, ledges), so boxes and bridges are solid. Kills name the game's callout where they happened, and with line of sight from
 the walls the replay page says who saw whom first, how many enemies had a line to the victim, and whether he ever had
 his killer in view; *Your deaths* sums it up per match.
 
@@ -701,8 +702,8 @@ Nexus doesn't ship any of the game's files. You export them yourself on a PC wit
    sudo systemctl restart nexus
    ```
    Without the command the web app builds them in the background on its own (`data/maps3d/*.game.*`,
-   `data/agents3d/`). A map is built again when its files change and once when its first replays arrive (they check the
-   axes and measure the players' height above the floor). `--map Ascent` builds one map, `--force` rebuilds.
+   `data/agents3d/`). A map is built again when its files change; 4.53: from the game's files alone, replays don't
+   change it. `--map Ascent` builds one map, `--force` rebuilds.
 
 Maps are matched by codename (Bind = Duality, Haven = Triad, Split = Bonsai, Icebox = Port, Breeze = Foxtrot,
 Fracture = Canyon, Pearl = Pitt, Lotus = Jam, Sunset = Juliett, Abyss = Infinity, Corrode = Rook, Summit = Plummet),

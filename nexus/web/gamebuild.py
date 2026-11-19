@@ -3,8 +3,8 @@
 The exported files are copied to data/game/ (README › 3D maps from the game files). A background thread builds what's
 missing or outdated, one map after the other, at startup and every 10 minutes (a map takes 15–60 s and a few hundred
 MB of memory; the agents take a few seconds together); `nexus build-game` does the same from the command line.
-A map is built again when its layout files change, when mapmesh.VERSION changes, and once when the first replays of
-it arrive (they check the axes and measure where the replays put the feet).
+A map is built again when its layout files change and when mapmesh.VERSION changes; 4.53: from the game's files
+alone (replays don't change it).
 
 Routes: /api/maps3d/<map>/mesh (the browser's binary mesh, gzipped, cached for a year by its hash),
 /api/agents3d/<code> (an agent model), 4.50: /api/guns3d/<code> (a gun) and /api/anims3d (the animations)."""
@@ -21,7 +21,6 @@ from .. import gamefiles as gf
 from ..maps import MapRegistry
 from ..stats import agentanim as aa
 from ..stats import agentmesh as am
-from ..stats import map3d as m3
 from ..stats import mapmesh as mm
 
 log = logging.getLogger(__name__)
@@ -75,24 +74,10 @@ class GameBuilder:
             self.files = gf.GameFiles(self.root)
         return self.files
 
-    def samples(self, name: str) -> tuple[list, int]:
-        by = m3.replays_by_map(self.data / "replays", self.map_of)
-        ids = sorted(by.get(name, []))[-SAMPLE_REPLAYS:]
-        pts = []
-        for d in m3.load_replays(self.data / "replays", ids):
-            for rows in (d.get("pos") or {}).values():
-                for r in rows[::20]:
-                    if len(r) >= 4:
-                        pts.append((r[1], r[2], r[3]))
-        return pts, len(ids)
-
-    def needs(self, mi, code: str, n_replays: int) -> bool:
+    def needs(self, mi) -> bool:
+        """Not built yet, or built by an older version (load_meta: None). 4.53: replays don't matter."""
         meta = mm.load_meta(self.out, mi.name)
-        if meta is None or not mm.paths(self.out, mi.name)["bin"].is_file():
-            return True
-        if meta.get("samples_from", 0) == 0 and n_replays > 0:
-            return True
-        return False
+        return meta is None or not mm.paths(self.out, mi.name)["bin"].is_file()
 
     def build_map(self, mi, force: bool = False, say=None) -> dict | None:
         code = mm.codename(mi.name, getattr(mi, "map_url", ""))
@@ -100,13 +85,12 @@ class GameBuilder:
         if files.layout(code) is None:
             self.status[mi.name] = "missing"
             return None
-        pts, n = self.samples(mi.name)
-        if not force and not self.needs(mi, code, n):
+        if not force and not self.needs(mi):
             self.status[mi.name] = "built"
             return mm.load_meta(self.out, mi.name)
         self.status[mi.name] = "building"
         try:
-            r = mm.build(files, mi, code, pts, log=say or log.info)
+            r = mm.build(files, mi, code, log=say or log.info)
         except Exception as e:                       # one bad map doesn't stop the others
             log.exception("building %s from the game files", mi.name)
             self.status[mi.name] = f"error: {type(e).__name__}: {e}"
@@ -115,7 +99,6 @@ class GameBuilder:
             self.status[mi.name] = "missing"
             return None
         meta, blob, vox = r
-        meta["samples_from"] = n
         mm.save(self.out, mi.name, meta, blob, vox)
         self._vox.pop(mi.name, None)
         self.status[mi.name] = "built"

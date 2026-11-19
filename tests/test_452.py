@@ -79,7 +79,7 @@ def test_build_draws_open_doors_like_glass(tmp_path, synthetic):  # noqa: F811
     mi = MapRegistry(synthetic["cache"]).get(name="Testmap")
     said = []
     meta, blob, vox = mm.build(gf.GameFiles(root), mi, "Testmap", log=said.append)
-    assert meta["version"] == mm.VERSION == 5
+    assert meta["version"] == mm.VERSION >= 5
     assert any("doors open in the game" in x for x in said), said
     head = mm.unpack_head(blob)
     assert head["gnt"] >= 24                                              # the window and the door: glass

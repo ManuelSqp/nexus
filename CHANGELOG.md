@@ -4,6 +4,19 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.53.0
+- **3D maps from the game's files: solid boxes and bridges.** Where a map is built from the game's files, where you
+  can walk now comes from the files alone, no replays:
+  - The game's navigation mesh, without the parts that run under boxes and walls: you no longer walk or fall
+    through them.
+  - The floors of the geometry itself that you can get onto from there, one step at a time (at most 1.3 m up, a
+    jump): box tops, bridges and walkways, ledges, the strip along the walls. Not roofs or the tops of walls, and
+    nothing a player can't stand on (railings).
+  - Replays no longer change a built map: the axes are checked with the callouts only, and where replays put the
+    feet is measured when a replay is shown.
+- The maps are built again once by themselves (a few seconds to a minute each; `nexus build-game` to do it now).
+- The drills (aim on maps) walk on the same floors.
+
 ## 4.52.1
 Security fixes from GitHub's code scanning (CodeQL). Nothing changes in how Nexus is used.
 - **Paths from outside data**: one helper (`nexus/safepath.py`) joins a folder and a name and refuses anything that

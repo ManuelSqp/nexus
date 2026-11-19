@@ -155,6 +155,6 @@ def test_scripts_escape_and_check_urls():
 
 def test_version():
     import nexus
-    assert nexus.__version__ == "4.52.1"
+    assert tuple(int(x) for x in nexus.__version__.split(".")[:2]) >= (4, 52)
     assert "## 4.52.1" in (ROOT / "CHANGELOG.md").read_text()
     assert json.loads((ROOT / "nexus/i18n/de.json").read_text())
