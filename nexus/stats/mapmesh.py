@@ -208,8 +208,8 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
     say(f"{code}: layout {src.layout.name}, {len(src.placed)} objects, axes flipped: {flip}")
 
     # ---- the geometry, in world cm: which objects, and how many triangles they'd be
-    solid, glass = [], []                                 # (mesh, its file, world matrix)
-    doors, n_doors = Doorways(nav_w), 0
+    solid, glass, opened = [], [], []                     # (mesh, its file, world matrix)
+    doors = Doorways(nav_w)
     for p in src.placed:
         if p.invisible or not render_layer(p.layer) or CLUTTER.search(p.ref.rsplit("/", 1)[-1]) or TECH.search(p.ref):
             continue
@@ -223,9 +223,8 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
             c = W[:3, 3]
             if size.max() < MIN_SIZE_CM or not ((c >= lo - 3000) & (c <= hi + 3000)).all():
                 continue
-            if doors.is_open(m, W):                         # 4.50.2: drawn like glass, don't block the view
-                glass.append((m, id(m), W))
-                n_doors += 1
+            if doors.is_open(m, W):                         # 4.50.2: drawn like glass, block neither view nor way
+                opened.append((m, id(m), W))
                 continue
             sm, gm = src.parts(m)
             if sm is not None:
@@ -235,9 +234,9 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
     if not solid:
         say(f"{code}: no meshes found (is the Environment folder exported?)")
         return None
-    n_obj = len(solid) + len(glass)
-    if n_doors:
-        say(f"{code}: {n_doors} doors open in the game (drawn see-through)")
+    n_obj = len(solid) + len(glass) + len(opened)
+    if opened:
+        say(f"{code}: {len(opened)} doors open in the game (drawn see-through)")
     fr = Frame(mi)
     navm = _to_frame(nav_w.reshape(-1, 3), mi, fr).reshape(-1, 3, 3)
 
@@ -246,15 +245,24 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
     say(f"{code}: {n_obj} objects, {len(T):,} triangles before simplifying")
     vox = voxelize(V, T, VOX)
     say(f"{code}: see-through grid {vox['shape']}")
-    geo = geo_floors(V, T, vox)                          # 4.53: box tops, bridges, ledges (full detail)
+    # 4.53: where you can walk: glass is see-through but solid (Abyss's glass crates, glass floors); open doors aren't
+    walk_vox = vox
+    if glass:
+        Vg, Tg = _place(glass, lo, hi, mi, fr)
+        if len(Tg):
+            gv = voxelize(Vg, Tg, VOX, origin=vox["origin"], shape=vox["shape"])
+            walk_vox = dict(vox, bits=np.packbits(vox_bool(vox) | vox_bool(gv)))
+            V, T = _merge([(V, T), (Vg, Tg)])
+        del Vg, Tg
+    geo = geo_floors(V, T, walk_vox)                     # 4.53: box tops, bridges, ledges (full detail)
     del V, T
 
     # ---- simplify each object on its own (simplifying the whole map at once tears holes into floors where
     # separate objects meet), as much as needed to stay near TARGET_TRIS
     Vs, Ts = _place(solid, lo, hi, mi, fr, simple=per_object(solid, TARGET_TRIS))
     Vs, Ts = weld(Vs, Ts, 0.005)
-    if glass:
-        Gm, GT = _place(glass, lo, hi, mi, fr, simple=per_object(glass, 40_000))
+    if glass or opened:
+        Gm, GT = _place(glass + opened, lo, hi, mi, fr, simple=per_object(glass + opened, 40_000))
     else:
         Gm, GT = np.zeros((0, 3)), np.zeros((0, 3), np.int64)
     say(f"{code}: {len(Ts):,} triangles after simplifying")
@@ -263,7 +271,7 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
     zones = _zones(src, F, mi, fr)
     _, nav_floors = walk_cells(navm)
     nav_in = sum(len(v) for v in nav_floors.values())
-    nav_floors = inside_objects(nav_floors, vox)
+    nav_floors = inside_objects(nav_floors, walk_vox)
     say(f"{code}: {nav_in - sum(len(v) for v in nav_floors.values()):,} navigation mesh cells inside objects left out")
     cells, floors, added = merge_floors(nav_floors, geo)
     say(f"{code}: walkable: {len(cells):,} cells, {added:,} of them from the geometry (box tops, bridges)")
@@ -468,12 +476,16 @@ def weld(V, T, g):
 
 
 # ------------------------------------------------------------------------------------------------ see-through grid
-def voxelize(V: np.ndarray, T: np.ndarray, cell: float) -> dict:
+def voxelize(V: np.ndarray, T: np.ndarray, cell: float, origin=None, shape=None) -> dict:
     """Every cell a surface passes through is solid (points spread over every triangle, at most half a cell
-    apart). -> {"origin": [x, y, z], "cell": m, "shape": [nx, ny, nz], "bits": packed bool (x fastest)}"""
-    lo = V.min(0) - cell
-    hi = V.max(0) + cell
-    shape = np.ceil((hi - lo) / cell).astype(int) + 1
+    apart). -> {"origin": [x, y, z], "cell": m, "shape": [nx, ny, nz], "bits": packed bool (x fastest)}
+    origin and shape: on another grid's cells (what's outside it is left out)."""
+    if origin is None:
+        lo = V.min(0) - cell
+        hi = V.max(0) + cell
+        shape = np.ceil((hi - lo) / cell).astype(int) + 1
+    else:
+        lo, shape = np.array(origin, float), np.array(shape, int)
     grid = np.zeros(int(shape[0] * shape[1] * shape[2]), bool)
     step = cell * 0.45
     A, B, C = V[T[:, 0]], V[T[:, 1]], V[T[:, 2]]
@@ -490,6 +502,7 @@ def voxelize(V: np.ndarray, T: np.ndarray, cell: float) -> dict:
             P = (A[idx, None, :] * (1 - a - b)[None, :, None] + B[idx, None, :] * a[None, :, None]
                  + C[idx, None, :] * b[None, :, None]).reshape(-1, 3)
             q = np.floor((P - lo) / cell).astype(np.int64)
+            q = q[((q >= 0) & (q < shape)).all(1)]
             grid[q[:, 0] + shape[0] * (q[:, 2] + shape[2] * q[:, 1])] = True
     return {"origin": lo.tolist(), "cell": cell, "shape": shape.tolist(), "bits": np.packbits(grid)}
 

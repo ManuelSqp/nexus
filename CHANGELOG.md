@@ -12,6 +12,8 @@ every report, and with `nexus --version` (`valcoach --version` up to 4.4). Updat
   - The floors of the geometry itself that you can get onto from there, one step at a time (at most 1.3 m up, a
     jump): box tops, bridges and walkways, ledges, the strip along the walls. Not roofs or the tops of walls, and
     nothing a player can't stand on (railings).
+  - Glass stays see-through but is solid to walk on and into (Abyss's glass crates on B, glass floors); doors that
+    are open in the game stay walk-through.
   - Replays no longer change a built map: the axes are checked with the callouts only, and where replays put the
     feet is measured when a replay is shown.
 - The maps are built again once by themselves (a few seconds to a minute each; `nexus build-game` to do it now).
