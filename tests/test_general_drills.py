@@ -116,7 +116,7 @@ def test_spots_and_play(app, synthetic):  # noqa: F811
         view = r.data.decode()
         boot = json.loads(view.split("window.NEXUS_MAP3D = ", 1)[1].split(";</script>", 1)[0])
         assert boot["mode"] == mode and boot["spot"]["id"] == a["id"] and boot["drill"]["id"] == f"g-{mode}-{a['id']}"
-        assert boot["opts"] == {"styles": ["jiggle", "two"], "diff": "pro", "reps": 7, "react": 0.3}
+        assert {k: boot["opts"][k] for k in ("styles", "diff", "reps", "react")} == {"styles": ["jiggle", "two"], "diff": "pro", "reps": 7, "react": 0.3}
         assert boot["gun"]["name"] == "Sheriff" and boot["list"].endswith("#" + mode) and 'id="dr-move"' in view
         assert "Watch this death in the replay" not in view
     hold = f"/api/profiles/{pid}/aim/drill/g-hold-{a['id']}/runs"

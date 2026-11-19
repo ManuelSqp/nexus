@@ -8,7 +8,8 @@ sight and callouts: a few seconds per match) and kept in data/drills/<match id>.
 Your keys (Settings in a drill, or the Keys button on the list): per user in data/aim/keys-<uid>.json.
 
 4.52: general drills on the map's real spots: /profiles/<pid>/aim/play/<mode>/<map>/<spot> (hold an angle, attacking,
-tracking, clear a site); the spots come from the fights in all replays of the map (stats/drills.py spots())."""
+tracking, clear a site); the spots come from the fights in all replays of the map (stats/drills.py spots()).
+4.54: entry (first onto a site), retake (the spike is down, you come in), post-plant (you hold, they retake)."""
 from __future__ import annotations
 
 import logging
@@ -27,10 +28,14 @@ from .replays import match_brief, replays_dir
 log = logging.getLogger(__name__)
 MATCHES = {"10": 10, "30": 30, "all": 400}     # "From" on the page: the last this-many matches with a replay
 SPOT_MATCHES = 60                               # 4.52: the spots of a map come from its last this-many replays
-GENERAL_ID = re.compile(r"^g-(hold|attack|track|clear)-[0-9a-f]{10}$")
+MODES = ("hold", "attack", "track", "clear", "entry", "retake", "postplant")    # 4.54: entry, retake, post-plant
+GENERAL_ID = re.compile(r"^g-(" + "|".join(MODES) + r")-[0-9a-f]{10}$")
 PEEKS = ("wide", "jiggle", "crouch", "jump", "two")
 DIFFS = {"easy": 0.9, "medium": 0.6, "hard": 0.42, "pro": 0.3}   # the enemies' reaction time (s)
-DEFAULT_REPS = {"hold": 20, "attack": 5, "track": 1, "clear": 3}
+DEFAULT_REPS = {"hold": 20, "attack": 5, "track": 1, "clear": 3, "entry": 5, "retake": 5, "postplant": 10}
+LISTS = {"hold": "angles", "attack": "angles", "track": "angles", "clear": "sites", "entry": "sites",
+         "retake": "retakes", "postplant": "retakes"}      # which of a map's spots each kind of drill is played on
+FOES = (1, 2, 3)                                # entry, retake, post-plant: how many enemies (2 by default)
 
 
 def keys_file(data_dir, uid: int) -> Path:
@@ -153,7 +158,8 @@ def register(app, store, sr, view_profile) -> None:
                 # 4.52: the general drills
                 "spots_api": url_for("aim_spots_api", pid=pid),
                 "play": url_for("aim_play", pid=pid, mode="MODE", map_name="MAP", sid="SID"),
-                "guns": list(dr.GUNS), "diffs": list(DIFFS), "peeks": list(PEEKS), "reps": DEFAULT_REPS}
+                "guns": list(dr.GUNS), "diffs": list(DIFFS), "peeks": list(PEEKS), "reps": DEFAULT_REPS,
+                "foes": list(FOES)}
         return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot)
 
     @app.get("/api/profiles/<int:pid>/aim/drills")
@@ -254,12 +260,13 @@ def register(app, store, sr, view_profile) -> None:
         name = request.args.get("map") or (maps[0] if maps else "")
         if name not in by:
             return jsonify(maps=[{"name": m, "matches": len(by[m])} for m in maps], map="", angles=[], sites=[],
-                           fights=0, pending=0, working=False)
+                           retakes=[], fights=0, pending=0, working=False)
         sp, pending = map_spots(p, name, by[name], True)
         runs = dr.read_runs(stats_dir(pid))
-        for a in sp["angles"] + sp["sites"]:
-            a["best"] = {k: dr.summary(runs.get(f"g-{k}-{a['id']}", []), k)["best"]
-                         for k in (("clear",) if "hides" in a else ("hold", "attack", "track"))}
+        for lst in ("angles", "sites", "retakes"):
+            for a in sp[lst]:
+                a["best"] = {k: dr.summary(runs.get(f"g-{k}-{a['id']}", []), k)["best"]
+                             for k in MODES if LISTS[k] == lst}
         j = jobs.get(p.id) or {}
         return jsonify(maps=[{"name": m, "matches": len(by[m])} for m in maps], map=name, pending=pending,
                        working=bool(j.get("running")), **sp)
@@ -267,14 +274,14 @@ def register(app, store, sr, view_profile) -> None:
     @app.get("/profiles/<int:pid>/aim/play/<mode>/<map_name>/<sid>")
     def aim_play(pid: int, mode: str, map_name: str, sid: str):
         p, can_edit = view_profile(pid)
-        if mode not in ("hold", "attack", "track", "clear") or not sid.isalnum() or len(sid) > 20:
+        if mode not in MODES or not sid.isalnum() or len(sid) > 20:
             abort(404)
         by = map_matches()
         name = next((m for m in by if m.lower() == map_name.lower()), None)
         if name is None:
             abort(404)
         sp, _pending = map_spots(p, name, by[name], False)
-        spot = next((a for a in (sp["sites"] if mode == "clear" else sp["angles"]) if a["id"] == sid), None)
+        spot = next((a for a in sp[LISTS[mode]] if a["id"] == sid), None)
         if spot is None:
             abort(404)
         a = request.args
@@ -285,6 +292,11 @@ def register(app, store, sr, view_profile) -> None:
             reps = max(1, min(40, int(a.get("reps") or DEFAULT_REPS[mode])))
         except ValueError:
             reps = DEFAULT_REPS[mode]
+        try:
+            foes = int(a.get("foes") or 2)
+        except ValueError:
+            foes = 2
+        foes = foes if foes in FOES else 2
         did = f"g-{mode}-{sid}"
         setup = _read(stats_dir(pid) / "trainer.json", {}).get("setup", {})
         runs = dr.read_runs(stats_dir(pid)).get(did, [])
@@ -292,10 +304,13 @@ def register(app, store, sr, view_profile) -> None:
         def frm(a: str, b: str) -> str:
             return a if a == b else f"{a} from {b}"
         title = {"hold": f"Hold: {frm(spot['az'], spot['dz'])}", "attack": f"Take: {frm(spot['dz'], spot['az'])}",
-                 "track": f"Tracking at {spot['az']}", "clear": f"Clear: {frm(spot['dz'], spot['az'])}"}[mode]
+                 "track": f"Tracking at {spot['az']}", "clear": f"Clear: {frm(spot['dz'], spot['az'])}",
+                 "entry": f"Entry: {frm(spot['dz'], spot['az'])}", "retake": f"Retake {spot['dz']}",
+                 "postplant": f"Post-plant {spot['dz']}"}[mode]
         boot = {"map": name, "api": "/api/maps3d/", "pid": pid, "mode": mode, "spot": spot, "title": title,
                 "drill": {"id": did, "map": name, "mode": mode, "where": spot["dz"]},
-                "opts": {"styles": styles, "diff": diff, "reps": reps, "react": DIFFS[diff]},
+                "opts": {"styles": styles, "diff": diff, "reps": reps, "react": DIFFS[diff], "foes": foes,
+                         "spike": dr.SPIKE_S, "defuse": dr.DEFUSE_S},
                 "runs_api": url_for("aim_drill_runs", pid=pid, drill_id=did), "can_save": can_edit,
                 "sens": setup.get("sens") or 0.4, "dpi": setup.get("dpi") or 800, "scale": setup.get("scale") or 1,
                 "keys": read_keys(data_dir, g.user.id), "actions": [[k, lbl] for k, (lbl, _d) in dr.ACTIONS.items()],

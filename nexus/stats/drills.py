@@ -9,6 +9,9 @@ drills_of(ctx): the drills of every player of one match (kept per match in data/
 when the replay or the map changes). group(): the same spot killing you again is one card ("×3"). The runs (your
 times per rep) are kept per player in data/profiles/<pid>/stats/drills.json.
 
+4.54: spots after a plant (retakes()): retake a site (you come in, the spike ticking) and post-plant (you hold, they
+come in on their real routes and go for the spike).
+
 GUNS: the weapons' numbers the drills use (magazine, fire rate, reload, damage to head/body/legs at close range,
 zoom when aiming down sights). From the game's patch notes as of late 2026; the Bandit and the Warden are newer and
 their numbers rougher."""
@@ -21,7 +24,8 @@ import os
 import time
 from pathlib import Path
 
-VERSION = 2                   # 2 (4.52): the fights of every match too (the general drills' spots)
+VERSION = 3                   # 2 (4.52): the fights of every match too (the general drills' spots); 3 (4.54): the
+                              # spike (post-plant fights: retakes, post-plants)
 LEAD_S = 1.5                  # the drill starts this long before the killer first had you in view
 MIN_LEAD_S = 2.5              # and at least this long before the kill
 SPOT_M = 3.0                  # deaths this close (and from the same callout) are one spot
@@ -198,10 +202,29 @@ def fights_of(ctx) -> list[dict]:
                 if not route or math.hypot(q[0] - route[-1][0], q[2] - route[-1][2]) > 0.05:
                     route.append([round(q[0], 2), round(q[1], 2), round(q[2], 2)])
                 s_ -= ROUTE_STEP
-            out.append({"a": [round(v, 2) for v in a[:3]], "d": [round(v, 2) for v in d[:3]],
-                        "a0": [round(v, 2) for v in a0[:3]], "az": kz if killer_attacks else vz,
-                        "dz": vz if killer_attacks else kz, "won": "attack" if killer_attacks else "defense",
-                        "route": route, "round": r.index})
+            fight = {"a": [round(v, 2) for v in a[:3]], "d": [round(v, 2) for v in d[:3]],
+                     "a0": [round(v, 2) for v in a0[:3]], "az": kz if killer_attacks else vz,
+                     "dz": vz if killer_attacks else kz, "won": "attack" if killer_attacks else "defense",
+                     "route": route, "round": r.index}
+            plant = next((s for s in view.get("spike") or [] if s.get("kind") == "plant"), None)
+            if plant and plant.get("site") and t >= plant["t"]:
+                # 4.54: after the plant: where the spike was, how long after the plant, and the defender's way in
+                # (every half second, standing still too: the retakers come in at their real speed)
+                fight.update(post=round(t - plant["t"], 2), site=str(plant["site"]),
+                             plant=[round(plant["x"], 2), round(plant["y"] if plant.get("y") is not None else d[1], 2),
+                                    round(plant["z"], 2)],
+                             droute=_timed(dp, t, ROUTE_S))
+            out.append(fight)
+    return out
+
+
+def _timed(path: list, t: float, secs: float) -> list:
+    """[x, y, z] every ROUTE_STEP seconds over the secs before t (the time is the place in the list)."""
+    out = []
+    n = int(round(secs / ROUTE_STEP))
+    for i in range(n + 1):
+        q = _at(path, t - secs + i * ROUTE_STEP)
+        out.append([round(q[0], 2), round(q[1], 2), round(q[2], 2)])
     return out
 
 
@@ -279,7 +302,52 @@ def spots(map_name: str, fights: list[dict]) -> dict:
         sites.append({"id": sid, "map": map_name, "dz": dz, "az": az, "count": len(fs), "route": best["route"],
                       "hides": hides, "start_yaw": _yaw_to(best["route"][0], best["route"][min(3, len(best["route"]) - 1)])})
     sites.sort(key=lambda a: (-a["count"], a["dz"]))
-    return {"angles": angles, "sites": sites}
+    return {"angles": angles, "sites": sites, "retakes": retakes(map_name, fights)}
+
+
+SPIKE_S = 45.0                # the spike goes off this long after the plant
+DEFUSE_S = 7.0                # a defuse (half of it stays: 3.5 s)
+POST_NEAR_M = 25.0            # post-plant: attackers this close to the spike play it
+RETAKE_FAR_M = 12.0           # a retake: the defender started at least this far from the spike
+
+
+def _dense(points: list, n: int, gap: float, near: float = 3.0) -> list:
+    """Up to n places at least gap apart, the most used first (the most others within near metres)."""
+    score = [sum(1 for q in points if math.hypot(p[0] - q[0], p[2] - q[2]) <= near) for p in points]
+    order = sorted(range(len(points)), key=lambda i: -score[i])
+    return _distinct([points[i] for i in order], n, gap)
+
+
+def retakes(map_name: str, fights: list[dict]) -> list[dict]:
+    """4.54: per site, from the fights after a plant: where the spike usually is, where attackers play it (posts),
+    the ways defenders come back in (up to three routes, every half second over 15 s), how long the spike had left
+    when they set off. Retake (you come in) and post-plant (you hold, they come)."""
+    by_site: dict[str, list] = {}
+    for f in fights:
+        if f.get("post") is not None and f.get("site") and f.get("plant"):
+            by_site.setdefault(f["site"], []).append(f)
+    out = []
+    for site, fs in by_site.items():
+        plant = _medoid([f["plant"] for f in fs])
+        near = lambda p: math.hypot(p[0] - plant[0], p[2] - plant[2])       # noqa: E731
+        posts = _dense([f["a"] for f in fs if near(f["a"]) <= POST_NEAR_M], 6, 2.0)
+        ins = [f for f in fs if f.get("droute") and len(f["droute"]) > 4 and near(f["droute"][0]) >= RETAKE_FAR_M
+               and _walked(f["droute"]) >= ENTRY_WALK_M and near(f["d"]) <= POST_NEAR_M + 10]
+        if not posts or not ins:
+            continue
+        starts = _dense([f["droute"][0] for f in ins], 3, 8.0, 6.0)
+        routes = []
+        for s0 in starts:
+            f = min(ins, key=lambda f: math.hypot(f["droute"][0][0] - s0[0], f["droute"][0][2] - s0[2]))
+            cnt = sum(1 for g in ins if math.hypot(g["droute"][0][0] - s0[0], g["droute"][0][2] - s0[2]) <= 6.0)
+            routes.append({"path": f["droute"], "count": cnt, "left": round(SPIKE_S - max(0.0, f["post"] - ROUTE_S), 1)})
+        left = sorted(r["left"] for r in routes)[len(routes) // 2]
+        sid = hashlib.sha1(f"{map_name}|retake|{site}".encode()).hexdigest()[:10]
+        out.append({"id": sid, "map": map_name, "site": site, "dz": site, "az": "", "count": len(fs),
+                    "won_def": sum(1 for f in fs if f["won"] == "defense"), "plant": plant, "posts": posts,
+                    "routes": routes, "left": max(20.0, min(SPIKE_S, left))})
+    out.sort(key=lambda a: (-a["count"], a["site"]))
+    return out
 
 
 def same_spot(a: dict, b: dict) -> bool:
@@ -360,7 +428,8 @@ def read_runs(stats_dir: Path) -> dict:
         return {}
 
 
-KINDS = {"death": "s", "hold": "s", "attack": "s", "track": "%", "clear": "%"}     # what a rep's number is
+KINDS = {"death": "s", "hold": "s", "attack": "s", "track": "%", "clear": "%",      # what a rep's number is
+         "entry": "s", "retake": "s", "postplant": "s"}                              # 4.54
 HIGHER = {"track", "clear"}                     # the bigger the better (the others: times, the smaller the better)
 
 
@@ -369,7 +438,8 @@ def clean_run(body: dict) -> dict | None:
     percentage for tracking and clearing), None for a rep you lost."""
     reps = body.get("reps")
     kind = body.get("kind") if body.get("kind") in KINDS else "death"
-    top = 100.0 if KINDS[kind] == "%" else 120.0 if kind == "attack" else 30.0     # attacking: up to a minute
+    top = (100.0 if KINDS[kind] == "%" else 120.0 if kind in ("attack", "entry", "retake")   # moving: up to a minute
+           else 30.0)
     if not isinstance(reps, list) or not 0 < len(reps) <= 50:
         return None
     out_reps = []
@@ -438,6 +508,8 @@ ACTIONS = {
     "right": ("Strafe right", "KeyD"),
     "walk": ("Walk", "ShiftLeft"),
     "crouch": ("Crouch", "KeyC"),
+    # 4.54: retakes. 4 is the game's own key for the spike (held to defuse).
+    "defuse": ("Defuse (hold)", "Digit4"),
 }
 FIXED = {"Escape"}           # always stops a drill
 

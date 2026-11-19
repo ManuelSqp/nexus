@@ -4,6 +4,8 @@
 // 4.52 the general drills on a map's real spots (from the fights in all its replays): hold an angle, attacking,
 // tracking, clear a site. The spots on a plan of the map, a list, and the chosen spot's options (how they peek,
 // difficulty, gun, reps) -> /profiles/<pid>/aim/play/<mode>/<map>/<spot>.
+// 4.54 entry (on the sites' spots), retake and post-plant (on the spots after a plant: the spike, where attackers
+// played it, the defenders' ways back in).
 (function () {
   'use strict';
   const C = window.NEXUS_DRILLS;
@@ -11,7 +13,7 @@
   const $ = id => document.getElementById(id);
   const T = s => (window.vcT ? window.vcT(s) : s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const TABS = ['deaths', 'hold', 'attack', 'track', 'clear'];
+  const TABS = ['deaths', 'hold', 'attack', 'track', 'clear', 'entry', 'retake', 'postplant'];
   // the tab from the address or a button: always one of our own names (never the text itself)
   const tabOf = v => {
     switch (v) {
@@ -20,6 +22,9 @@
       case 'attack': return 'attack';
       case 'track': return 'track';
       case 'clear': return 'clear';
+      case 'entry': return 'entry';
+      case 'retake': return 'retake';
+      case 'postplant': return 'postplant';
       default: return null;
     }
   };
@@ -99,25 +104,34 @@
     hold: ['Hold an angle', 'You hold where defenders fight in your replays; enemies peek from the real corner: wide swings, jiggles, crouch and jump peeks, sometimes two at once. Kill each before he has you for his reaction time.'],
     attack: ['Attacking: you peek', 'You move (your keys, the game\'s speeds) and take the spot from defenders on the places they hold in your replays. Stop before you shoot: shots while moving go wide, and the drill shows how fast you stopped.'],
     track: ['Tracking', 'An enemy strafes left and right (ADAD) where the fights happen. Stay on his head for 30 seconds.'],
-    clear: ['Clear a site', 'Walk the attackers\' route onto a site. Each hiding place defenders used is checked the moment it opens: was your crosshair on it, at head height? Some have an enemy.']};
+    clear: ['Clear a site', 'Walk the attackers\' route onto a site. Each hiding place defenders used is checked the moment it opens: was your crosshair on it, at head height? Some have an enemy.'],
+    entry: ['Entry', 'First onto the site on the attackers\' route. Defenders wait on the places they hid in your replays, and one of them swings you when you get close. Take the site: the time from the start until the last one is down.'],
+    retake: ['Retake', 'The spike is down. You come back in on the defenders\' real way, the attackers play it from the places they used in your replays. Kill them and defuse before it goes off (hold your defuse key, 7 s; half of it stays).'],
+    postplant: ['Post-plant', 'You play the spike from the places attackers used after planting. The retakers come in on their real routes at their real speed and go for the spike. Kill each before he has you, and before anyone defuses.']};
   const fromTo = (a, b) => (a === b ? a : `${a} ${T('from')} ${b}`);
   function title(s) {                       // a spot's name in this tab
     switch (tab) {
       case 'hold': return `${T('Hold:')} ${fromTo(s.az, s.dz)}`;
       case 'attack': return `${T('Take:')} ${fromTo(s.dz, s.az)}`;
       case 'track': return `${T('Tracking at')} ${s.az}`;
+      case 'entry': return `${T('Entry:')} ${fromTo(s.dz, s.az)}`;
+      case 'retake': return `${T('Retake')} ${s.dz}`;
+      case 'postplant': return `${T('Post-plant')} ${s.dz}`;
       default: return `${T('Clear:')} ${fromTo(s.dz, s.az)}`;
     }
   }
   const STYLE = {wide: 'Wide swing', jiggle: 'Jiggle peek', crouch: 'Crouch peek', jump: 'Jump peek', two: 'Two at once'};
   const DIFF = {easy: 'Easy', medium: 'Medium', hard: 'Hard', pro: 'Pro'};
-  const REPS = {hold: [10, 20, 30], attack: [3, 5, 10], track: [1, 3, 5], clear: [1, 3, 5]};
+  const REPS = {hold: [10, 20, 30], attack: [3, 5, 10], track: [1, 3, 5], clear: [1, 3, 5], entry: [3, 5, 10],
+                retake: [3, 5, 10], postplant: [5, 10, 20]};
+  const SITES = new Set(['clear', 'entry']), SPIKE = new Set(['retake', 'postplant']);
+  const FOES = new Set(['entry', 'retake', 'postplant']);       // how many enemies: 1, 2 or 3
   let G = null, gTimer = 0, sel = null;
-  const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}};
+  const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}, foes: 2};
   try { Object.assign(g, JSON.parse(localStorage.getItem('nexus.drills.g') || '{}')); } catch (e) {}
   // only our own values (from the lists the page came with), whatever was saved or picked
   const own = (list, v, dflt) => { const i = list.indexOf(v); return i >= 0 ? list[i] : dflt; };
-  g.diff = own(C.diffs, g.diff, 'medium'); g.gun = own(C.guns, g.gun, 'Vandal');
+  g.diff = own(C.diffs, g.diff, 'medium'); g.gun = own(C.guns, g.gun, 'Vandal'); g.foes = own(C.foes || [1, 2, 3], g.foes, 2);
   g.styles = C.peeks.filter(k => Array.isArray(g.styles) && g.styles.includes(k));
   if (!g.styles.length) g.styles = ['wide'];
   g.map = typeof g.map === 'string' ? g.map : '';
@@ -136,8 +150,9 @@
       if (d.pending && TABS.indexOf(tab) > 0) gTimer = setTimeout(loadSpots, 2500);
     } catch (e) { $('am-g-from').textContent = e.message; }
   }
-  const list = () => (!G ? [] : tab === 'clear' ? G.sites : G.angles);
-  const where = s => (tab === 'clear' ? (s.hides[0] || s.route[s.route.length - 1]) : s.hold);
+  const list = () => (!G ? [] : SITES.has(tab) ? G.sites : SPIKE.has(tab) ? (G.retakes || []) : G.angles);
+  const where = s => (SITES.has(tab) ? (s.hides[0] || s.route[s.route.length - 1]) : SPIKE.has(tab) ? s.plant : s.hold);
+  const pctTab = () => tab === 'track' || tab === 'clear';
   function renderGen() {
     const [head, text] = INTRO[tab];
     $('am-g-title').textContent = T(head); $('am-g-text').textContent = T(text);
@@ -154,10 +169,11 @@
     const body = $('am-g-body'), empty = $('am-empty');
     body.hidden = !L.length;
     empty.hidden = !!L.length || !!G.pending;
-    empty.innerHTML = `<p class="muted">${esc(T(G.maps.length ? 'No spots on this map yet. They come from the fights in its replays.' : 'No maps yet: the general drills need replays on maps built from the game\'s files.'))}</p>`;
+    empty.innerHTML = `<p class="muted">${esc(T(!G.maps.length ? 'No maps yet: the general drills need replays on maps built from the game\'s files.'
+      : SPIKE.has(tab) ? 'No retakes on this map yet. They come from the fights after a plant in its replays.' : 'No spots on this map yet. They come from the fights in its replays.'))}</p>`;
     $('am-g-list').innerHTML = L.slice(0, 40).map(s => {
       const best = (s.best || {})[tab];
-      const b = best === null || best === undefined ? '' : `<span class="good">${tab === 'track' || tab === 'clear' ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>`;
+      const b = best === null || best === undefined ? '' : `<span class="good">${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>`;
       return `<li><button type="button" data-sid="${esc(s.id)}" class="${s.id === sel ? 'on' : ''}"><span translate="no">${esc(title(s))}</span><small>×${s.count}${b ? ' · ' + b : ''}</small></button></li>`;
     }).join('');
     plan();
@@ -170,6 +186,7 @@
     const pts = [];
     for (const a of G.angles) pts.push(a.hold, a.start, ...a.peeks, ...a.defs);
     for (const s of G.sites) pts.push(...s.route, ...s.hides);
+    for (const s of G.retakes || []) pts.push(s.plant, ...s.posts, ...s.routes.flatMap(r => r.path));
     if (!pts.length) return;
     const xs = pts.map(p => p[0]), zs = pts.map(p => p[2]);
     const x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
@@ -184,7 +201,18 @@
       x.lineWidth = 2;
       const line = (a, b, col, dash) => { const [p, q] = [to(a), to(b)]; x.strokeStyle = col; x.setLineDash(dash || []); x.beginPath(); x.moveTo(...p); x.lineTo(...q); x.stroke(); x.setLineDash([]); };
       const dot = (p, col, r = 5) => { const [a, b] = to(p); x.fillStyle = col; x.beginPath(); x.arc(a, b, r, 0, 2 * Math.PI); x.fill(); };
-      if (tab === 'clear') {
+      if (SPIKE.has(tab)) {                  // the defenders' ways back in, where attackers played it, the spike
+        for (const r of s.routes) {
+          x.strokeStyle = '#5fe0c6'; x.lineWidth = 3; x.setLineDash([7, 6]); x.beginPath();
+          r.path.forEach((p, i) => { const [a, b] = to(p); if (i) x.lineTo(a, b); else x.moveTo(a, b); });
+          x.stroke(); x.setLineDash([]);
+          dot(r.path[0], '#5fe0c6', 6);
+        }
+        for (const p of s.posts) dot(p, '#ff7d8b', 6);
+        const [a, b] = to(s.plant);
+        x.fillStyle = '#ff3b4e'; x.strokeStyle = '#fff'; x.lineWidth = 2;
+        x.beginPath(); x.moveTo(a, b - 10); x.lineTo(a + 9, b); x.lineTo(a, b + 10); x.lineTo(a - 9, b); x.closePath(); x.fill(); x.stroke();
+      } else if (SITES.has(tab)) {
         x.strokeStyle = '#ff4f8b'; x.lineWidth = 3; x.setLineDash([7, 6]); x.beginPath();
         s.route.forEach((p, i) => { const [a, b] = to(p); if (i) x.lineTo(a, b); else x.moveTo(a, b); });
         x.stroke(); x.setLineDash([]);
@@ -217,6 +245,7 @@
     const o = new URLSearchParams();
     if (tab === 'hold') o.set('styles', g.styles.join(','));
     o.set('diff', g.diff); o.set('gun', g.gun); o.set('reps', String(g.reps[tab] || C.reps[tab]));
+    if (FOES.has(tab)) o.set('foes', String(g.foes));
     return C.play.replace('MODE', tab).replace('MAP', encodeURIComponent(G.map)).replace('SID', s.id) + '?' + o;
   }
   function spotCard() {
@@ -226,21 +255,25 @@
     const what = tab === 'hold' ? `${T('Enemies come out of')} <span translate="no">${esc(s.az)}</span>.`
       : tab === 'attack' ? `${Math.min(3, s.defs.length)} ${T('defenders on the places they held.')}`
       : tab === 'track' ? `${T('About')} ${Math.round(s.dist)} m ${T('away.')}`
+      : tab === 'entry' ? `${s.hides.length} ${T('places defenders hid; one of them swings you.')}`
+      : SPIKE.has(tab) ? `${s.posts.length} ${T('places attackers played the spike from,')} ${s.routes.length} ${T(s.routes.length === 1 ? 'way back in.' : 'ways back in.')} ${T('The spike has')} ${Math.round(s.left)} s ${T('left when they set off.')}`
       : `${s.hides.length} ${T('hiding places; the route attackers took most.')}`;
-    const won = tab === 'clear' ? '' : ` ${T('Defenders won')} ${Math.round(s.won_def / s.count * 100)} %.`;
+    const won = SITES.has(tab) ? '' : ` ${T('Defenders won')} ${Math.round(s.won_def / s.count * 100)} %.`;
+    const foes = !FOES.has(tab) ? '' : `<fieldset class="am-opt"><legend>${esc(T(tab === 'postplant' ? 'Retakers' : tab === 'retake' ? 'Attackers' : 'Defenders'))}</legend>${(C.foes || [1, 2, 3]).map(n =>
+      `<label class="am-chip"><input type="radio" name="am-foes" value="${n}" ${g.foes === n ? 'checked' : ''}> ${n}</label>`).join('')}</fieldset>`;
     const styles = tab !== 'hold' ? '' : `<fieldset class="am-opt"><legend>${esc(T('How they peek'))}</legend>${C.peeks.map(k =>
       `<label class="am-chip"><input type="checkbox" data-style="${k}" ${g.styles.includes(k) ? 'checked' : ''}> ${esc(T(STYLE[k]))}</label>`).join('')}</fieldset>`;
     const best = (s.best || {})[tab];
     el.innerHTML = `<p class="muted small" translate="no">${esc(G.map)} · ${esc(s.dz)}</p>
       <h2 translate="no">${esc(title(s))}</h2>
       <p>${esc(T('Fought over'))} ${s.count} ${esc(T(s.count === 1 ? 'time in the replays.' : 'times in the replays.'))}${esc(won)} ${what}</p>
-      ${styles}
+      ${styles}${foes}
       <fieldset class="am-opt"><legend>${esc(T(tab === 'track' ? 'How fast he strafes' : 'Difficulty'))}</legend>${C.diffs.map(k =>
         `<label class="am-chip"><input type="radio" name="am-diff" value="${k}" ${g.diff === k ? 'checked' : ''}> ${esc(T(DIFF[k]))}</label>`).join('')}</fieldset>
       <div class="am-row"><label>${esc(T('Gun'))} <select id="am-g-gun">${C.guns.map(n => `<option ${n === g.gun ? 'selected' : ''} translate="no">${esc(n)}</option>`).join('')}</select></label>
         <label>${esc(T(tab === 'hold' ? 'Peeks' : 'Reps'))} <select id="am-g-reps">${REPS[tab].map(n => `<option ${n === reps ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
       <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${reps} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
-        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${tab === 'track' || tab === 'clear' ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>`;
+        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>`;
   }
   $('am-g-map').addEventListener('change', e => { g.map = own((G ? G.maps : []).map(m => m.name), e.target.value, g.map); saveG(); sel = null; G = null; plan(); loadSpots(); });
   $('am-g-list').addEventListener('click', e => { const b = e.target.closest('[data-sid]'); if (b) { sel = b.dataset.sid; renderGen(); } });
@@ -260,6 +293,7 @@
       if (!g.styles.length) g.styles = ['wide'];
     } else if (t.name === 'am-diff') g.diff = own(C.diffs, t.value, g.diff);
     else if (t.id === 'am-g-gun') g.gun = own(C.guns, t.value, g.gun);
+    else if (t.name === 'am-foes') g.foes = own(C.foes || [1, 2, 3], +t.value, g.foes);
     else if (t.id === 'am-g-reps') g.reps[tab] = own(REPS[tab], +t.value, C.reps[tab]);
     saveG(); spotCard();
   });

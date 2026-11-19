@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.53.3** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.54.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -737,6 +737,13 @@ in all its replays (kept with the death drills in `data/drills/<match id>.json`)
 swing, jiggle, crouch peek, jump peek or come two at once), **attacking** (you move with your keys and take the spot;
 shots while moving go wide), **tracking** (an ADAD-strafing enemy, % on his head) and **clear a site** (walk the
 attackers' route; crosshair placement on each hiding place as it opens).
+
+**Entry, retake, post-plant (4.54).** Three more on the same page: **entry** (first onto a site on the attackers' route;
+defenders on the places they hid, one of them swings you), **retake** (the spike is down: come back in on the
+defenders' real way, kill the attackers on their post-plant places and defuse, holding your defuse key, 4 by
+default) and **post-plant** (you play the spike, the retakers come in on their real routes at their real speed and go
+for it). The retake spots come from the fights after a plant in the map's replays: where the spike usually is, where
+attackers played it, the defenders' ways back in.
 
 ### Run it permanently
 

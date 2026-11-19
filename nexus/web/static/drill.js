@@ -13,6 +13,12 @@
 //   track  (4.52) an enemy strafes (ADAD) where fights happen; stay on his head for 30 s.
 //   clear  (4.52) walk the attackers' route onto a site; each hiding place is checked as it opens (your crosshair
 //          on it, at head height?), some have an enemy.
+//   entry  (4.54) first onto a site: the attackers' route in, defenders on the places they hid (one of them swings
+//          you when you get close); take the site.
+//   retake (4.54) the spike is down: come in on the defenders' real way back, kill the attackers on their post-plant
+//          places and defuse (hold your key; half a defuse stays) before it goes off.
+//   postplant (4.54) you play the spike after the plant: the retakers come in on their real routes, at their real
+//          speed; kill each before he has you, and before anyone defuses.
 // The spots and routes come from the fights in all replays of the map (stats/drills.py spots()).
 (function () {
   'use strict';
@@ -32,7 +38,9 @@
   // moving like Valorant (m/s): running, walking, crouching; how fast you speed up and stop; above ACCURATE the
   // first shot goes wide (up to SPREAD degrees at full speed)
   const RUN = 6.75, WALK = 3.6, CROUCH = 2.4, ACCEL = 40, STOP = 55, ACCURATE = 1.75, SPREAD = 6;
-  const MOVING = MODE === 'attack' || MODE === 'clear';
+  const MOVING = MODE === 'attack' || MODE === 'clear' || MODE === 'entry' || MODE === 'retake';
+  const SPIKE = MODE === 'retake' || MODE === 'postplant';
+  const NFOES = O.foes || 2, DEFUSE = O.defuse || 7;
   const canvas = $('m3-canvas');
   let keys = KB.normalize(C.keys, C.defaults);
   const opt = {speed: 1, heads: true, reps: O.reps || 10};
@@ -53,17 +61,34 @@
              next: 0, firing: false, ads: false, first: null, firsts: {head: 0, body: 0, legs: 0, miss: 0}, offs: [],
              flash: 0, until: 0, msg: '', lastT: 0, paused: false, saved: false, held: new Set(), dead: false,
              me: {x: 0, y: 0, z: 0, vx: 0, vz: 0, crouch: false, still: 0}, styles: {}, shots: [], track: null,
-             hides: [], deaths: 0, kills: 0};
+             hides: [], deaths: 0, kills: 0, spike: null, defusing: false, lefts: []};
 
   // ------------------------------------------------------------------------------------------ where you stand
   function home() {                       // where a rep starts: [x, y, z, yaw]
     if (MODE === 'death') return D.me;
     if (MODE === 'attack') return SP._start || [...SP.start, SP.start_yaw];
-    if (MODE === 'clear') {
+    if (MODE === 'clear' || MODE === 'entry') {
       const i = SP._from || 0, p = SP.route[i];
       return [p[0], p[1], p[2], yawTo(p, SP.route[Math.min(SP.route.length - 1, i + 4)])];
     }
+    if (MODE === 'retake') {                // the start of the way back in, looking along it
+      const R = myRoute(), p = R[0], q = R.find(x => Math.hypot(x[0] - p[0], x[2] - p[2]) > 2) || SP.plant;
+      return [p[0], p[1], p[2], yawTo(p, q)];
+    }
+    if (MODE === 'postplant') return SP._posts[S.reps.length % SP._posts.length];
     return SP._stand || [...SP.hold, SP.hold_yaw];
+  }
+  // retake: one of the defenders' ways back in, rep by rep
+  const myRoute = () => SP.routes[S.reps.length % SP.routes.length].path;
+  // post-plant: the places attackers played the spike from (the three most used, rep by rep), looking where the
+  // retakers first show up
+  function postStands() {
+    return SP.posts.slice(0, 3).map(p => {
+      const e = [p[0], p[1] + EYE, p[2]];
+      let q = null;
+      for (const r of SP.routes) { q = r.path.find(x => V().visible(e, [x[0], x[1] + 1.6, x[2]])); if (q) break; }
+      return [p[0], p[1], p[2], yawTo(p, q || SP.routes[0].path[SP.routes[0].path.length - 1])];
+    });
   }
   // attacking: start on the attackers' route, as close as can be but out of the defenders' sight
   function attackStart() {
@@ -81,6 +106,15 @@
       if (SP.hides.every(h => !V().visible(e, [h[0], h[1] + 1.95, h[2]]))) return Math.max(0, i - 2);  // a step back
     }
     return 0;
+  }
+  // entry: only hiding places you can see from somewhere on the way in (one you'd never find isn't a fair fight)
+  function fairHides() {
+    const R = SP.route.slice(SP._from || 0), out = [];
+    SP.hides.forEach((h, i) => {
+      const head = [h[0], h[1] + 1.6, h[2]];
+      if (R.some(q => V().visible([q[0], q[1] + EYE, q[2]], head))) out.push(i);
+    });
+    return out.length ? out : SP.hides.map((h, i) => i);
   }
   // hold, track: where the defender stood may be right behind a box (he crouched, or the replay's position is a bit
   // off): stand where the corners can be seen, as close as can be, looking at the first one
@@ -181,11 +215,15 @@
     }
     return clear(e, eye()) || clear(e, [S.me.x, S.me.y + 1.1, S.me.z]);
   }
-  function foe(i, path, extra = {}) {
-    const agent = extra.agent || pick(AGENTS.length ? AGENTS : ['']);
+  function prepPath(path) {
     const floors = path.map(r => r[6]);                  // our paths know the floor (crouching = lower than it)
     NM.prep({p: path});
     path.forEach((r, k) => { if (floors[k] !== undefined) r[6] = floors[k]; });
+    return path;
+  }
+  function foe(i, path, extra = {}) {
+    const agent = extra.agent || pick(AGENTS.length ? AGENTS : ['']);
+    prepPath(path);
     return Object.assign({key: 100 + i, agent, url: (C.agents || {})[agent], weapon: pick(RIFLES), path, seen: null,
                           sees: null, dead: null, hp: HP}, extra);
   }
@@ -277,6 +315,44 @@
     return out;
   }
 
+  // post-plant: a retaker on his real way in (a point every half second, at his real speed), then straight to the
+  // spike and down on it to defuse; f.at: when he gets there
+  function retakePath(R, delay) {
+    const out = [], row = (t, p, yaw, dy = 0) => out.push([t, p[0], p[1] + dy, p[2], yaw, 0, p[1]]);
+    let yaw = yawTo(R[0], R.find(q => Math.hypot(q[0] - R[0][0], q[2] - R[0][2]) > 1) || SP.plant);
+    row(-1, R[0], yaw);
+    R.forEach((q, i) => {
+      const n = R[i + 1];
+      if (n && Math.hypot(n[0] - q[0], n[2] - q[2]) > 0.05) yaw = yawTo(q, n);
+      row(delay + i * 0.5, q, yaw);
+    });
+    let t = delay + (R.length - 1) * 0.5, cur = R[R.length - 1].slice();
+    const P = SP.plant, d = Math.hypot(P[0] - cur[0], P[2] - cur[2]), n = Math.max(1, Math.ceil(d / (RUN * 0.1)));
+    yaw = yawTo(cur, P);
+    for (let i = 1; i <= n; i++) {
+      const k = i / n, x = cur[0] + (P[0] - cur[0]) * k, z = cur[2] + (P[2] - cur[2]) * k;
+      t += d / RUN / n; row(t, [x, floor(x, z, cur[1]) ?? cur[1], z], yaw);
+    }
+    const at = t, end = [P[0], floor(P[0], P[2], cur[1]) ?? P[1], P[2]];
+    row(t + 0.3, end, yaw, -0.45); row(t + 60, end, yaw, -0.45);
+    return [out, at];
+  }
+  // entry: the defender who swings you when you get close (he heard you): out of his place towards you, at a run
+  function swing(f) {
+    const p = foeAt(f, S.t), dx = S.me.x - p[0], dz = S.me.z - p[2], L = Math.hypot(dx, dz) || 1;
+    const fl = floor(p[0], p[2], p[1]) ?? p[1];
+    const out = [[-1, p[0], fl, p[2], p[3], 0, fl], [S.t, p[0], fl, p[2], yawTo(p, eye()), 0, fl]];
+    let cur = [p[0], fl, p[2]], t = S.t;
+    for (let s = 0.2; s <= 2.4; s += 0.2) {
+      const x = p[0] + dx / L * s, z = p[2] + dz / L * s, y = floor(x, z, cur[1]);
+      if (y === null || V().blocked(x, z, y)) break;
+      t += 0.2 / RUN; cur = [x, y, z];
+      out.push([t, x, y, z, yawTo(cur, eye()), 0, y]);
+    }
+    out.push([t + 60, cur[0], cur[1], cur[2], yawTo(cur, eye()), 0, cur[1]]);
+    f.path = prepPath(out); f.swing = 'done';
+  }
+
   // ------------------------------------------------------------------------------------------ loading
   async function load() {
     try {
@@ -299,7 +375,9 @@
       });
       if (MODE === 'hold' || MODE === 'track') SP._stand = stand();
       if (MODE === 'attack') SP._start = attackStart();
-      if (MODE === 'clear') SP._from = clearStart();
+      if (MODE === 'clear' || MODE === 'entry') SP._from = clearStart();
+      if (MODE === 'entry') SP._fair = fairHides();
+      if (MODE === 'postplant') SP._posts = postStands();
       place(home());
       S.phase = 'ready';
       panel();
@@ -315,7 +393,7 @@
 
   // ------------------------------------------------------------------------------------------ shooting
   function shoot() {
-    if (S.phase !== 'run' || S.dead) return;
+    if (S.phase !== 'run' || S.dead || S.defusing) return;
     const now = performance.now() / 1000;
     if (S.reload > now || now < S.next) return;
     if (S.ammo <= 0) { startReload(); return; }
@@ -364,10 +442,14 @@
       S.reps.push(Math.round(mine * 1000) / 1000);
       if (MODE === 'hold') for (const x of S.foes) (S.styles[x.style] = S.styles[x.style] || []).push(mine);
       endRep(mine);
-    } else if (MODE === 'attack') {
+    } else if (MODE === 'attack' || MODE === 'entry') {
       S.reps.push(Math.round(S.t * 1000) / 1000);
-      endRep(S.t, T('Spot taken'));
-    }
+      endRep(S.t, T(MODE === 'entry' ? 'Site taken' : 'Spot taken'));
+    } else if (MODE === 'postplant') {      // how fast you got each of them once he could be seen
+      const mine = avg(S.foes.map(x => Math.max(0, x.dead.t - (x.seen ?? x.dead.t))));
+      S.reps.push(Math.round(mine * 1000) / 1000);
+      endRep(mine);
+    } else if (MODE === 'retake') S.msg = `<b class="good">${esc(T('All down: defuse the spike'))}</b>`;
   }
 
   // ------------------------------------------------------------------------------------------ the reps
@@ -375,7 +457,7 @@
     S.t = MODE === 'death' ? D.t0 : 0; S.lastT = S.t; S.t0 = S.t;
     place(home());
     S.dead = false; S.ammo = gun.mag; S.reload = 0; S.next = 0; S.first = null; S.flash = 0; S.msg = '';
-    S.foes = [];
+    S.foes = []; S.spike = null; S.defusing = false;
     if (MODE === 'death') {
       S.foes = [foe(0, S.R.paths[D.killer], {key: D.killer, agent: D.killer_agent, weapon: D.weapon, replay: true})];
     } else if (MODE === 'hold') {
@@ -395,6 +477,21 @@
     } else if (MODE === 'attack') {
       S.foes = SP.defs.slice(0, Math.min(3, SP.defs.length))
         .map((p, i) => foe(i, still(p, yawTo(p, SP.start), Math.random() < 0.3), {fov: 52}));
+    } else if (MODE === 'entry') {
+      const order = SP._fair.slice().sort(() => Math.random() - 0.5).slice(0, Math.min(NFOES, SP._fair.length));
+      S.foes = order.map((i, k) => foe(k, still(SP.hides[i], yawTo(SP.hides[i], nearestOnRoute(SP.hides[i])), Math.random() < 0.3), {fov: 60}));
+      if (S.foes.length) pick(S.foes).swing = 'wait';
+    } else if (MODE === 'retake') {
+      const R = myRoute(), posts = SP.posts.slice(0, 5).sort(() => Math.random() - 0.5).slice(0, Math.min(NFOES, SP.posts.length));
+      S.foes = posts.map((p, k) => foe(k, still(p, yawTo(p, nearestOn(R, p)), Math.random() < 0.35), {fov: 60}));
+      S.spike = {left: SP.left, prog: 0, half: false};
+    } else if (MODE === 'postplant') {
+      S.spike = {left: SP.left};
+      for (let k = 0; k < NFOES; k++) {
+        const R = SP.routes[k % SP.routes.length].path, delay = k ? 0.5 + Math.random() * 2.5 + (k >= SP.routes.length ? 1.2 : 0) : Math.random();
+        const [path, at] = retakePath(R, delay);
+        S.foes.push(foe(k, path, {fov: 70, at}));
+      }
     } else if (MODE === 'clear') {
       const order = SP.hides.map((p, i) => i).sort(() => Math.random() - 0.5);
       const busy = new Set(order.slice(0, Math.min(2, SP.hides.length)));
@@ -406,17 +503,19 @@
     S.phase = 'count'; S.until = performance.now() / 1000 + 0.7;
     panel();
   }
-  function nearestOnRoute(p) {              // where a defender looks: the nearest bit of the route (not on top of him)
-    let best = SP.route[0], bd = Infinity;
-    for (const q of SP.route) { const d = Math.hypot(q[0] - p[0], q[2] - p[2]); if (d < bd && d > 3) { bd = d; best = q; } }
+  function nearestOn(R, p) {                // where an enemy looks: the nearest bit of a route (not on top of him)
+    let best = R[0], bd = Infinity;
+    for (const q of R) { const d = Math.hypot(q[0] - p[0], q[2] - p[2]); if (d < bd && d > 3) { bd = d; best = q; } }
     return best;
   }
+  const nearestOnRoute = p => nearestOn(SP.route, p);
   function endRep(mine, label) {
     S.phase = 'between'; S.firing = false;
-    const his = MODE === 'death' ? D.his : MODE === 'hold' ? react : null;
+    const his = MODE === 'death' ? D.his : MODE === 'hold' || MODE === 'postplant' ? react : null;
     if (mine === null) S.msg = `<b class="bad">${esc(label || T('He got you'))}</b>`;
     else if (MODE === 'track') S.msg = `<b class="good">${Math.round(mine)} % ${esc(T('on his head'))}</b>`;
     else if (MODE === 'clear') S.msg = `<b class="good">${Math.round(mine)} % ${esc(T('crosshair placement'))}</b>`;
+    else if (MODE === 'retake') S.msg = `<b class="good">${esc(T('Defused'))} · ${Math.max(0, S.spike.left).toFixed(1)} s ${esc(T('left on the spike'))}</b>`;
     else if (his !== null && his !== undefined) S.msg = mine < his ? `<b class="good">${esc(T('Faster than him'))} · ${mine.toFixed(2)} s</b>` : `<b class="bad">${esc(T('Slower than him'))} · ${mine.toFixed(2)} s</b>`;
     else S.msg = `<b class="good">${esc(label || '')} ${mine.toFixed(2)} s</b>`;
     S.until = performance.now() / 1000 + (mine === null ? 1.3 : 1.6);
@@ -447,9 +546,11 @@
   }
 
   // ------------------------------------------------------------------------------------------ the clock
+  const holds = a => (keys[a] || []).some(k => k && S.held.has(k));
   function move(dt) {                       // your feet: Valorant's speeds, speeding up and stopping
-    const m = S.me, has = a => (keys[a] || []).some(k => k && S.held.has(k));
+    const m = S.me, has = holds;
     m.crouch = has('crouch');
+    if (S.defusing) { m.vx = 0; m.vz = 0; m.still += dt; return; }          // down on the spike
     const max = m.crouch ? CROUCH : has('walk') ? WALK : RUN;
     const f = [Math.sin(S.yaw), -Math.cos(S.yaw)], r = [Math.cos(S.yaw), Math.sin(S.yaw)];
     let wx = 0, wz = 0;
@@ -493,6 +594,8 @@
       if (MODE === 'track' && S.phase === 'run') trackTick(dt);
       if (MODE === 'clear' && S.phase === 'run') clearTick();
       if (MODE === 'attack' && S.phase === 'run' && S.t > 60) failRep(T('Out of time'));
+      if (MODE === 'entry' && S.phase === 'run') entryTick();
+      if (SPIKE && S.phase === 'run') spikeTick(dt);
       if (MODE === 'hold' && S.phase === 'run' && S.t > 40) failRep(T('Out of time'));
       if (S.R) flashes();
       if (S.phase === 'run' && S.firing && gun.auto) shoot();
@@ -529,6 +632,43 @@
       endRep(pct);
     }
   }
+  function entryTick() {
+    const end = SP.route[SP.route.length - 1], onSite = Math.hypot(end[0] - S.me.x, end[2] - S.me.z) < 3;
+    for (const f of S.foes) {                 // he heard you coming: he swings (on the site, whoever's still hiding)
+      if (f.dead || f.swing === 'done' || (f.swing !== 'wait' && !(onSite && f.seen === null))) continue;
+      const p = foeAt(f, S.t);
+      if (onSite || Math.hypot(p[0] - S.me.x, p[2] - S.me.z) < 14) swing(f);
+    }
+    if (S.t > 60) failRep(T('Out of time'));
+  }
+  function spikeTick(dt) {
+    const sp = S.spike;
+    sp.left = SP.left - S.t;
+    if (MODE === 'retake') {
+      const P = SP.plant, on = Math.hypot(S.me.x - P[0], S.me.z - P[2]) < 1.6 && Math.abs(S.me.y - P[1]) < 1.8;
+      S.defusing = on && holds('defuse');
+      if (S.defusing) {
+        sp.prog += dt;
+        if (sp.prog >= DEFUSE / 2) sp.half = true;
+        if (sp.prog >= DEFUSE) {
+          S.defusing = false;
+          S.reps.push(Math.round(S.t * 1000) / 1000); S.lefts.push(Math.max(0, sp.left));
+          endRep(S.t);
+          return;
+        }
+      } else sp.prog = sp.half ? DEFUSE / 2 : 0;
+      if (sp.left <= 0) failRep(T('The spike went off'));
+      return;
+    }
+    for (const f of S.foes) {                 // post-plant: a retaker on the spike long enough
+      if (!f.dead && S.t >= f.at + DEFUSE) { failRep(T('They defused the spike')); return; }
+    }
+    if (sp.left <= 0) {                       // it went off: they didn't make it
+      const got = S.foes.filter(f => f.dead).map(f => Math.max(0, f.dead.t - (f.seen ?? f.dead.t)));
+      if (got.length) { const v = avg(got); S.reps.push(Math.round(v * 1000) / 1000); endRep(v); }
+      else { S.reps.push(null); endRep(null, T('The spike went off before they came')); }
+    }
+  }
   function flashes() {                      // a flash that popped in your view while you looked
     for (const u of (S.R.util || [])) {
       if (u.type !== 'flash' || u.t0 <= S.lastT || u.t0 > S.t) continue;
@@ -558,12 +698,43 @@
     }
     return out;
   }
-  function objects() { return S.R ? NM.utilObjects(S.R.util, S.t, C.util_col) : []; }
-  function radar(g, toR) {                  // clear a site: the route and the hiding places on the minimap
-    if (MODE !== 'clear' || !SP) return;
-    g.strokeStyle = 'rgba(255,79,139,.9)'; g.lineWidth = 3; g.setLineDash([6, 6]); g.beginPath();
-    SP.route.slice(SP._from || 0).forEach((p, i) => { const [x, y] = toR(p[0], p[2]); if (i) g.lineTo(x, y); else g.moveTo(x, y); });
-    g.stroke(); g.setLineDash([]);
+  function objects() {
+    const out = S.R ? NM.utilObjects(S.R.util, S.t, C.util_col) : [];
+    if (SPIKE && SP && SP.plant) {           // the spike (blinking faster as it runs out)
+      const P = SP.plant, y = floor(P[0], P[2], P[1]) ?? P[1], left = S.spike ? S.spike.left : SP.left;
+      const on = Math.sin(performance.now() / 1000 * Math.PI * (left < 10 ? 8 : 3)) > -0.2;
+      out.push({x: P[0], y: y + 0.18, z: P[2], r: 0.3, sc: [1, 0.6, 1], col: on ? [1, 0.22, 0.28] : [0.45, 0.1, 0.12], a: 0.95, seed: 0, cloudy: false});
+    }
+    return out;
+  }
+  // the way to go on the minimap: a dark edge under a bright dashed line (it stands out on any map), an arrow at its
+  // end; the bit you've walked past fades
+  function routeOnRadar(g, toR, R) {
+    if (!R || R.length < 2) return;
+    const pts = R.map(p => toR(p[0], p[2]));
+    let k = 0, bd = Infinity;
+    R.forEach((p, i) => { const d = Math.hypot(p[0] - S.me.x, p[2] - S.me.z); if (d < bd) { bd = d; k = i; } });
+    const path = (from, to) => { g.beginPath(); pts.slice(from, to + 1).forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); };
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    if (k > 0) { path(0, k); g.strokeStyle = 'rgba(255,79,139,.35)'; g.lineWidth = 2; g.setLineDash([4, 6]); g.stroke(); }
+    path(k, pts.length - 1); g.setLineDash([]); g.strokeStyle = 'rgba(0,0,0,.75)'; g.lineWidth = 7; g.stroke();
+    path(k, pts.length - 1); g.strokeStyle = '#ff4f8b'; g.lineWidth = 4; g.setLineDash([9, 6]); g.stroke(); g.setLineDash([]);
+    const [ax, ay] = pts[pts.length - 1], [bx, by] = pts[Math.max(0, pts.length - 3)], a = Math.atan2(ay - by, ax - bx);
+    g.fillStyle = '#ff4f8b'; g.strokeStyle = 'rgba(0,0,0,.75)'; g.lineWidth = 2; g.beginPath();
+    g.moveTo(ax + Math.cos(a) * 9, ay + Math.sin(a) * 9);
+    g.lineTo(ax + Math.cos(a + 2.5) * 9, ay + Math.sin(a + 2.5) * 9); g.lineTo(ax + Math.cos(a - 2.5) * 9, ay + Math.sin(a - 2.5) * 9);
+    g.closePath(); g.stroke(); g.fill();
+  }
+  function radar(g, toR) {                  // the route, the hiding places, the spike on the minimap
+    if (!SP) return;
+    if (MODE === 'clear' || MODE === 'entry') routeOnRadar(g, toR, SP.route.slice(SP._from || 0));
+    if (MODE === 'retake') routeOnRadar(g, toR, myRoute());
+    if (SPIKE && SP.plant) {
+      const [x, y] = toR(SP.plant[0], SP.plant[2]);
+      g.fillStyle = '#ff3b4e'; g.strokeStyle = '#fff'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x, y - 8); g.lineTo(x + 7, y); g.lineTo(x, y + 8); g.lineTo(x - 7, y); g.closePath(); g.fill(); g.stroke();
+    }
+    if (MODE !== 'clear') return;
     for (const h of S.hides) {
       const [x, y] = toR(h.p[0], h.p[2]);
       g.fillStyle = h.off === null ? '#5b6b8c' : h.off <= 7 ? '#2fc4b2' : '#e2a23a';
@@ -579,6 +750,9 @@
       case 'attack': return `${T('Take:')} ${fromTo(SP.dz, SP.az)}`;
       case 'track': return `${T('Tracking at')} ${SP.az}`;
       case 'clear': return `${T('Clear:')} ${fromTo(SP.dz, SP.az)}`;
+      case 'entry': return `${T('Entry:')} ${fromTo(SP.dz, SP.az)}`;
+      case 'retake': return `${T('Retake')} ${SP.dz}`;
+      case 'postplant': return `${T('Post-plant')} ${SP.dz}`;
       default: return C.title || '';
     }
   }
@@ -592,20 +766,26 @@
     let clock = '–';
     if (MODE === 'track' && S.track) clock = S.track.all ? Math.round(S.track.head / S.track.all * 100) + ' %' : '0 %';
     else if (MODE === 'clear') clock = S.hides.some(h => h.off !== null) ? Math.round(placement()) + ' %' : '–';
-    else if (MODE === 'attack') clock = S.phase === 'run' || S.phase === 'between' ? S.t.toFixed(1) + ' s' : '–';
+    else if (MODE === 'attack' || MODE === 'entry') clock = S.phase === 'run' || S.phase === 'between' ? S.t.toFixed(1) + ' s' : '–';
+    else if (SPIKE) clock = S.spike ? Math.max(0, S.spike.left).toFixed(1) + ' s' : (SP.left || 45).toFixed(0) + ' s';
     else if (S.phase === 'run' && seen.length && live.length) clock = (S.t - Math.min(...seen)).toFixed(2) + ' s';
     else if (S.reps.length && S.phase === 'between' && S.reps[S.reps.length - 1] !== null) clock = S.reps[S.reps.length - 1].toFixed(2) + ' s';
     $('dr-clock').textContent = clock;
     const sub2 = MODE === 'death' ? [T('his time'), D.his !== null && D.his !== undefined ? D.his.toFixed(2) + ' s' : '–']
       : MODE === 'hold' ? [T('they shoot after'), react.toFixed(2) + ' s']
       : MODE === 'track' ? [T('time left'), Math.max(0, (S.track ? S.track.secs : 30) - S.t).toFixed(0) + ' s']
-      : MODE === 'attack' ? [T('defenders left'), `${live.length} / ${S.foes.length}`]
+      : MODE === 'attack' || MODE === 'entry' ? [T('defenders left'), `${live.length} / ${S.foes.length}`]
+      : MODE === 'retake' ? (S.spike && S.spike.prog > 0 ? [T('defusing'), `${S.spike.prog.toFixed(1)} / ${DEFUSE} s`] : [T('attackers left'), `${live.length} / ${S.foes.length}`])
+      : MODE === 'postplant' ? (() => {
+        const on = live.find(f => S.t >= f.at);
+        return on ? [T('defusing!'), `${Math.min(DEFUSE, S.t - on.at).toFixed(1)} / ${DEFUSE} s`] : [T('retakers left'), `${live.length} / ${S.foes.length}`];
+      })()
       : [T('spots checked'), `${S.hides.filter(h => h.off !== null).length} / ${S.hides.filter(h => h.open !== -1).length}`];
     $('dr-his-l').textContent = sub2[0]; $('dr-his').textContent = sub2[1];
     const pct = MODE === 'track' || MODE === 'clear';
     $('dr-reps').innerHTML = Array.from({length: Math.min(opt.reps, 40)}, (_, i) => {
       const v = S.reps[i];
-      const good = v !== null && v !== undefined && (pct ? v >= 60 : MODE === 'death' ? (D.his === null || D.his === undefined || v < D.his) : MODE === 'hold' ? v < react : true);
+      const good = v !== null && v !== undefined && (pct ? v >= 60 : MODE === 'death' ? (D.his === null || D.his === undefined || v < D.his) : MODE === 'hold' || MODE === 'postplant' ? v < react : true);
       const cls = i < S.reps.length ? (v === null ? 'miss' : good ? 'beat' : 'slow') : (i === S.reps.length ? 'now' : '');
       return `<i class="${cls}" title="${esc(T('Rep'))} ${i + 1}"></i>`;
     }).join('');
@@ -635,7 +815,10 @@
     hold: 'Hold the angle. They peek from the real corner, one at a time (sometimes two). Kill each before he has you for his reaction time.',
     attack: 'Take the spot: move up and peek the defenders on their usual places. Stop before you shoot (counter-strafe): shots while moving go wide.',
     track: 'He strafes left and right. Stay on his head for 30 seconds.',
-    clear: 'Walk the route onto the site. Have your crosshair on each hiding place, at head height, the moment it opens. Some have an enemy.'};
+    clear: 'Walk the route onto the site. Have your crosshair on each hiding place, at head height, the moment it opens. Some have an enemy.',
+    entry: 'You are first onto the site. Defenders wait on the places they hid in your replays, and one of them swings you when you get close. Take the site.',
+    retake: 'The spike is down. Come back in on the defenders\' way, kill the attackers where they played the spike, and defuse before it goes off (hold your defuse key; half a defuse stays).',
+    postplant: 'You play the spike after the plant. The retakers come in on their real routes at their real speed. Kill each before he has you, and before anyone defuses.'};
   function panel(err) {
     const el = $('dr-panel');
     if (err) { el.hidden = false; el.innerHTML = `<p class="bad">${esc(err)}</p><p><a class="btn" href="${esc(C.list)}">${esc(T('Back to the list'))}</a></p>`; return; }
@@ -646,7 +829,7 @@
       el.innerHTML = `<h2>${esc(S.paused ? T('Paused') : MODE === 'death' ? T('Your death as a drill') : title())}</h2>` +
         `<p>${esc(T(INTRO[MODE]))}</p>` +
         (MODE === 'death' ? `<p class="dr-his">${esc(T('His time'))}: <b>${D.his !== null && D.his !== undefined ? D.his.toFixed(2) + ' s' : '–'}</b></p>` : '') +
-        `<p class="muted small">${esc(keyName('shoot'))} ${esc(T('shoot'))} · ${esc(keyName('reload'))} ${esc(T('reload'))}${moveKeys} · ${esc(keyName('restart'))} ${esc(T('again'))}${MODE === 'death' ? ` · ${esc(keyName('watch'))} ${esc(T('watch how he did it'))}` : ''} · Esc ${esc(T('stop'))}</p>` +
+        `<p class="muted small">${esc(keyName('shoot'))} ${esc(T('shoot'))} · ${esc(keyName('reload'))} ${esc(T('reload'))}${moveKeys}${MODE === 'retake' ? ` · ${esc(keyName('defuse'))} ${esc(T('defuse (hold)'))}` : ''} · ${esc(keyName('restart'))} ${esc(T('again'))}${MODE === 'death' ? ` · ${esc(keyName('watch'))} ${esc(T('watch how he did it'))}` : ''} · Esc ${esc(T('stop'))}</p>` +
         `<p><button type="button" class="btn primary" data-a="go">${esc(S.paused ? T('Go on') : T('Start · click'))}</button> ` +
         `<button type="button" class="btn ghost" data-a="opts">${esc(T('Options & keys'))}</button></p>`;
       return;
@@ -678,12 +861,13 @@
       out.deaths = S.deaths; out.kills = S.kills;
     }
     if (MODE === 'track' && S.track) out.body = S.track.all ? S.track.body / S.track.all * 100 : 0;
+    if (MODE === 'retake' && S.lefts.length) out.left = median(S.lefts);
     return out;
   }
   function result() {
     const el = $('dr-panel'), vals = S.reps.filter(v => v !== null);
     const pct = MODE === 'track' || MODE === 'clear';
-    const his = MODE === 'death' ? D.his ?? null : MODE === 'hold' ? react : null;
+    const his = MODE === 'death' ? D.his ?? null : MODE === 'hold' || MODE === 'postplant' ? react : null;
     const good = v => (pct ? v >= 60 : his === null || v < his);
     const beat = vals.filter(good).length;
     const best = vals.length ? (pct ? Math.max(...vals) : Math.min(...vals)) : null, med = median(vals);
@@ -698,10 +882,13 @@
       : MODE === 'attack' ? `${esc(T('Spot taken'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
       : MODE === 'track' ? `${esc(T('On his head'))} <span class="good">${fmt(best)}</span>`
       : MODE === 'clear' ? `${esc(T('Crosshair placement'))} <span class="good">${fmt(med)}</span>`
+      : MODE === 'entry' ? `${esc(T('Site taken'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
+      : MODE === 'retake' ? `${esc(T('Retakes won'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
+      : MODE === 'postplant' ? `${esc(T('Post-plants won'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
       : `${esc(T('Kills'))} <span class="good">${vals.length} / ${S.reps.length}</span>`;
     const facts = [];
     if (MODE !== 'track') facts.push(`<div><b>${esc(T('Your first shots'))}</b><p><span class="hd">${esc(T('head'))} ${S.firsts.head}</span> <span>${esc(T('body'))} ${S.firsts.body}</span> <span>${esc(T('legs'))} ${S.firsts.legs}</span> <span class="bad">${esc(T('missed'))} ${S.firsts.miss}</span></p></div>`);
-    if (MODE === 'death' || MODE === 'hold' || MODE === 'attack')
+    if (['death', 'hold', 'attack', 'entry', 'retake', 'postplant'].includes(MODE))
       facts.push(`<div><b>${esc(T('Your crosshair when he appeared'))}</b><p>${off !== null ? `${esc(T('On average'))} ${Math.round(off)}° ${esc(T('off him'))}.` : '–'}${mo !== null ? ` ${esc(T('In the match:'))} ${Math.round(mo)}°.` : ''}</p></div>`);
     if (MODE === 'hold') {
       const rows = Object.entries(S.styles).map(([k, v]) => `<span>${esc(T(STYLE[k] || k))} <b>${median(v).toFixed(2)} s</b></span>`).join(' ');
@@ -717,6 +904,8 @@
       facts.push(`<div class="dr-wide"><b>${esc(T('On his head, second by second'))}</b><p class="dr-bins">${bins.map(v => `<i class="${v >= 0.6 ? 'beat' : v >= 0.3 ? 'slow' : 'miss'}"></i>`).join('')}</p></div>`);
       facts.push(`<div><b>${esc(T('On him at all'))}</b><p>${S.track.all ? Math.round(S.track.body / S.track.all * 100) : 0} %</p></div>`);
     }
+    if (MODE === 'retake') facts.push(`<div><b>${esc(T('Left on the spike'))}</b><p>${S.lefts.length ? S.lefts.map(v => v.toFixed(1) + ' s').join(' · ') : '–'} · ${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
+    if (MODE === 'entry') facts.push(`<div><b>${esc(T('Kills and deaths'))}</b><p>${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
     if (MODE === 'clear') facts.push(`<div><b>${esc(T('Hiding places'))}</b><p>${S.hides.map(h2 => `<span class="${h2.off === null ? '' : h2.off <= 7 ? 'good' : 'bad'}">${h2.off === null ? '–' : Math.round(h2.off) + '°'}</span>`).join(' ')} · ${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
     facts.push(`<div><b>${esc(T('Since the first time'))}</b><p>${meds.length > 1 ? `${esc(T('Median per session'))}: ${meds.slice(-5).map(fmt).join(' → ')}` : esc(T('Your first session on this spot.'))}</p></div>`);
     el.hidden = false;
@@ -725,8 +914,8 @@
       <h2>${head}</h2>
       <div class="dr-nums"><div><b class="good">${fmt(best)}</b><small>${esc(T('your best'))}</small></div>
         <div><b>${fmt(med)}</b><small>${esc(T('your median'))}</small></div>
-        ${his !== null && !pct ? `<div><b class="bad">${his.toFixed(2)} s</b><small>${esc(T(MODE === 'hold' ? 'their reaction' : 'his time'))}</small></div>` : ''}</div>
-      ${S.reps.length > 1 ? `<div class="dr-bars">${his !== null && !pct ? `<div class="dr-his-line" style="bottom:${Math.round(his / top * 100)}%"><span>${esc(T(MODE === 'hold' ? 'theirs' : 'his'))} ${his.toFixed(2)} s</span></div>` : ''}${bars}</div>` : ''}
+        ${his !== null && !pct ? `<div><b class="bad">${his.toFixed(2)} s</b><small>${esc(T(MODE === 'death' ? 'his time' : 'their reaction'))}</small></div>` : ''}</div>
+      ${S.reps.length > 1 ? `<div class="dr-bars">${his !== null && !pct ? `<div class="dr-his-line" style="bottom:${Math.round(his / top * 100)}%"><span>${esc(T(MODE === 'death' ? 'his' : 'theirs'))} ${his.toFixed(2)} s</span></div>` : ''}${bars}</div>` : ''}
       <div class="dr-facts">${facts.join('')}</div>
       <p class="dr-btns">${C.next ? `<a class="btn primary" href="${esc(C.next)}">${esc(T('Next drill'))}</a>` : ''}
         <button type="button" class="btn ${C.next ? '' : 'primary'}" data-a="again">${esc(T('Again'))} (${esc(keyName('restart'))})</button>
@@ -739,7 +928,7 @@
     S.saved = true;
     try {
       const r = await fetch(C.runs_api, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({kind: MODE, reps: S.reps, his: MODE === 'death' ? D.his ?? null : MODE === 'hold' ? react : null,
+        body: JSON.stringify({kind: MODE, reps: S.reps, his: MODE === 'death' ? D.his ?? null : MODE === 'hold' || MODE === 'postplant' ? react : null,
                               first: S.firsts, off: avg(S.offs), detail: details()})});
       const d = await r.json();
       if (r.ok && d.history) C.history = d.history;
@@ -849,7 +1038,10 @@
       `${D.kwhere ? ' · ' + esc(T('from')) + ' <span translate="no">' + esc(D.kwhere) + '</span>' : ''}${D.first === 'killer' ? ' · ' + esc(T('he saw you first')) : ''}</small>`;
   } else {
     const what = MODE === 'hold' ? (O.styles || []).map(s => T(STYLE[s] || s)).join(', ') : MODE === 'track' ? 'ADAD'
-      : MODE === 'attack' ? `${Math.min(3, SP.defs.length)} ${T('defenders')}` : `${SP.hides.length} ${T('hiding places')}`;
+      : MODE === 'attack' ? `${Math.min(3, SP.defs.length)} ${T('defenders')}`
+      : MODE === 'entry' ? `${Math.min(NFOES, SP.hides.length)} ${T('defenders')}`
+      : MODE === 'retake' ? `${Math.min(NFOES, SP.posts.length)} ${T('attackers')}`
+      : MODE === 'postplant' ? `${NFOES} ${T('retakers')}` : `${SP.hides.length} ${T('hiding places')}`;
     const diff = (O.diff || 'medium').replace(/^./, c => c.toUpperCase());
     $('dr-info').innerHTML = `<b translate="no">${esc(D.map)} · ${esc(title())}</b><small>${esc(T(diff))} · <span translate="no">${esc(gun.name)}</span> · ${esc(what)}</small>`;
   }
@@ -862,7 +1054,8 @@
                                       kill: S.foes.some(f => f.dead), ammo: S.ammo, yaw: S.yaw, pitch: S.pitch,
                                       hp: S.foes.length ? S.foes[0].hp : null, firsts: {...S.firsts}, paused: S.paused,
                                       foes: S.foes.length, me: {...S.me}, speed: speed(), mode: MODE, dead: S.dead,
-                                      hides: S.hides.map(h => ({open: h.open, off: h.off}))}),
+                                      hides: S.hides.map(h => ({open: h.open, off: h.off})),
+                                      spike: S.spike ? {...S.spike} : null, defusing: S.defusing}),
                        hitboxes: (i = 0) => (S.foes[i] ? hitboxes(S.foes[i]) : []),
                        aimAt: p => { const v = sub(p, eye()), L = Math.hypot(...v); S.yaw = Math.atan2(v[0], -v[2]); S.pitch = Math.asin(v[1] / L); },
                        shoot: () => { shoot(); }, start: () => { restart(); }, eye, keys: () => keys, act, models,
@@ -874,5 +1067,6 @@
                        goTo: p => { S.me.x = p[0]; S.me.y = p[1]; S.me.z = p[2]; },          // for tests: stand there
                        trackSecs: s => { if (S.track) S.track.secs = s; },                  // for tests: shorter
                        foeAt: (i = 0) => (S.foes[i] ? foeAt(S.foes[i], S.t) : null), spot: () => SP,
+                       foeInfo: (i = 0) => (S.foes[i] ? {at: S.foes[i].at, swing: S.foes[i].swing || null, seen: S.foes[i].seen} : null),
                        foeDead: i => !!(S.foes[i] && S.foes[i].dead)};
 })();

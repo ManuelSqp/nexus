@@ -4,6 +4,30 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.54.0
+- **Practice › Aim on maps: entry, retake and post-plant.** Three new tabs next to *Clear a site*, on the same real
+  spots from your replays:
+  - **Entry**: you're first onto the site on the attackers' most used route. 1 to 3 defenders (you pick) wait on the
+    places defenders hid in your replays, only ones you can see from somewhere on the way in; one of them swings you
+    when you get close, and whoever's still hiding comes out when you reach the site. Your time: from the start until
+    the last one is down (out of time after a minute).
+  - **Retake**: the spike is down where it usually is on that site, with the time it had left when defenders set off
+    in your replays. You come back in on one of their real ways (up to three, rep by rep, drawn on the minimap), 1 to
+    3 attackers play it from the places attackers used after planting. Kill them and **defuse**: hold your defuse key
+    on the spike (4 by default, like the game; 7 s, half of it stays, you can't move or shoot meanwhile). The spike
+    goes off at 0. The result shows what was left on it.
+  - **Post-plant**: you play the spike from the places attackers used (the three most used, rep by rep), looking
+    where retakers first show up. 1 to 3 retakers come in on their real routes at their real speed (a few seconds
+    apart), then go for the spike and defuse. Kill each before he has you for his reaction time (the difficulty),
+    and before anyone finishes a defuse. Your time: how fast you got each of them once he could be seen.
+  - The spike is drawn in the map (blinking faster under 10 s) and on the minimap.
+- **The route on the minimap is easier to see** (clear a site, entry, retake): thicker, with a dark edge on any map,
+  an arrow at its end, and the part you've already walked faded.
+- **Your keys**: *Defuse (hold)*, 4 by default.
+- The drills of every match are worked out once more in the background (they now keep where the spike was and the
+  defenders' ways back in after a plant).
+- German texts.
+
 ## 4.53.3
 - The last two code scanning alerts: the review evening puts each player's mark into the page escaped, and the roster
   drafts' picture that follows the pointer while dragging an agent is a copy of the picture you picked up (no
