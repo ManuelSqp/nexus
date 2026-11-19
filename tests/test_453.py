@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).parent))
-from test_448 import write_game  # noqa: E402
+from test_448 import box, placed, usd_mesh, write_game  # noqa: E402
 from test_web import synthetic  # noqa: E402,F401
 
 from nexus import gamefiles as gf  # noqa: E402
@@ -18,9 +18,21 @@ from nexus.stats.map3d import CELL, Frame  # noqa: E402
 ROOT = Path(__file__).parent.parent
 
 
+def _with_glass_crate(root: Path) -> None:
+    """Abyss's B site crates: glass all round (2 m wide, 1.2 m high), at world (0, 3000)."""
+    c = root / "Export" / "ShooterGame" / "Content"
+    usd_mesh(c / "Environment" / "Test" / "CrateGlass.usda", "CrateGlass", *box((-100, -100, 0), (100, 100, 120)),
+             materials=["Glass_M0_PenableB_MI"])
+    art = c / "Maps" / "Testmap" / "Testmap_Art.usda"
+    t = art.read_text().rstrip()
+    assert t.endswith("}")
+    art.write_text(t[:-1] + placed("CrateGlass_0", "../../Environment/Test/CrateGlass.usda", t=(0, -3000, 0)) + "}\n")
+
+
 @pytest.fixture()
 def built(tmp_path, synthetic):  # noqa: F811
     write_game(tmp_path / "game")
+    _with_glass_crate(tmp_path / "game")
     mi = MapRegistry(synthetic["cache"]).get(name="Testmap")
     said = []
     meta, blob, vox = mm.build(gf.GameFiles(tmp_path / "game"), mi, "Testmap", log=said.append)
@@ -43,6 +55,8 @@ def test_floors_from_the_game_files(built):
     assert not any(abs(h) < 0.5 for h in at(-3550, -1050))                  # the 2 m crate: not through it ...
     assert not any(abs(h - 2.0) < 0.3 for h in at(-3550, -1050))            # ... nor onto it (too high to get up)
     assert not any(abs(h - 4.0) < 0.5 for h in at(-950, 0))                 # not on top of the 4 m wall
+    glass = at(0, 3000)                                                     # the glass crate: solid to walk on
+    assert glass and all(abs(h - 1.2) < 0.05 for h in glass)
     assert meta["geo_cells"] >= 4 and meta["foot_cm"] is None and "samples_from" not in meta
     assert any("inside objects left out" in x for x in said) and any("from the geometry" in x for x in said)
 
@@ -85,6 +99,14 @@ def test_inside_a_tall_box():
     vox = {"origin": [0.0, 0.0, 0.0], "cell": 0.25, "shape": [40, 40, 40], "bits": np.packbits(g.reshape(-1))}
     I, J, H = np.array([7, 7, 2]), np.array([7, 16, 30]), np.zeros(3)
     assert mm.enclosed(I, J, H, vox).tolist() == [True, False, False]   # in the box; the open floor; the corridor
+
+
+def test_voxelize_on_another_grid():
+    V = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [5.0, 5.0, 5.0], [6.0, 5.0, 5.0], [5.0, 5.0, 6.0]])
+    T = np.array([[0, 1, 2], [3, 4, 5]])
+    a = mm.voxelize(V[:3], T[:1], 0.25)
+    b = mm.voxelize(V, T, 0.25, origin=a["origin"], shape=a["shape"])      # the far triangle is outside: left out
+    assert b["shape"] == a["shape"] and (mm.vox_bool(a) == mm.vox_bool(b)).all()
 
 
 def test_headroom_and_inside_objects():
