@@ -3,7 +3,8 @@
 Input: the map's layout and meshes exported from the game (gamefiles.py, data/game/). Output, per map in
 data/maps3d/:
   <map>.game.json      what the page needs besides the mesh: callout zones, the walkable grid (for walking and the
-                       radar, from the game's navigation mesh), where to start, the frame, the version
+                       radar: the game's navigation mesh, and 4.53 the floors of the geometry itself near it: box
+                       tops, bridges, ledges), where to start, the frame, the version
   <map>.game.bin.gz    the mesh for the browser (binary, see pack()), the roof cut height map and a coarse
                        see-through grid
   <map>.game.vox.npz   the fine see-through grid for line of sight on the server (stats/sight.py)
@@ -14,11 +15,11 @@ installed, else a coarser vertex grid) to a few hundred thousand triangles.
 
 The frame is the one of the replay-built maps (map3d.py): metres on the minimap, x right, z down, y up. Heights are
 the game's (world z / 100), so the floors are where the game has them; where the replays put players relative to
-that (the capsule's centre or the feet) is measured from the replays when the map is built (foot_cm).
+that (the capsule's centre or the feet) is measured when a replay is shown (replayview.py).
 
 The exporter may mirror the world (FModel writes USD's right-handed frame: the game's Y negated). Which way round
-the files are is checked against valorant-api.com's callout points and the replays: they must fall on the
-walkable floor (detect_flip)."""
+the files are is checked against valorant-api.com's callout points: they must fall on the walkable floor
+(detect_flip)."""
 from __future__ import annotations
 
 import gzip
@@ -36,7 +37,7 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 5                      # 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
+VERSION = 6                      # 6 (4.53): floors from the geometry too, nothing from replays; 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
 TARGET_TRIS = 450_000            # after simplifying (a soft target: see per_object)
 MIN_KEEP = 0.35                  # a simplified object keeps at least this share of its triangles
 SIMPLIFY_MIN = 300               # objects with fewer triangles aren't simplified
@@ -46,6 +47,12 @@ VOX = 0.25                       # m, the server's see-through grid
 VOX_WEB = 0.5                    # m, the browser's
 HCELL = 1.0                      # m, the roof cut height map
 ROOF = 3.4                       # m above the highest floor below: higher than this is cut away (roofs)
+UP_SLOPE = 50                    # degrees: a surface at most this steep is a floor (4.53)
+CLEAR_FROM, HEADROOM = 0.35, 1.5   # m above a floor: nothing solid in between, or it's not one (a crouching player)
+NAV_CLEAR_FROM = 0.65            # the same for the navigation mesh's floors (it runs below the steps of stairs)
+ENCLOSED_M, BOX_TOP_M = 1.5, 4.0   # inside a big box: its sides this close all round, its top at most this high
+NEAR_NAV_M = 3.0                 # the geometry's floors count this close to the navigation mesh (box tops, bridges)
+CLIMB = 1.3                      # m a player gets up onto from the floor beside it (a step, or jumping onto a box)
 MARGIN_CM = (1200, 1200, 400, 1600)    # around the walkable area: x/y, below, above
 
 SKIP_LAYERS = ("Vista", "Env_VFX", "VFX", "Lighting", "Audio", "Birthday", "Activations", "Camera", "Profiling",
@@ -178,10 +185,10 @@ def detect_flip(nav_xy: np.ndarray, points: list[tuple[float, float]]) -> str:
 
 
 # ------------------------------------------------------------------------------------------------ building
-def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, float]] | None = None,
-          log=None) -> tuple[dict, bytes, dict] | None:
+def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, dict] | None:
     """-> (meta, packed mesh for the browser, see-through grid for the server) or None (no layout).
-    samples: world (x, y, z) positions of players from replays (to check the axes and measure the foot height)."""
+    4.53: from the game's files alone (and valorant-api.com's callouts for the axes): no replays. Where replays put
+    the feet is measured when a replay is shown (replayview.py)."""
     t0 = time.time()
     say = log or (lambda *_: None)
     src = Source(files, code)
@@ -191,7 +198,7 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
     if nav is None or not len(nav):
         say(f"{code}: no navigation mesh in the export")
         return None
-    pts = [(c.x, c.y) for c in getattr(mi, "callouts", [])] + [(x, y) for x, y, _z in (samples or [])[:4000]]
+    pts = [(c.x, c.y) for c in getattr(mi, "callouts", [])]
     flip = detect_flip(nav[:, :, :2], pts)
     fx, fy = FLIPS[flip]
     F = np.diag([fx, fy, 1.0, 1.0])                         # files -> world (and world -> files)
@@ -239,6 +246,7 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
     say(f"{code}: {n_obj} objects, {len(T):,} triangles before simplifying")
     vox = voxelize(V, T, VOX)
     say(f"{code}: see-through grid {vox['shape']}")
+    geo = geo_floors(V, T, vox)                          # 4.53: box tops, bridges, ledges (full detail)
     del V, T
 
     # ---- simplify each object on its own (simplifying the whole map at once tears holes into floors where
@@ -253,10 +261,14 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
 
     # ---- callout zones and the walkable grid
     zones = _zones(src, F, mi, fr)
-    cells, floors = walk_cells(navm)
+    _, nav_floors = walk_cells(navm)
+    nav_in = sum(len(v) for v in nav_floors.values())
+    nav_floors = inside_objects(nav_floors, vox)
+    say(f"{code}: {nav_in - sum(len(v) for v in nav_floors.values()):,} navigation mesh cells inside objects left out")
+    cells, floors, added = merge_floors(nav_floors, geo)
+    say(f"{code}: walkable: {len(cells):,} cells, {added:,} of them from the geometry (box tops, bridges)")
     hmap = roof_map(floors, vox)
     area = _area_per_vertex(Vs, zones, mi, fr)
-    foot = foot_cm(samples, floors, mi, fr) if samples else None
     callouts = _callout_points(mi, fr, floors, zones)
     if zones and cells:
         cc = np.array([[(c[0] + 0.5) * CELL, c[2] + 0.5, (c[1] + 0.5) * CELL] for c in cells])
@@ -267,7 +279,7 @@ def build(files: gf.GameFiles, mi, code: str, samples: list[tuple[float, float, 
     meta = {"version": VERSION, "map": mi.name, "code": code, "source": src.signature, "flip": flip,
             "cell": CELL, "cells": cells, "callouts": callouts, "zones": [_zone_public(z) for z in zones],
             "palette": [z["color"] for z in zones], "start": _start(zones, cells), "per_m": fr.per_m,
-            "foot_cm": foot, "hand": int(np.sign(mi.x_mult) * np.sign(mi.y_mult)) or 1,
+            "foot_cm": None, "geo_cells": added, "hand": int(np.sign(mi.x_mult) * np.sign(mi.y_mult)) or 1,
             "tris": int(len(Ts)), "objects": n_obj, "built": int(time.time()), "seconds": round(time.time() - t0, 1),
             "bytes": len(blob), "hash": hashlib.sha1(blob).hexdigest()[:12]}
     say(f"{code}: done in {meta['seconds']} s, {len(blob) / 1e6:.1f} MB")
@@ -536,6 +548,205 @@ def walk_cells(navm: np.ndarray) -> tuple[list, dict]:
     return cells, floors
 
 
+def geo_floors(V: np.ndarray, T: np.ndarray, vox: dict, cell: float = CELL) -> dict[tuple[int, int], list[float]]:
+    """4.53: the floors of the geometry itself, on the half-metre grid: every surface facing up (at most UP_SLOPE
+    steep) at a cell's centre, with room for a crouching player above it (nothing solid in the see-through grid from
+    just above the surface up to HEADROOM). Box tops, bridges, ledges: the navigation mesh leaves many of them out.
+    -> {(i, j): [heights]}"""
+    if not len(T):
+        return {}
+    A, B, C = V[T[:, 0]], V[T[:, 1]], V[T[:, 2]]
+    n = np.cross(B - A, C - A)
+    ln = np.linalg.norm(n, axis=1)
+    up = np.where(ln > 0, n[:, 1] / np.where(ln > 0, ln, 1), 0)
+    keep = np.abs(up) >= math.cos(math.radians(UP_SLOPE))          # either winding: meshes aren't all the same way
+    A, B, C = A[keep], B[keep], C[keep]
+    xs = np.stack([A[:, 0], B[:, 0], C[:, 0]], 1)
+    zs = np.stack([A[:, 2], B[:, 2], C[:, 2]], 1)
+    i0 = np.floor(xs.min(1) / cell - 0.5).astype(np.int64) + 1          # first centre at or right of the left edge
+    i1 = np.floor(xs.max(1) / cell - 0.5).astype(np.int64)
+    j0 = np.floor(zs.min(1) / cell - 0.5).astype(np.int64) + 1
+    j1 = np.floor(zs.max(1) / cell - 0.5).astype(np.int64)
+    ni, nj = i1 - i0 + 1, j1 - j0 + 1
+    ok = (ni > 0) & (nj > 0) & (ni <= 400) & (nj <= 400)
+    out_i, out_j, out_h = [], [], []
+    for a, b in set(zip(ni[ok].tolist(), nj[ok].tolist())):       # triangles by how many centres their box holds
+        sel = np.nonzero(ok & (ni == a) & (nj == b))[0]
+        di, dj = np.meshgrid(np.arange(a), np.arange(b), indexing="ij")
+        di, dj = di.reshape(-1), dj.reshape(-1)
+        chunk = max(1, 2_000_000 // len(di))
+        for s in range(0, len(sel), chunk):
+            idx = sel[s:s + chunk]
+            ii = i0[idx, None] + di[None, :]
+            jj = j0[idx, None] + dj[None, :]
+            px, pz = (ii + 0.5) * cell, (jj + 0.5) * cell
+            x1, x2, x3 = xs[idx, 0, None], xs[idx, 1, None], xs[idx, 2, None]
+            z1, z2, z3 = zs[idx, 0, None], zs[idx, 1, None], zs[idx, 2, None]
+            det = (z2 - z3) * (x1 - x3) + (x3 - x2) * (z1 - z3)
+            det = np.where(np.abs(det) < 1e-12, np.nan, det)
+            l1 = ((z2 - z3) * (px - x3) + (x3 - x2) * (pz - z3)) / det
+            l2 = ((z3 - z1) * (px - x3) + (x1 - x3) * (pz - z3)) / det
+            l3 = 1 - l1 - l2
+            inside = (l1 >= 0) & (l2 >= 0) & (l3 >= 0)
+            h = l1 * A[idx, 1, None] + l2 * B[idx, 1, None] + l3 * C[idx, 1, None]
+            out_i.append(ii[inside])
+            out_j.append(jj[inside])
+            out_h.append(h[inside])
+    if not out_i:
+        return {}
+    I, J, H = np.concatenate(out_i), np.concatenate(out_j), np.concatenate(out_h)
+    free = headroom(I, J, H, vox, cell)
+    floors: dict[tuple[int, int], list[float]] = {}
+    for a, b, y in zip(I[free].tolist(), J[free].tolist(), H[free].tolist()):
+        floors.setdefault((a, b), []).append(y)
+    for k, v in floors.items():
+        floors[k] = _group_levels(v)
+    return floors
+
+
+def headroom(I: np.ndarray, J: np.ndarray, H: np.ndarray, vox: dict, cell: float = CELL,
+             dx: float = 0.0, dz: float = 0.0, start: float = CLEAR_FROM) -> np.ndarray:
+    """Per floor (cell i, j at height h): room for a crouching player above it? (nothing solid in the see-through
+    grid from start to HEADROOM above it, at the cell's centre moved by dx, dz)"""
+    nx, ny, nz = vox["shape"]
+    g = vox_bool(vox).reshape(ny, nz, nx)
+    ox, oy, oz = vox["origin"]
+    vc = vox["cell"]
+    ix = np.floor(((I + 0.5) * cell + dx - ox) / vc).astype(np.int64)
+    iz = np.floor(((J + 0.5) * cell + dz - oz) / vc).astype(np.int64)
+    inb = (ix >= 0) & (ix < nx) & (iz >= 0) & (iz < nz)          # outside the grid there's nothing solid
+    free = np.ones(len(I), bool)
+    lo_y = np.floor((H + start - oy) / vc).astype(np.int64)
+    hi_y = np.floor((H + HEADROOM - oy) / vc).astype(np.int64)
+    for k in range(int(math.ceil((HEADROOM - start) / vc)) + 1):
+        y = lo_y + k
+        chk = free & inb & (y <= hi_y) & (y >= 0) & (y < ny)
+        hit = np.zeros_like(free)
+        hit[chk] = g[y[chk], iz[chk], ix[chk]]
+        free &= ~hit
+    return free
+
+
+def inside_objects(floors: dict, vox: dict) -> dict:
+    """The navigation mesh's floors without the ones inside something solid (it runs under some boxes, which made
+    them walk-through): no room above at the centre and around it. A wall only beside the centre (the cells along
+    the walls) doesn't count, nor what's less than NAV_CLEAR_FROM above (stairs: the mesh runs below the steps)."""
+    items = [(i, j, h) for (i, j), hs in floors.items() for h in hs]
+    if not items:
+        return {}
+    a = np.array(items)
+    I, J, H = a[:, 0].astype(np.int64), a[:, 1].astype(np.int64), a[:, 2]
+    d = CELL * 0.4
+    n_free = sum(headroom(I, J, H, vox, dx=x, dz=z, start=NAV_CLEAR_FROM).astype(int)
+                 for x, z in ((0, 0), (d, 0), (-d, 0), (0, d), (0, -d)))
+    free = (n_free >= 2) & ~enclosed(I, J, H, vox)
+    out: dict[tuple[int, int], list[float]] = {}
+    for (i, j, h), ok in zip(items, free.tolist()):
+        if ok:
+            out.setdefault((i, j), []).append(h)
+    return out
+
+
+def enclosed(I: np.ndarray, J: np.ndarray, H: np.ndarray, vox: dict, cell: float = CELL) -> np.ndarray:
+    """Per floor: inside a big box? (the see-through grid has only an object's surfaces: a box taller than HEADROOM
+    is empty inside.) Its sides close to the centre all round, at knee height, within ENCLOSED_M, and a lid above
+    within BOX_TOP_M."""
+    nx, ny, nz = vox["shape"]
+    g = vox_bool(vox).reshape(ny, nz, nx)
+    ox, oy, oz = vox["origin"]
+    vc = vox["cell"]
+    ix = np.floor(((I + 0.5) * cell - ox) / vc).astype(np.int64)
+    iz = np.floor(((J + 0.5) * cell - oz) / vc).astype(np.int64)
+
+    def solid(x, y, z):
+        ok = (x >= 0) & (x < nx) & (y >= 0) & (y < ny) & (z >= 0) & (z < nz)
+        out = np.zeros(len(x), bool)
+        out[ok] = g[y[ok], z[ok], x[ok]]
+        return out
+    knee = np.floor((H + 0.8 - oy) / vc).astype(np.int64)
+    n = int(math.ceil(ENCLOSED_M / vc))
+    shut = np.ones(len(I), bool)
+    for dx, dz in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+        hit = np.zeros(len(I), bool)
+        for k in range(1, n + 1):
+            hit |= solid(ix + dx * k, knee, iz + dz * k)
+        shut &= hit
+    lid = np.zeros(len(I), bool)
+    for k in range(int(math.ceil((BOX_TOP_M - NAV_CLEAR_FROM) / vc)) + 1):
+        lid |= solid(ix, np.floor((H + NAV_CLEAR_FROM - oy) / vc).astype(np.int64) + k, iz)
+    return shut & lid
+
+
+def _group_levels(v: list[float]) -> list[float]:
+    """Heights in one cell -> its floors: closer than LEVEL_GAP is one floor (the higher one)."""
+    v = sorted(v)
+    lv = [v[0]]
+    for y in v[1:]:
+        if y - lv[-1] >= LEVEL_GAP:
+            lv.append(y)
+        else:
+            lv[-1] = max(lv[-1], y)
+    return lv
+
+
+def merge_floors(nav: dict, geo: dict, near_m: float = NEAR_NAV_M) -> tuple[list, dict, int]:
+    """The walkable floors: the navigation mesh's, and the geometry's that a player can get onto from them (each step
+    at most CLIMB up, jumping included: a box top, a bridge up its stairs; not a roof, not the top of a wall), no
+    further than near_m from the navigation mesh and not a strip a player can't stand on (railings, wall tops).
+    Where both have a floor at about the same height, the geometry's height counts (the navigation mesh floats a bit
+    above it). -> (cells [[i, j, h, 0], ...], floors {(i, j): [heights]}, how many floors the geometry added)"""
+    from collections import deque
+
+    from scipy import ndimage
+    if not nav:
+        return [], {}, 0
+    keys = np.array(list(nav.keys()) + list(geo.keys()))
+    i_lo, j_lo = keys.min(0)
+    i_hi, j_hi = keys.max(0)
+    m = np.zeros((int(i_hi - i_lo + 1), int(j_hi - j_lo + 1)), bool)
+    for (i, j) in nav:
+        m[i - i_lo, j - j_lo] = True
+    r = int(round(near_m / CELL))
+    yy, xx = np.ogrid[-r:r + 1, -r:r + 1]
+    near = ndimage.binary_dilation(m, structure=(xx * xx + yy * yy) <= r * r)
+
+    def same(a, b, h):
+        return any(abs(x - h) <= 0.45 for x in geo.get((a, b), ()))     # a step of a stair counts
+
+    cand: dict[tuple[int, int], list[float]] = {}
+    for (i, j), hs in geo.items():
+        if not near[i - i_lo, j - j_lo]:
+            continue
+        for h in hs:                     # not a strip: a neighbour at the same height across x and one across z
+            if (same(i - 1, j, h) or same(i + 1, j, h)) and (same(i, j - 1, h) or same(i, j + 1, h)):
+                cand.setdefault((i, j), []).append(h)
+    # from the navigation mesh's floors onto the geometry's: one cell at a time, up at most CLIMB, down any height
+    seen: set[tuple[int, int, float]] = set()
+    todo = deque((i, j, h) for (i, j), hs in nav.items() for h in hs)
+    while todo:
+        i, j, h = todo.popleft()
+        for a, b in ((i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)):
+            for h2 in cand.get((a, b), ()):
+                if h2 - h <= CLIMB and (a, b, h2) not in seen:
+                    seen.add((a, b, h2))
+                    todo.append((a, b, h2))
+    out = {k: list(v) for k, v in nav.items()}
+    added = 0
+    for (i, j, h) in seen:
+        lv = out.setdefault((i, j), [])
+        close = [x for x in lv if abs(x - h) < LEVEL_GAP]
+        if close:                                          # the same floor: the geometry's height
+            for x in close:
+                lv.remove(x)
+            lv.append(h if all(abs(x - h) <= 0.5 for x in close) else max(close + [h]))
+        else:
+            lv.append(h)
+            added += 1
+        lv.sort()
+    cells = [[i, j, round(h, 2), 0] for (i, j), lv in sorted(out.items()) for h in lv]
+    return cells, out, added
+
+
 def roof_map(floors: dict, vox: dict | None = None) -> dict:
     """Per square metre: the highest floor of the navigation mesh (where there's none, inside buildings and behind
     walls, the floors around spread outwards 10 m). The browser hides what's more than ROOF above it, so the view
@@ -584,24 +795,6 @@ def roof_map(floors: dict, vox: dict | None = None) -> dict:
     v = (np.clip((fill - ymin) * 100, 0, 65532).astype(np.int64) & ~3) | known.astype(np.int64) | (lid.astype(np.int64) << 1)
     return {"x0": x0 * HCELL, "z0": z0 * HCELL, "w": w, "h": h, "cell": HCELL, "ymin": round(ymin, 2),
             "v": v.astype(np.uint16)}
-
-
-def foot_cm(samples, floors: dict, mi, fr) -> float | None:
-    """How far above the floor the replays put players (cm): the median over positions with a floor below."""
-    d = []
-    for x, y, z in samples[:20000]:
-        u, v = mi.to_uv(x, y)
-        i, j = int(math.floor(u / fr.per_m / CELL)), int(math.floor(v / fr.per_m / CELL))
-        lv = floors.get((i, j))
-        if not lv:
-            continue
-        zm = z / 100
-        below = [h for h in lv if h <= zm + 0.3]
-        if below and zm - max(below) < 2.5:
-            d.append(zm - max(below))
-    if len(d) < 50:
-        return None
-    return round(float(np.median(d)) * 100, 1)
 
 
 # ------------------------------------------------------------------------------------------------ callout zones
