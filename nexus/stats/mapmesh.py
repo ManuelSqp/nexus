@@ -37,7 +37,7 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 6                      # 6 (4.53): floors from the geometry too, nothing from replays; 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
+VERSION = 7                      # 7 (4.53.1): clutter by name words, no effects; 6 (4.53): floors from the geometry too, nothing from replays; 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
 TARGET_TRIS = 450_000            # after simplifying (a soft target: see per_object)
 MIN_KEEP = 0.35                  # a simplified object keeps at least this share of its triangles
 SIMPLIFY_MIN = 300               # objects with fewer triangles aren't simplified
@@ -58,10 +58,39 @@ MARGIN_CM = (1200, 1200, 400, 1600)    # around the walkable area: x/y, below, a
 SKIP_LAYERS = ("Vista", "Env_VFX", "VFX", "Lighting", "Audio", "Birthday", "Activations", "Camera", "Profiling",
                "Volumes", "KillVolumes", "BVPawn", "BVProjectile", "NavMesh", "Callout", "Mode_", "Lanes",
                "TeamSpawn", "ObserverCameras", "Esports")
-CLUTTER = re.compile(r"(Foliage|Plant|Grass|Gravel|Ivy|Vine|Vino|Wire|Cable|Light|Lamp|Sconce|Trash|Plushie|Decal|"
-                     r"Rainpipe|Pipe|Fish|Leaves|Leaf|Flower|Moss|Rope|Chain|Scaffold|Debris|Paper|Bottle|Cup|Book|"
-                     r"Bird|Butterfl|Insect|Particle|Puddle|Cloud|Sky|Water_?Plane|Banner|Flag|Poster)", re.I)
-TECH = re.compile(r"(TargetingMeshes|MapMarkup|/Utilities/|EditorShapes|EditorMeshes|NavMesh)", re.I)   # helpers, not walls
+# 4.53.1: clutter by the words of an object's name (Floor_8_BirdHouseB is Haven's Bird House, not a bird;
+# Shell_9_..._PlantersA are planters; ..._CastleWallCUpper isn't a cup). Never anything that blocks or carries you:
+VISUAL = {"decal", "light", "lightstrip", "lightline", "lightleak", "cloud", "sky", "skybox", "foliage", "leaves", "leaf",
+          "grass", "ivy", "vine", "vino", "wire", "wiring", "cable", "rope", "chain", "moss", "particle", "puddle",
+          "flower", "insect", "butterfly", "butterflie", "banner", "flag", "poster", "paper", "tape", "shrubbery",
+          "weed", "clover", "shadowblocker"}
+# small things (less than SMALL_CM): left out; bigger ones with the same words are part of the map
+SMALL = {"plant", "gravel", "lamp", "sconce", "trash", "plushie", "rainpipe", "pipe", "fish", "bottle", "cup", "book",
+         "bird", "debris", "bush"}
+SMALL_CM = 600
+STRUCTURE = {"floor", "shell", "wall", "roof", "stair", "stairs", "ramp", "brick", "building", "ground", "bridge",
+             "platform"}   # a name's first word: walkable or a wall, even with "Grass" or "Plant" in it
+
+
+def _words(name: str) -> list[str]:
+    stem = name.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    return [w.lower() for w in re.findall(r"[A-Z]?[a-z]+|[A-Z]+(?![a-z])", stem)]
+
+
+def clutter(name: str, size_cm: float) -> bool:
+    """Is an object (its file's name, its biggest side) clutter to leave out?"""
+    ws = _words(name)
+    if not ws:
+        return False
+    keys = {w for w in ws} | {w[:-1] for w in ws if w.endswith("s")}
+    structural = ws[0] in STRUCTURE or (ws[0] in ("plum", "rook") and len(ws) > 1 and ws[1] in STRUCTURE)
+    if structural:
+        return bool(keys & (VISUAL - {"grass", "moss", "weed", "clover"}))     # a grass floor is a floor
+    return bool(keys & VISUAL) or (bool(keys & SMALL) and size_cm < SMALL_CM)
+
+
+TECH = re.compile(r"(TargetingMeshes|MapMarkup|/Utilities/|EditorShapes|EditorMeshes|NavMesh|Rift_Bombsite)",
+                  re.I)   # helpers, not walls; 4.53.1: effects (the glowing border round a spike site, Rift_Bombsite_*)
 FLIPS = {"none": (1, 1), "y": (1, -1), "x": (-1, 1), "xy": (-1, -1)}
 
 
@@ -211,7 +240,7 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
     solid, glass, opened = [], [], []                     # (mesh, its file, world matrix)
     doors = Doorways(nav_w)
     for p in src.placed:
-        if p.invisible or not render_layer(p.layer) or CLUTTER.search(p.ref.rsplit("/", 1)[-1]) or TECH.search(p.ref):
+        if p.invisible or not render_layer(p.layer) or TECH.search(p.ref):
             continue
         m = src.mesh(p)
         if m is None or not len(m.tris):
@@ -222,6 +251,8 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
             size = ext * np.linalg.norm(W[:3, :3], axis=0)
             c = W[:3, 3]
             if size.max() < MIN_SIZE_CM or not ((c >= lo - 3000) & (c <= hi + 3000)).all():
+                continue
+            if clutter(p.ref, float(size.max())):
                 continue
             if doors.is_open(m, W):                         # 4.50.2: drawn like glass, block neither view nor way
                 opened.append((m, id(m), W))
@@ -273,7 +304,7 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
     nav_in = sum(len(v) for v in nav_floors.values())
     nav_floors = inside_objects(nav_floors, walk_vox)
     say(f"{code}: {nav_in - sum(len(v) for v in nav_floors.values()):,} navigation mesh cells inside objects left out")
-    cells, floors, added = merge_floors(nav_floors, geo)
+    cells, floors, added = merge_floors(nav_floors, geo, vox=walk_vox)
     say(f"{code}: walkable: {len(cells):,} cells, {added:,} of them from the geometry (box tops, bridges)")
     hmap = roof_map(floors, vox)
     area = _area_per_vertex(Vs, zones, mi, fr)
@@ -702,12 +733,14 @@ def _group_levels(v: list[float]) -> list[float]:
     return lv
 
 
-def merge_floors(nav: dict, geo: dict, near_m: float = NEAR_NAV_M) -> tuple[list, dict, int]:
+def merge_floors(nav: dict, geo: dict, near_m: float = NEAR_NAV_M, vox: dict | None = None) -> tuple[list, dict, int]:
     """The walkable floors: the navigation mesh's, and the geometry's that a player can get onto from them (each step
     at most CLIMB up, jumping included: a box top, a bridge up its stairs; not a roof, not the top of a wall), no
     further than near_m from the navigation mesh and not a strip a player can't stand on (railings, wall tops).
     Where both have a floor at about the same height, the geometry's height counts (the navigation mesh floats a bit
-    above it). -> (cells [[i, j, h, 0], ...], floors {(i, j): [heights]}, how many floors the geometry added)"""
+    above it). vox (4.53.1): what you walk into; no step goes through it (a thin wall between two cells: the floor
+    behind the map's outer walls isn't part of it).
+    -> (cells [[i, j, h, 0], ...], floors {(i, j): [heights]}, how many floors the geometry added)"""
     from collections import deque
 
     from scipy import ndimage
@@ -734,13 +767,14 @@ def merge_floors(nav: dict, geo: dict, near_m: float = NEAR_NAV_M) -> tuple[list
             if (same(i - 1, j, h) or same(i + 1, j, h)) and (same(i, j - 1, h) or same(i, j + 1, h)):
                 cand.setdefault((i, j), []).append(h)
     # from the navigation mesh's floors onto the geometry's: one cell at a time, up at most CLIMB, down any height
+    passable = _passable(vox) if vox is not None else (lambda *_: True)
     seen: set[tuple[int, int, float]] = set()
     todo = deque((i, j, h) for (i, j), hs in nav.items() for h in hs)
     while todo:
         i, j, h = todo.popleft()
         for a, b in ((i - 1, j), (i + 1, j), (i, j - 1), (i, j + 1)):
             for h2 in cand.get((a, b), ()):
-                if h2 - h <= CLIMB and (a, b, h2) not in seen:
+                if h2 - h <= CLIMB and (a, b, h2) not in seen and passable(i, j, a, b, max(h, h2)):
                     seen.add((a, b, h2))
                     todo.append((a, b, h2))
     out = {k: list(v) for k, v in nav.items()}
@@ -758,6 +792,29 @@ def merge_floors(nav: dict, geo: dict, near_m: float = NEAR_NAV_M) -> tuple[list
         lv.sort()
     cells = [[i, j, round(h, 2), 0] for (i, j), lv in sorted(out.items()) for h in lv]
     return cells, out, added
+
+
+def _passable(vox: dict):
+    """-> passable(i, j, a, b, h): nothing solid between the centres of cells (i, j) and (a, b) at a player's knee
+    and chest above height h."""
+    nx, ny, nz = vox["shape"]
+    g = vox_bool(vox).reshape(ny, nz, nx)
+    ox, oy, oz = vox["origin"]
+    vc = vox["cell"]
+
+    def passable(i, j, a, b, h):
+        for t in (0.25, 0.5, 0.75):
+            x = (i + 0.5 + (a - i) * t) * CELL
+            z = (j + 0.5 + (b - j) * t) * CELL
+            ix, iz = int((x - ox) // vc), int((z - oz) // vc)
+            if not (0 <= ix < nx and 0 <= iz < nz):
+                continue
+            for dy in (0.6, 1.2):
+                iy = int((h + dy - oy) // vc)
+                if 0 <= iy < ny and g[iy, iz, ix]:
+                    return False
+        return True
+    return passable
 
 
 def roof_map(floors: dict, vox: dict | None = None) -> dict:
