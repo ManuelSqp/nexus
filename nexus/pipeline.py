@@ -49,11 +49,8 @@ def get_client(cfg: Config) -> HenrikClient:
     return HenrikClient(cfg.henrik.api_key, cfg.path(cfg.paths.cache_dir), cfg.henrik.base_url)
 
 
-def load_match(cfg: Config, ref: str, queue: str | None = None, allow_file: bool = False) -> Match:
-    """`ref` = match id or 'latest'; with allow_file (the CLI, tests only, never request data) also a path to a
-    saved v4 match .json."""
-    if allow_file and ref.endswith(".json"):
-        return load_match_from_file(ref)
+def load_match(cfg: Config, ref: str, queue: str | None = None) -> Match:
+    """`ref` = match id or 'latest'. A saved v4 match .json is load_match_from_file's (the CLI's) job."""
     if ref != "latest" and not valid_match_id(ref):
         raise ValueError(f"Not a valid match ID: {ref!r}")
     if ref != "latest":
@@ -378,7 +375,7 @@ class CoachRequest:
     vod_url: str | None = None         # how the report references the VOD (web app)
     team_review: bool = False          # review every player of your team, not only you
     team_roles: dict | None = None     # 'name#tag' lower -> assigned team roles
-    allow_file: bool = False           # `match` may be a saved .json (the CLI only, never the web app)
+    match_file: str | None = None      # a saved match .json instead of `match` (the CLI only, never the web app)
 
 
 @dataclass
@@ -396,7 +393,7 @@ def run(cfg: Config, req: CoachRequest, log: Log = _noop) -> CoachResult:
     from .coach.ollama import OllamaError
     from .report import render_report
 
-    match = load_match(cfg, req.match, req.queue, allow_file=req.allow_file)
+    match = load_match_from_file(req.match_file) if req.match_file else load_match(cfg, req.match, req.queue)
     if why := coachable(match):
         raise ValueError(why)
     puuid = focus_player(cfg, match, req.player)

@@ -35,9 +35,12 @@ def test_load_match_only_ids_unless_allowed(tmp_path, synthetic):  # noqa: F811
     path = str(synthetic["match"])
     with pytest.raises(ValueError):
         pipeline.load_match(cfg, path)                          # the web app: never a file
-    m = pipeline.load_match(cfg, path, allow_file=True)        # the CLI
+    m = pipeline.load_match_from_file(path)                   # the CLI
     assert m.match_id and m.rounds
-    assert pipeline.load_match_from_file(path).match_id == m.match_id
+    from nexus.cli import _load
+    assert _load(cfg, path).match_id == m.match_id                # the CLI takes a file or an ID
+    with pytest.raises(ValueError):
+        pipeline.run(cfg, pipeline.CoachRequest(match=path, no_llm=True), lambda *a: None)   # a request: IDs only
     with pytest.raises(ValueError):
         pipeline.load_match_from_file(tmp_path / "nothing.json")
     with pytest.raises(ValueError):
@@ -99,7 +102,7 @@ def test_youtube_hosts_exactly():
 
 def test_safe_next():
     from nexus.web.urls import safe_next
-    for good in ("/teams/1/plans", "/a?b=c"):
+    for good in ("/teams/1/plans", "/a?b=c", "/"):
         assert safe_next(good, "/x") == good
     for bad in ("https://evil.io/", "//evil.io", "/\\evil.io", "\\\\evil.io", "javascript:alert(1)", "/\t/evil.io", "", None):
         assert safe_next(bad, "/x") == "/x", bad
@@ -140,7 +143,7 @@ def test_scripts_escape_and_check_urls():
     ev, dr, st = ((STATIC / f).read_text() for f in ("evening.js", "drafts.js", "strat.js"))
     for js in (ev, dr, st):
         assert "const local = u =>" in js and "x.origin === location.origin" in js
-    assert "s.src = local(B.replay_js)" in ev and "${esc(icon(a))}" in ev and "${esc(p.k)}" in ev
+    assert "s.src = REPLAY_JS" in ev and "new URL('../replay.js', document.currentScript.src)" in ev and "B.replay_js" not in ev and "${esc(icon(a))}" in ev and "${esc(p.k)}" in ev
     assert "${icon(" not in dr and "${esc(st.n_all)}" in dr
     assert "e.textContent = text" in st and "const hHtml = " in st and "/^on/i.test(k)" in st
     assert "e.innerHTML = html" not in st

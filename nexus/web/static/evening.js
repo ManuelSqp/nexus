@@ -2,6 +2,9 @@
 (function () {
   'use strict';
   const B = JSON.parse(document.getElementById('ev-boot').textContent);
+  // the playback script (/replay.js) sits one folder up from this one (/static/evening.js): its address comes from
+  // where this script was loaded, not from the page's data
+  const REPLAY_JS = document.currentScript ? new URL('../replay.js', document.currentScript.src).pathname : '/replay.js';
   const $ = s => document.querySelector(s);
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   // a URL of this site only (a path, or the same origin): never javascript: or another host
@@ -228,7 +231,7 @@
     loading = Promise.all([
       fetch(B.replay).then(r => { if (!r.ok) throw new Error('no replay'); return r.json(); }),
       window.nexusBuild ? Promise.resolve() : new Promise((ok, no) => {
-        const s = document.createElement('script'); s.src = local(B.replay_js); s.onload = ok; s.onerror = no; document.head.appendChild(s);
+        const s = document.createElement('script'); s.src = REPLAY_JS; s.onload = ok; s.onerror = no; document.head.appendChild(s);
       }),
     ]).then(([d]) => { replayData = d; });
     return loading;

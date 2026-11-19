@@ -132,7 +132,7 @@ def test_switch_between_replay_file_and_vod(tmp_path, data, match, source):
     cfg = _cfg(tmp_path, data, source)
     replayfile._write(replayfile.data_file(pipeline.replays_dir(cfg), match.match_id), fake_replay(match))
     logs = []
-    res = pipeline.run(cfg, pipeline.CoachRequest(match=str(data["match"]), no_llm=True, allow_file=True), logs.append)
+    res = pipeline.run(cfg, pipeline.CoachRequest(match=str(data["match"]), no_llm=True, match_file=str(data["match"])), logs.append)
     rep = json.loads(res.json.read_text())
     if source == "replay":
         assert rep["meta"]["positions"] == "replay"
@@ -151,7 +151,7 @@ def test_switch_between_replay_file_and_vod(tmp_path, data, match, source):
 def test_no_replay_file_falls_back(tmp_path, data, match):
     cfg = _cfg(tmp_path, data, "replay")
     logs = []
-    res = pipeline.run(cfg, pipeline.CoachRequest(match=str(data["match"]), no_llm=True, allow_file=True), logs.append)
+    res = pipeline.run(cfg, pipeline.CoachRequest(match=str(data["match"]), no_llm=True, match_file=str(data["match"])), logs.append)
     assert json.loads(res.json.read_text())["meta"]["positions"] is None
     assert any("No replay file" in line for line in logs)
 

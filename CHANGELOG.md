@@ -10,7 +10,7 @@ Security fixes from GitHub's code scanning (CodeQL). Nothing changes in how Nexu
   would end up outside the folder (`..`, absolute names, links pointing out).
   - The web app loads matches by **match ID only**. Before, a "match" ending in `.json` that existed as a file was
     read before the ID was checked (the web routes checked IDs first, but the loader itself didn't). Loading a saved
-    match file is now the command line's own path (`load_match(..., allow_file=True)`, `load_match_from_file`).
+    match file is now the command line's own path (`load_match_from_file`, `CoachRequest.match_file`).
   - The HenrikDev client checks a match ID before it becomes a cache file name; a player's folder is always a number.
   - Translations are looked up by language code, never by building a file name from the request.
   - **Recordings folder** (admin, Users): the error no longer shows the path back, and with `NEXUS_VOD_ROOTS` set
@@ -22,6 +22,7 @@ Security fixes from GitHub's code scanning (CodeQL). Nothing changes in how Nexu
 - **Lineup links**: only youtube.com, www./m./music.youtube.com count as YouTube (`evilyoutube.com` doesn't).
 - **Redirects**: "back to" targets from forms go through one check (pages of this site only); after saving, a page
   sends you back to itself built from its route instead of the request's URL.
+- The review evening loads the playback script from its own known address, not from the page's data.
 - **Error messages**: clips, Discord posts, the settings tests and the player order give fixed messages; the
   details go to the server log instead of the page.
 - Roster drafts: no script error on a team without players yet.

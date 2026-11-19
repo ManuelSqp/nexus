@@ -141,9 +141,11 @@ def create_app(data_dir: Path, config_seed: Path | None = None, start_workers: b
         (folders separated by the system's path separator) inside one of those. The message doesn't echo the path."""
         if not text:
             return None
-        p = os.path.realpath(os.path.expanduser(text))
-        roots = [os.path.realpath(os.path.expanduser(r)) for r in os.environ.get("NEXUS_VOD_ROOTS", "").split(os.pathsep) if r.strip()]
-        if roots and not any(p == r or p.startswith(r.rstrip(os.sep) + os.sep) for r in roots):
+        p = os.path.join(os.path.realpath(os.path.expanduser(text)), "")          # resolved, ending in a separator
+        roots = [os.path.join(os.path.realpath(os.path.expanduser(r)), "")
+                 for r in os.environ.get("NEXUS_VOD_ROOTS", "").split(os.pathsep) if r.strip()]
+        base = next((r for r in roots if p.startswith(r)), None) if roots else os.path.join(os.path.abspath(os.sep), "")
+        if base is None or not p.startswith(base):
             return "This recordings folder isn't allowed on this server."
         if not os.path.isdir(p):
             return "Recordings folder not found on this server."

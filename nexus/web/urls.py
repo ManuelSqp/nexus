@@ -23,7 +23,9 @@ def local_path(target: str | None) -> str | None:
 def safe_next(target: str | None, fallback: str) -> str:
     """A ?next= / form "next" target: itself when it's a page of this site, else fallback."""
     t = local_path(target)
-    return t if t else fallback
+    # a local path starts with exactly one "/" (local_path refuses "//", "/\\" and the like): rebuilt from "/" and
+    # the rest, so the target can only ever be a page of this site
+    return "/" + t[1:] if t else fallback
 
 
 def same_page() -> str:
