@@ -120,9 +120,10 @@
   // ------------------------------------------------------------------------------------------ utility shapes (4.45)
   const live = NM.live, R_UTIL = NM.R_UTIL, hex = NM.hex;
   const utilColor = u => NM.utilColor(u, C.util_col);
-  function objects() {                     // 3D utility for map3d.js (the walls hide them)
-    if (!S.d || !S.util) return [];
-    return NM.utilObjects(S.d.util, S.t, C.util_col);
+  function objects() {                     // 3D utility for map3d.js (the walls hide them); 4.55: the puffs of moves
+    if (!S.d) return [];
+    const out = S.util ? NM.utilObjects(S.d.util, S.t, C.util_col) : [];
+    return out.concat(NM.moveObjects(S.d._fx, S.t));
   }
   function drawUtil(g, project, u, dpr) {    // the agent's name over his utility (the shapes are 3D now)
     if (!S.names || !u.agent) return;
@@ -163,7 +164,10 @@
 
   // ------------------------------------------------------------------------------------------ 4.50: how they move
   // 4.50: the animations (which ones play is read from the paths: motion.js)
-  const prep = d => NM.prep(d.paths);
+  const prep = d => {                       // 4.55: teleports, dashes (motion.js moves()) first: prep() needs the marks
+    d._fx = NM.moves(d.paths, d.casts, i => (byI[i] ? byI[i].agent : ''));
+    NM.prep(d.paths);
+  };
   const motion = (path, t, p, hold = 'hold') => NM.motion(path, t, p, hold);
   function body(i, path) {                               // a dead player: where he fell and how (away from the killer)
     const k = deathOf(i, S.t);

@@ -15,7 +15,13 @@ from ..stats import trainingeffect as te
 from ..stats import mapangles as ma
 from ..stats import sandbox as sbx
 from ..stats import trainer as tr
+from ..stats import drills as dr
 from .aim import MAX_LOG, _lock, _read, _write
+from .drills import read_keys
+
+# 4.55: the keys the aim trainer uses (your keys from Aim on maps; the labels for what they do here)
+TRAINER_KEYS = [["shoot", "Shoot"], ["next", "Start, go on, next scenario"], ["restart", "Play it again"],
+                ["full", "Full screen"]]
 
 
 def trainer_data(sr, pid: int) -> dict:
@@ -136,7 +142,9 @@ def register(app, store, sr, view_profile, filter_rows, known_maps: list[str] = 
                                scenarios=tr.scenario_list(), summary=tr.summary(runs), plans=pl, levels=tr.LEVELS,
                                start=start if start in pl or start in skill_plans or start in prep_plans else "",
                                play=play if play in tr.SCENARIOS or play in extra else "", setup=setup, numbers=tr.numbers(setup),
-                               n_runs=len(runs), today=sum(1 for r in runs if r.get("d") == date.today().isoformat()))
+                               n_runs=len(runs), today=sum(1 for r in runs if r.get("d") == date.today().isoformat()),
+                               keys=read_keys(store.data_dir, g.user.id), key_defaults=dr.default_keys(),
+                               key_actions=TRAINER_KEYS)
 
     @app.get("/profiles/<int:pid>/trainer/insights")
     def aim_insights(pid: int):

@@ -7,6 +7,20 @@
 {%- endif -%}
 {%- endmacro %}
 {% block head %}<style>
+/* 4.55: your keys (keys.js), as in Aim on maps */
+#tr-kpanel .kb-rows{display:flex;flex-direction:column}
+#tr-kpanel .kb-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid var(--line)}
+#tr-kpanel .kb-row:first-child{border-top:0}
+#tr-kpanel .kb-name{flex:1 1 auto;font-weight:600}
+#tr-kpanel .kb-key{font:inherit;font-weight:700;min-width:110px;border-radius:9px;padding:7px 12px;border:1px solid var(--line2);background:var(--panel3);color:var(--text);cursor:pointer}
+#tr-kpanel .kb-key.empty{font-weight:400;color:var(--muted);border-style:dashed;background:transparent}
+#tr-kpanel .kb-key.on{background:#ff4f8b;border-color:#ff4f8b;color:#fff}
+#tr-kpanel .kb-key.bad{border:2px solid #e2505f;color:#ff9aa6}
+#tr-kpanel .kb-x{font:inherit;border:0;background:transparent;color:var(--muted);cursor:pointer;font-size:16px;padding:4px}
+#tr-kpanel .kb-clash{color:#ff9aa6;margin:8px 0 0}#tr-kpanel .kb-foot{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 0}
+#tr-kpanel .kb-msg{font-size:13px;color:var(--muted)}
+#tr-kpanel .kb-row{border-top-color:#36445a}#tr-kpanel .kb-key{background:#0f1620;border-color:#36445a;color:#e7ecf3}
+#tr-kpanel .kb-key.empty{background:transparent;color:#9aa6b8}#tr-kpanel .kb-key.on{background:#ff4f8b;border-color:#ff4f8b;color:#fff}
 .sb-list{display:grid;gap:8px;margin-bottom:12px}
 .sb-item{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .sb-acts{display:flex;gap:6px;flex-wrap:wrap}
@@ -429,6 +443,11 @@
   <div class="tr-count" id="tr-count" hidden></div>
   <div class="tr-panel" id="tr-panel"></div>
   <div class="tr-warn" id="tr-warn" hidden></div>
+  <div class="tr-xpanel" id="tr-kpanel" hidden>
+    <div class="tr-xhead"><h2>Keys</h2><button type="button" class="btn primary sm" data-a="kdone">Done</button></div>
+    <p class="small muted">The same keys as in Aim on maps, saved with your account. Click a key, then press the key or mouse button you want.</p>
+    <div id="tr-kbox"></div>
+  </div>
   <div class="tr-xpanel" id="tr-xpanel" hidden>
     <div class="tr-xhead"><h2>Crosshair</h2><button type="button" class="btn primary sm" data-a="xdone">Done</button></div>
 <div class="tr-xh-body" id="tr-xform">
@@ -475,9 +494,11 @@ window.NEXUS_TRAINER = {{ {
   'scenarios': scenarios, 'plans': all_plans, 'start': start, 'play': play, 'can_save': can_save, 'scale': setup.scale or 1,
   'summary': summary, 'angles': angles, 'sandbox': sandbox,
   'sens_base': setup.sens or 0.4, 'dpi': setup.get('dpi'), 'crosshair': setup.get('crosshair'), 'sens_rec': rec.sens if rec and rec.edge else None,
+  'keys': keys, 'defaults': key_defaults, 'actions': key_actions, 'keys_api': url_for('aim_keys'),
   'urls': {'sens': url_for('trainer_sens', pid=p.id), 'run': url_for('trainer_run', pid=p.id), 'setup': url_for('trainer_setup', pid=p.id), 'aim': url_for('aim', pid=p.id), 'callouts': url_for('callouts', pid=p.id)}
 }|tojson }};
 </script>
+<script src="{{ url_for('static', filename='keys.js') }}?v={{ app_version }}"></script>
 <script src="{{ url_for('static', filename='trainer.js') }}?v={{ app_version }}"></script>
 <script src="{{ url_for('static', filename='sandbox.js') }}?v={{ app_version }}"></script>
 {% endblock %}

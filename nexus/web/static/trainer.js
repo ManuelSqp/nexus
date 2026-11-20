@@ -10,6 +10,13 @@
   const $ = id => document.getElementById(id);
   const stage = $('tr-stage'), canvas = $('tr-canvas'), panel = $('tr-panel'), hud = $('tr-hud');
   const byId = Object.fromEntries(C.scenarios.map(s => [s.id, s]));
+  // 4.55: your own keys, the same as in Aim on maps (keys.js, saved with your account): shoot, start / go on / next
+  // scenario, play again, full screen. Esc always pauses.
+  const KB = window.NexusKeys;
+  const KEYS0 = {shoot: ['Mouse0', ''], next: ['Space', ''], restart: ['Backspace', ''], full: ['KeyF', '']};
+  let keys = KB ? KB.normalize(C.keys, C.defaults || KEYS0) : KEYS0;
+  const isKey = (a, code) => !!code && (keys[a] || []).includes(code);
+  const keyName = a => (KB ? KB.label((keys[a] || [])[0]) : (keys[a] || [])[0]) || '–';
   byId.mix = {id: 'mix', name: 'Sens test', kind: 'click', seconds: 20,
               about: 'Flicks and small corrections, then a target to track. Shoot the targets, then stay on the moving one.'};
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -1346,9 +1353,16 @@
   });
   canvas.addEventListener('mousedown', e => {
     if (document.pointerLockElement !== canvas) return;
-    if (e.button === 0) { firing = true; shoot(); }
+    if (isKey('shoot', 'Mouse' + e.button)) { e.preventDefault(); firing = true; shoot(); }
   });
-  document.addEventListener('mouseup', e => { if (e.button === 0) firing = false; });
+  document.addEventListener('mouseup', e => { if (isKey('shoot', 'Mouse' + e.button)) firing = false; });
+  canvas.addEventListener('contextmenu', e => { if (document.pointerLockElement === canvas) e.preventDefault(); });
+  canvas.addEventListener('wheel', e => {                 // shooting on the wheel: one shot a notch
+    if (document.pointerLockElement !== canvas) return;
+    e.preventDefault();
+    if (isKey('shoot', e.deltaY < 0 ? 'WheelUp' : 'WheelDown')) shoot();
+  }, {passive: false});
+  document.addEventListener('keyup', e => { if (isKey('shoot', e.code)) firing = false; });
   async function lock() {
     try {
       const p = canvas.requestPointerLock({unadjustedMovement: true});
@@ -1393,7 +1407,8 @@
       return;
     }
     hud.hidden = true;
-    setPanel(`${planStep()}<h2>${esc(sc.name)}</h2><p>${esc(sc.about)}</p><p>${st.seconds} seconds · ${sc.kind === 'track' ? 'hold the left mouse button on the target' : 'left click to shoot'} · Esc pauses · F fullscreen</p>
+    const shootKey = keyName('shoot');
+    setPanel(`${planStep()}<h2>${esc(sc.name)}</h2><p>${esc(sc.about)}</p><p>${st.seconds} seconds · ${sc.kind === 'track' ? `hold ${esc(shootKey)} on the target` : `${esc(shootKey)} to shoot`} · Esc pauses · ${esc(keyName('full'))} fullscreen · ${esc(keyName('next'))} starts</p>
       <div class="tr-btns"><button type="button" class="btn primary" data-a="go">Click to start</button><button type="button" class="btn ghost" data-a="quit">Back</button>${xhBtn()}</div>`);
   }
   function showPaused(again) {
@@ -1403,7 +1418,7 @@
       <div class="tr-btns"><button type="button" class="btn primary" data-a="resume" id="tr-resume" disabled>Continue</button>
       ${finder ? '' : '<button type="button" class="btn ghost" data-a="restart">Start over</button>'}
       <button type="button" class="btn ghost" data-a="quit">${finder ? 'Stop the sens finder' : 'Quit'}</button>${xhBtn()}</div>
-      <p style="margin:12px 0 0;font-size:12.5px">Enter or Space also continues.</p>`);
+      <p style="margin:12px 0 0;font-size:12.5px">Enter or ${esc(keyName('next'))} also continues.</p>`);
     const b = $('tr-resume'), wait = Math.max(0, 900 - (performance.now() - unlockedAt));
     setTimeout(() => { if (b.isConnected) { b.disabled = false; b.focus(); } }, wait);
   }
@@ -1454,7 +1469,8 @@
     return `<p class="tr-stall">The browser stood still ${stalls.length}× (up to ${Math.max(...stalls)} ms) during this, not the trainer: usually
       another program or a browser tab working in the background. Closing those helps.</p>`;
   }
-  const xhBtn = () => '<button type="button" class="btn ghost" data-a="xh">Crosshair</button>';
+  const xhBtn = () => '<button type="button" class="btn ghost" data-a="xh">Crosshair</button>' +
+    (KB && C.keys_api ? '<button type="button" class="btn ghost" data-a="keys">Keys</button>' : '');
 
   async function finish() {
     if (finder) { finderNext(); return; }
@@ -1638,7 +1654,24 @@
     else if (act === 'next') { plan.i++; newRun(plan.items[plan.i].id); showReady(); }
     else if (act === 'quit') close();
     else if (act === 'xh') openXh();
+    else if (act === 'keys') openKeys();
   });
+  // your keys inside the trainer (the same panel as the crosshair's)
+  const kPanel = $('tr-kpanel');
+  let kEd = null;
+  function openKeys() {
+    if (!kPanel || !KB) return;
+    panel.hidden = true; kPanel.hidden = false;
+    if (!kEd) kEd = KB.editor($('tr-kbox'), {keys, defaults: C.defaults || KEYS0, actions: C.actions, api: C.keys_api,
+                                             onSave: k => { keys = k; }});
+  }
+  function closeKeys() {
+    if (!kPanel || kPanel.hidden) return false;
+    kPanel.hidden = true; panel.hidden = !panel.innerHTML;
+    if (st && st.phase === 'ready') showReady();           // the keys on it
+    return true;
+  }
+  if (kPanel) kPanel.addEventListener('click', e => { if (e.target.closest('[data-a="kdone"]')) closeKeys(); });
   // the crosshair settings inside the trainer: your real crosshair stays on the game behind them
   const xPanel = $('tr-xpanel');
   function openXh() { if (!xPanel) return; panel.hidden = true; xPanel.hidden = false; xShow(); const f = xPanel.querySelector('input,button'); if (f) f.focus(); }
@@ -1647,14 +1680,26 @@
   document.addEventListener('keydown', e => {
     if (!stage.classList.contains('on')) return;
     if (e.key === 'Escape' && xPanel && !xPanel.hidden) { closeXh(); return; }
+    if (e.key === 'Escape' && closeKeys()) return;
+    if (kPanel && !kPanel.hidden) return;                                          // choosing your keys
     if (e.target && e.target.closest && e.target.closest('input')) return;          // typing a value in the crosshair panel
     if (e.key === 'Escape' && st && (st.phase === 'ready' || st.phase === 'done') && !document.pointerLockElement
         && performance.now() - unlockedAt > 600) close();
-    if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); toggleFs(); }
-    if ((e.key === 'Enter' || e.key === ' ') && st && st.phase === 'paused' && !document.pointerLockElement) {
+    const plain = !e.ctrlKey && !e.metaKey && !e.altKey;
+    if (document.pointerLockElement === canvas && isKey('shoot', e.code)) {         // shooting on a key
+      e.preventDefault();
+      if (!e.repeat) { firing = true; shoot(); }
+      return;
+    }
+    if (isKey('full', e.code) && plain) { e.preventDefault(); toggleFs(); return; }
+    if (!st || document.pointerLockElement || !plain) return;
+    const click = sel => { const b = panel.querySelector(sel); if (b && !b.disabled) { e.preventDefault(); b.click(); return true; } return false; };
+    if ((e.key === 'Enter' || isKey('next', e.code)) && st.phase === 'paused') {
       const b = $('tr-resume');
       if (b && !b.disabled) { e.preventDefault(); go(true); }
-    }
+    } else if (isKey('next', e.code) && st.phase === 'ready') click('[data-a="go"]');
+    else if (isKey('next', e.code) && st.phase === 'done') click('[data-a="next"]') || click('[data-a="restart"]');
+    else if (isKey('restart', e.code) && st.phase === 'done') click('[data-a="restart"]');
   });
   document.querySelectorAll('[data-play]').forEach(b => b.addEventListener('click', () => { plan = null; open(b.dataset.play); }));
   document.querySelectorAll('[data-plan]').forEach(b => b.addEventListener('click', () => {
@@ -1734,5 +1779,5 @@
     $('tr-ang-play').addEventListener('click', () => { choose(); open('map_angles'); });
     fill();
   })();
-  window.nexusTrainer = {addCustom, play: id => { plan = null; open(id); }, open, startFinder, xParse, xCode, crosshair: () => xh, finder: () => finder, state: () => st, aim: (y, p) => { yaw = y; pitch = p; }, shoot, score, step};   // for tests
+  window.nexusTrainer = {keys: () => keys, addCustom, play: id => { plan = null; open(id); }, open, startFinder, xParse, xCode, crosshair: () => xh, finder: () => finder, state: () => st, aim: (y, p) => { yaw = y; pitch = p; }, shoot, score, step};   // for tests
 })();
