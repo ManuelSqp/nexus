@@ -4,6 +4,25 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.56.0
+- **The enemies use their utility in Aim on maps** (hold, attack, entry, retake, post-plant). Each rep takes one real
+  round's worth of what their side threw around these fights in your replays (now and then a round without), at its
+  real time and place:
+  - **Retake / post-plant**: from the plant, on the spike's clock. The post-plant mollies on the spike, the smokes on
+    the way in, the retakers' flashes and smokes.
+  - **Hold**: from the peek. A flash thrown just before the swing pops before it (the peek waits for it).
+  - **Attack / entry**: when you get there, as far ahead as it was thrown before the fight.
+  - What it does: **smokes and walls** block sight both ways (you can't walk through a wall either), a **flash**
+    blinds you if it pops in front of you while you look (look away), **mollies** burn you (you have 150; 24 to 60 a
+    second depending on the agent, close to the game: defusing in one is how retakes are lost), **slows** halve your
+    speed, **recon** (a dart, a Haunt) and **traps** reveal you: the enemies pre-aim, react quicker and don't need to
+    be looking your way.
+  - Your health, *revealed* and *slowed* show next to your ammo.
+- On the spot: **Their utility** on / off, with how many rounds it comes from and what they throw (smokes, flashes,
+  mollies, …).
+- The drills of every match are worked out once more in the background (they now keep the utility around each fight).
+- German texts.
+
 ## 4.55.0
 - **Your keys in the aim trainer.** The trainer now uses the same keys as Aim on maps (saved with your account): shoot
   (any mouse button, key or the wheel), start / go on / next scenario (Space by default, Enter still works when

@@ -36,6 +36,7 @@ DEFAULT_REPS = {"hold": 20, "attack": 5, "track": 1, "clear": 3, "entry": 5, "re
 LISTS = {"hold": "angles", "attack": "angles", "track": "angles", "clear": "sites", "entry": "sites",
          "retake": "retakes", "postplant": "retakes"}      # which of a map's spots each kind of drill is played on
 FOES = (1, 2, 3)                                # entry, retake, post-plant: how many enemies (2 by default)
+UTIL_MODES = ("hold", "attack", "entry", "retake", "postplant")   # 4.56: the enemies use their utility
 
 
 def keys_file(data_dir, uid: int) -> Path:
@@ -159,7 +160,7 @@ def register(app, store, sr, view_profile) -> None:
                 "spots_api": url_for("aim_spots_api", pid=pid),
                 "play": url_for("aim_play", pid=pid, mode="MODE", map_name="MAP", sid="SID"),
                 "guns": list(dr.GUNS), "diffs": list(DIFFS), "peeks": list(PEEKS), "reps": DEFAULT_REPS,
-                "foes": list(FOES)}
+                "foes": list(FOES), "util_modes": list(UTIL_MODES)}
         return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot)
 
     @app.get("/api/profiles/<int:pid>/aim/drills")
@@ -297,6 +298,7 @@ def register(app, store, sr, view_profile) -> None:
         except ValueError:
             foes = 2
         foes = foes if foes in FOES else 2
+        util = mode in UTIL_MODES and a.get("util", "1") != "0"     # 4.56: their utility from your replays
         did = f"g-{mode}-{sid}"
         setup = _read(stats_dir(pid) / "trainer.json", {}).get("setup", {})
         runs = dr.read_runs(stats_dir(pid)).get(did, [])
@@ -309,7 +311,7 @@ def register(app, store, sr, view_profile) -> None:
                  "postplant": f"Post-plant {spot['dz']}"}[mode]
         boot = {"map": name, "api": "/api/maps3d/", "pid": pid, "mode": mode, "spot": spot, "title": title,
                 "drill": {"id": did, "map": name, "mode": mode, "where": spot["dz"]},
-                "opts": {"styles": styles, "diff": diff, "reps": reps, "react": DIFFS[diff], "foes": foes,
+                "opts": {"styles": styles, "diff": diff, "reps": reps, "react": DIFFS[diff], "foes": foes, "util": util,
                          "spike": dr.SPIKE_S, "defuse": dr.DEFUSE_S},
                 "runs_api": url_for("aim_drill_runs", pid=pid, drill_id=did), "can_save": can_edit,
                 "sens": setup.get("sens") or 0.4, "dpi": setup.get("dpi") or 800, "scale": setup.get("scale") or 1,

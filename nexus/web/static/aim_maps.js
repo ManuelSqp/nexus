@@ -127,11 +127,14 @@
   const SITES = new Set(['clear', 'entry']), SPIKE = new Set(['retake', 'postplant']);
   const FOES = new Set(['entry', 'retake', 'postplant']);       // how many enemies: 1, 2 or 3
   let G = null, gTimer = 0, sel = null;
-  const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}, foes: 2};
+  const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}, foes: 2, util: true};
+  // 4.56: the enemies' utility (what their side threw around these fights in your replays)
+  const ENEMY = {hold: 'a', attack: 'd', entry: 'd', retake: 'a', postplant: 'd'};
+  const UTIL_NAME = {smoke: 'smokes', flash: 'flashes', damage: 'mollies', slow: 'slows', wall: 'walls', recon: 'recon', trap: 'traps'};
   try { Object.assign(g, JSON.parse(localStorage.getItem('nexus.drills.g') || '{}')); } catch (e) {}
   // only our own values (from the lists the page came with), whatever was saved or picked
   const own = (list, v, dflt) => { const i = list.indexOf(v); return i >= 0 ? list[i] : dflt; };
-  g.diff = own(C.diffs, g.diff, 'medium'); g.gun = own(C.guns, g.gun, 'Vandal'); g.foes = own(C.foes || [1, 2, 3], g.foes, 2);
+  g.diff = own(C.diffs, g.diff, 'medium'); g.gun = own(C.guns, g.gun, 'Vandal'); g.foes = own(C.foes || [1, 2, 3], g.foes, 2); g.util = g.util !== false;
   g.styles = C.peeks.filter(k => Array.isArray(g.styles) && g.styles.includes(k));
   if (!g.styles.length) g.styles = ['wide'];
   g.map = typeof g.map === 'string' ? g.map : '';
@@ -246,6 +249,7 @@
     if (tab === 'hold') o.set('styles', g.styles.join(','));
     o.set('diff', g.diff); o.set('gun', g.gun); o.set('reps', String(g.reps[tab] || C.reps[tab]));
     if (FOES.has(tab)) o.set('foes', String(g.foes));
+    if (ENEMY[tab] && !g.util) o.set('util', '0');
     return C.play.replace('MODE', tab).replace('MAP', encodeURIComponent(G.map)).replace('SID', s.id) + '?' + o;
   }
   function spotCard() {
@@ -261,13 +265,19 @@
     const won = SITES.has(tab) ? '' : ` ${T('Defenders won')} ${Math.round(s.won_def / s.count * 100)} %.`;
     const foes = !FOES.has(tab) ? '' : `<fieldset class="am-opt"><legend>${esc(T(tab === 'postplant' ? 'Retakers' : tab === 'retake' ? 'Attackers' : 'Defenders'))}</legend>${(C.foes || [1, 2, 3]).map(n =>
       `<label class="am-chip"><input type="radio" name="am-foes" value="${n}" ${g.foes === n ? 'checked' : ''}> ${n}</label>`).join('')}</fieldset>`;
+    const side = ENEMY[tab], sets = side ? (s.util || []).filter(set => set.some(u => u[2] === side)) : [];
+    const kinds = [...new Set(sets.flat().filter(u => u[2] === side).map(u => u[0]))].filter(k => UTIL_NAME[k]);
+    const util = !side ? '' : `<fieldset class="am-opt"><legend>${esc(T('Their utility'))}</legend>${sets.length
+      ? `<label class="am-chip"><input type="radio" name="am-util" value="1" ${g.util ? 'checked' : ''}> ${esc(T('on'))}</label><label class="am-chip"><input type="radio" name="am-util" value="0" ${g.util ? '' : 'checked'}> ${esc(T('off'))}</label>
+        <small class="muted">${esc(T('from'))} ${sets.length} ${esc(T(sets.length === 1 ? 'round' : 'rounds'))}: ${kinds.map(k => esc(T(UTIL_NAME[k]))).join(', ')}</small>`
+      : `<small class="muted">${esc(T('None in your replays here yet.'))}</small>`}</fieldset>`;
     const styles = tab !== 'hold' ? '' : `<fieldset class="am-opt"><legend>${esc(T('How they peek'))}</legend>${C.peeks.map(k =>
       `<label class="am-chip"><input type="checkbox" data-style="${k}" ${g.styles.includes(k) ? 'checked' : ''}> ${esc(T(STYLE[k]))}</label>`).join('')}</fieldset>`;
     const best = (s.best || {})[tab];
     el.innerHTML = `<p class="muted small" translate="no">${esc(G.map)} · ${esc(s.dz)}</p>
       <h2 translate="no">${esc(title(s))}</h2>
       <p>${esc(T('Fought over'))} ${s.count} ${esc(T(s.count === 1 ? 'time in the replays.' : 'times in the replays.'))}${esc(won)} ${what}</p>
-      ${styles}${foes}
+      ${styles}${foes}${util}
       <fieldset class="am-opt"><legend>${esc(T(tab === 'track' ? 'How fast he strafes' : 'Difficulty'))}</legend>${C.diffs.map(k =>
         `<label class="am-chip"><input type="radio" name="am-diff" value="${k}" ${g.diff === k ? 'checked' : ''}> ${esc(T(DIFF[k]))}</label>`).join('')}</fieldset>
       <div class="am-row"><label>${esc(T('Gun'))} <select id="am-g-gun">${C.guns.map(n => `<option ${n === g.gun ? 'selected' : ''} translate="no">${esc(n)}</option>`).join('')}</select></label>
@@ -294,6 +304,7 @@
     } else if (t.name === 'am-diff') g.diff = own(C.diffs, t.value, g.diff);
     else if (t.id === 'am-g-gun') g.gun = own(C.guns, t.value, g.gun);
     else if (t.name === 'am-foes') g.foes = own(C.foes || [1, 2, 3], +t.value, g.foes);
+    else if (t.name === 'am-util') g.util = t.value === '1';
     else if (t.id === 'am-g-reps') g.reps[tab] = own(REPS[tab], +t.value, C.reps[tab]);
     saveG(); spotCard();
   });
