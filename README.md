@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.55.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.56.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -751,6 +751,12 @@ defenders' real way, kill the attackers on their post-plant places and defuse, h
 default) and **post-plant** (you play the spike, the retakers come in on their real routes at their real speed and go
 for it). The retake spots come from the fights after a plant in the map's replays: where the spike usually is, where
 attackers played it, the defenders' ways back in.
+
+**Their utility (4.56).** In hold, attack, entry, retake and post-plant the enemies use their utility: what their side
+really threw around these fights in your replays, one round's worth a rep, at its real time (from the fight, or from
+the plant). Smokes and walls block sight both ways, a flash blinds you if you look at it, mollies burn you (you have
+150; the damage a second is close to each agent's), slows slow you, recon and traps reveal you (they pre-aim: quicker,
+and they don't need to look your way). It can be switched off per drill (*Their utility* on the spot).
 
 ### Run it permanently
 

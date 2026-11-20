@@ -24,8 +24,8 @@ import os
 import time
 from pathlib import Path
 
-VERSION = 3                   # 2 (4.52): the fights of every match too (the general drills' spots); 3 (4.54): the
-                              # spike (post-plant fights: retakes, post-plants)
+VERSION = 4                   # 2 (4.52): the fights of every match too (the general drills' spots); 3 (4.54): the
+                              # spike (post-plant fights: retakes, post-plants); 4 (4.56): the utility around a fight
 LEAD_S = 1.5                  # the drill starts this long before the killer first had you in view
 MIN_LEAD_S = 2.5              # and at least this long before the kill
 SPOT_M = 3.0                  # deaths this close (and from the same callout) are one spot
@@ -171,6 +171,7 @@ def fights_of(ctx) -> list[dict]:
     if ctx is None or ctx.zones is None or ctx.mi is None:
         return out
     m = ctx.match
+    team_of_i = {i: m.team_of(p) for p, i in ctx.index.items()}
     for r in m.rounds:
         if r.index not in ctx.offsets or not r.kills:
             continue
@@ -214,7 +215,61 @@ def fights_of(ctx) -> list[dict]:
                              plant=[round(plant["x"], 2), round(plant["y"] if plant.get("y") is not None else d[1], 2),
                                     round(plant["z"], 2)],
                              droute=_timed(dp, t, ROUTE_S))
+            # 4.56: the utility both teams used around it (after a plant: on the site until the spike goes off)
+            sides = {i: ("a" if r.side_of(tm) == "attack" else "d") for i, tm in team_of_i.items() if tm}
+            post = "post" in fight
+            near = fight["plant"] if post else [(a[0] + d[0]) / 2, 0, (a[2] + d[2]) / 2]
+            until = t + (SPIKE_S - fight["post"] if post else UTIL_AFTER_S)
+            util = _fight_util(view.get("util") or [], sides, t, near, until,
+                               UTIL_NEAR_M + (10 if post else math.hypot(a[0] - d[0], a[2] - d[2]) / 2))
+            if util:
+                fight["util"] = util
+            fight["t"] = round(t, 2)
             out.append(fight)
+    return out
+
+
+UTIL_TYPES = ("smoke", "damage", "slow", "flash", "wall", "recon", "trap")
+UTIL_BEFORE_S = 15.0          # utility thrown this long before a fight still counts for it
+UTIL_AFTER_S = 5.0            # and this long after
+UTIL_NEAR_M = 25.0            # this close to the fight (to the spike after a plant)
+UTIL_MAX = 16
+
+
+def _fight_util(util: list, sides: dict, t: float, near: list, until: float, radius: float) -> list:
+    """[[type, agent, side ("a" attackers / "d" defenders), seconds from the fight, how long (None: till the round
+    ends), x, y, z], …] of the round's utility near a fight (4.56)."""
+    out = []
+    for u in util:
+        side = sides.get(u.get("owner"))
+        if u.get("type") not in UTIL_TYPES or not side or u.get("x") is None or u.get("z") is None:
+            continue
+        if not t - UTIL_BEFORE_S <= u["t0"] <= until:
+            continue
+        if math.hypot(u["x"] - near[0], u["z"] - near[2]) > radius:
+            continue
+        dur = None if u.get("t1") is None else round(max(0.0, u["t1"] - u["t0"]), 2)
+        y = None if u.get("y") is None else round(u["y"], 2)
+        out.append([u["type"], u.get("agent") or "", side, round(u["t0"] - t, 2), dur, round(u["x"], 2), y,
+                    round(u["z"], 2)])
+    out.sort(key=lambda x: x[3])
+    return out[:UTIL_MAX]
+
+
+def _util_sets(fs: list, shift=None, n: int = 10) -> list:
+    """The utility of up to n fights (one per round, the most used first): [[item, …], …]; shift(f) moves the times
+    (after a plant: from the plant instead of the fight)."""
+    out, seen = [], set()
+    for f in sorted(fs, key=lambda f: -len(f.get("util") or [])):
+        items = f.get("util") or []
+        key = (f.get("round"), tuple(items[0][:4]) if items else ())
+        if not items or key in seen:
+            continue
+        seen.add(key)
+        dt = shift(f) if shift else 0.0
+        out.append([[u[0], u[1], u[2], round(u[3] + dt, 2), *u[4:]] for u in items])
+        if len(out) >= n:
+            break
     return out
 
 
@@ -275,7 +330,7 @@ def spots(map_name: str, fights: list[dict]) -> dict:
                        "peeks": _distinct(sorted(A, key=lambda p: math.hypot(p[0] - att[0], p[2] - att[2])), 5),
                        "start": start, "start_yaw": _yaw_to(start, hold),
                        "defs": _distinct(sorted(D, key=lambda p: math.hypot(p[0] - hold[0], p[2] - hold[2])), 4),
-                       "dist": round(dist, 1), "route": best["route"]})
+                       "dist": round(dist, 1), "route": best["route"], "util": _util_sets(fs)})
     angles.sort(key=lambda a: (-a["count"], a["dz"], a["az"]))
     sites = []
     by_dz: dict[str, list] = {}
@@ -300,7 +355,8 @@ def spots(map_name: str, fights: list[dict]) -> dict:
             continue
         sid = hashlib.sha1(f"{map_name}|site|{dz}|{az}".encode()).hexdigest()[:10]
         sites.append({"id": sid, "map": map_name, "dz": dz, "az": az, "count": len(fs), "route": best["route"],
-                      "hides": hides, "start_yaw": _yaw_to(best["route"][0], best["route"][min(3, len(best["route"]) - 1)])})
+                      "hides": hides, "start_yaw": _yaw_to(best["route"][0], best["route"][min(3, len(best["route"]) - 1)]),
+                      "util": _util_sets(fs)})
     sites.sort(key=lambda a: (-a["count"], a["dz"]))
     return {"angles": angles, "sites": sites, "retakes": retakes(map_name, fights)}
 
@@ -345,7 +401,9 @@ def retakes(map_name: str, fights: list[dict]) -> list[dict]:
         sid = hashlib.sha1(f"{map_name}|retake|{site}".encode()).hexdigest()[:10]
         out.append({"id": sid, "map": map_name, "site": site, "dz": site, "az": "", "count": len(fs),
                     "won_def": sum(1 for f in fs if f["won"] == "defense"), "plant": plant, "posts": posts,
-                    "routes": routes, "left": max(20.0, min(SPIKE_S, left))})
+                    "routes": routes, "left": max(20.0, min(SPIKE_S, left)),
+                    # 4.56: the utility after the plant, from the plant
+                    "util": _util_sets(fs, lambda f: f["post"])})
     out.sort(key=lambda a: (-a["count"], a["site"]))
     return out
 
