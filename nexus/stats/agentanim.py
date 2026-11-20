@@ -28,7 +28,7 @@ import numpy as np
 
 from .. import gamefiles as gf
 
-VERSION = 2
+VERSION = 3                              # 3 (4.55): sprinting
 FPS = 30.0
 # which joints carry translations from the clip (the rest keep the agent's own)
 MOVE = ("Root", "Splitter")
@@ -48,6 +48,8 @@ CLIPS: dict[str, tuple[tuple[str, ...], str]] = {
     **{f"walk_{d}": ((f"TP_Core_Walk{d}_LB",), "lb") for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW")},
     **{f"run_{d}": ((f"TP_Core_Run{d}_LB",), "lb") for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW")},
     **{f"cwalk_{d}": ((f"TP_Core_CrouchWalk{d}_LB",), "lb") for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW")},
+    # 4.55: faster than running (Neon's High Gear, Reyna's Dismiss) and dashes (one long stride)
+    **{f"sprint_{d}": ((f"TP_Core_Sprint{d}_LB",), "lb") for d in ("N", "NE", "E", "SE", "S", "SW", "W", "NW")},
     "fall": (("TP_Core_Falling_LB",), "lb"),
     "death_front": (("TP_Core_Death_Body_Front_LG", "TP_Core_Death_Body_Front_SM"), "full"),
     "death_back": (("TP_Core_Death_Body_Back_LG", "TP_Core_Death_Body_Back_SM"), "full"),
@@ -55,7 +57,7 @@ CLIPS: dict[str, tuple[tuple[str, ...], str]] = {
     "death_right": (("TP_Core_Death_Body_Right_LG", "TP_Core_Death_Body_Right_SM"), "full"),
     "death_head": (("TP_Core_Death_Headshot01", "TP_Core_Death_Head_Front_LG"), "full"),
 }
-LOOP = {"idle", "hold", "pistol", "crouch", "fall"} | {k for k in CLIPS if k.startswith(("walk_", "run_", "cwalk_"))}
+LOOP = {"idle", "hold", "pistol", "crouch", "fall"} | {k for k in CLIPS if k.startswith(("walk_", "run_", "cwalk_", "sprint_"))}
 ANYWHERE = {"pistol"}                     # clips found outside the _Core folders too (by their TP_Core_ name)
 SIDEARMS = ("BasePistol", "Slim", "AutoPistol", "Luger", "Revolver", "Compact")     # held like a pistol
 

@@ -4,6 +4,24 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.55.0
+- **Your keys in the aim trainer.** The trainer now uses the same keys as Aim on maps (saved with your account): shoot
+  (any mouse button, key or the wheel), start / go on / next scenario (Space by default, Enter still works when
+  paused), play it again (Backspace) and full screen (F). A **Keys** button next to *Crosshair* opens them inside the
+  trainer; the start screen shows the keys you have.
+- **Movement abilities in the replay viewer.**
+  - **Teleports** (Omen's Shrouded Step and ult, Chamber's Rendezvous, Yoru's Gatecrash, Waylay's Refract) jump
+    instead of sliding through walls, with a puff in the agent's colour where they left and where they came out. The
+    model stands still around the jump instead of running on the spot.
+  - **Dashes** (Jett's Tailwind, Waylay's Lightspeed) take one long stride with a short trail; **Updraft** and
+    **Blast Pack** leave a puff on the floor where they took off.
+  - **Sprinting**: anyone faster than running (Neon's High Gear, Reyna's Dismiss) plays the game's sprint animation.
+  - Which ability it was comes from the replay's casts. Without them (or for an agent not on the list), a jump of more
+    than 6 m in a moment nobody can run is still drawn as a teleport.
+- **Server:** `nexus build-game` once (without `--force`) adds the sprint animations (`TP_Core_Sprint*_LB` in
+  `Characters/_Core/3P/Anims`, already in a full `_Core` export). Without them a sprint plays the run animation.
+- German texts.
+
 ## 4.54.0
 - **Practice › Aim on maps: entry, retake and post-plant.** Three new tabs next to *Clear a site*, on the same real
   spots from your replays:

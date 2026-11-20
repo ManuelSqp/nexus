@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.54.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.55.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -167,7 +167,7 @@ KovaaK's playlists by share code (paste it under *Sandbox › Online Playlists �
 the coach finds more online.
 
 **Aim trainer:** *Practice › Aim trainer* is an aim trainer in the browser (and in the Nexus app) that plays like
-Valorant: your Valorant sensitivity (0.07° per mouse count × sens), Valorant's field of view and raw mouse input
+Valorant (4.55: with your own keys from Aim on maps, the *Keys* button in the trainer): your Valorant sensitivity (0.07° per mouse count × sens), Valorant's field of view and raw mouse input
 (Chrome, Edge, the Nexus app; other browsers get a warning). A **scenario library** of 100 scenarios (4.24) in eight
 groups, each marked easy, medium or hard: *flicks* (head-line, close, mid, far, wide, vertical, tiny, spider, low,
 high, behind you), *switching* (grid, six shot, head-line, close, tiny, double and triple tap, wide walls, bursts),
@@ -725,6 +725,13 @@ two more folders the same way and copy them anywhere into `data/game/` too:
 `data/agents3d/guns/`. Without them the agents stand in their default pose as before. Which animation plays is
 read from the replay (speed, direction compared to where the player looks, up or down, crouching from the height
 when the replay shows it); the legs follow the distance walked, so the feet don't slide.
+
+**Movement abilities (4.55).** Teleports (Omen, Chamber, Yoru, Waylay's Refract) jump in the replay instead of
+sliding through the walls, with a puff where they left and where they came out; dashes (Jett, Waylay) take one long
+stride with a trail; Updraft and Blast Pack leave a puff on the floor; anyone faster than running (Neon, Reyna's
+Dismiss) sprints with the game's sprint (`TP_Core_Sprint*_LB`, next to the other core animations: run
+`nexus build-game` once to add them). Which ability it was comes from the replay's casts; without them a jump nobody
+can run is still drawn as a teleport.
 
 **Aim on maps (4.51).** With the maps built from the game's files, Practice › Aim on maps turns your deaths into aim
 drills: you stand where you died and your killer comes out the way he did (his path from the replay, his agent and
