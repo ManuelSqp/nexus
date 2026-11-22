@@ -63,7 +63,7 @@
   const HP_ME = 150;                        // 100 + heavy shields
   // molly damage a second (close to the game's); anything else that burns: DPS_DEFAULT
   const DPS = {Brimstone: 60, Phoenix: 60, 'KAY/O': 60, Killjoy: 45, Viper: 24, Raze: 55, Gekko: 40, Tejo: 50, Vyse: 40};
-  const DPS_DEFAULT = 40, SLOW = 0.5, REVEAL_REACT = 0.6;
+  const DPS_DEFAULT = 40, SLOW = 0.5, REVEAL_REACT = 0.6, SOLID_A = 1.8;
   const AGENTS = Object.keys(C.agents || {});
   const RIFLES = ['Vandal', 'Phantom', 'Vandal', 'Phantom', 'Spectre', 'Sheriff'];
   const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -754,10 +754,15 @@
   }
 
   // ------------------------------------------------------------------------------------------ for map3d.js
+  // 4.56.1: someone fully behind (or in) a smoke isn't drawn: his head and his chest both behind it
+  function smoked(f) {
+    const hb = hitboxes(f), hd = hb[0], chest = hb.find(h => h[0] === 'body');
+    return !!hd && throughSmoke(eye(), hd[1]) && (!chest || throughSmoke(eye(), chest[2]));
+  }
   function models() {
     const out = [];
     for (const f of S.foes) {
-      if (!f.url || hiding(f)) continue;
+      if (!f.url || hiding(f) || smoked(f)) continue;
       const p = foeAt(f, f.dead ? f.dead.t : S.t);
       if (!p) continue;
       const o = {key: f.key, url: f.url, x: p[0], y: p[1], z: p[2], yaw: p[3], col: ENEMY};
@@ -772,7 +777,9 @@
     return out;
   }
   function objects() {
-    const out = NM.utilObjects(utilList(), S.t, C.util_col);
+    // 4.56.1: smokes and walls are solid here, as in the game (the replay viewer keeps them see-through): an alpha
+    // over 1 leaves only the soft rim see-through
+    const out = NM.utilObjects(utilList(), S.t, C.util_col).map(o => (o.block ? {...o, a: SOLID_A} : o));
     if (SPIKE && SP && SP.plant) {           // the spike (blinking faster as it runs out)
       const P = SP.plant, y = floor(P[0], P[2], P[1]) ?? P[1], left = S.spike ? S.spike.left : SP.left;
       const on = Math.sin(performance.now() / 1000 * Math.PI * (left < 10 ? 8 : 3)) > -0.2;

@@ -4,6 +4,12 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.56.1
+- **Smokes are solid in the drills**, as in the game: you could see the enemy through a smoke (it blocked sight for
+  the drill already, but it was drawn see-through and the enemy model was drawn anyway). Now smokes and walls are
+  opaque in Aim on maps (and in the death drills), and anyone whose head and chest are both behind a smoke isn't
+  drawn. The replay viewer keeps them see-through.
+
 ## 4.56.0
 - **The enemies use their utility in Aim on maps** (hold, attack, entry, retake, post-plant). Each rep takes one real
   round's worth of what their side threw around these fights in your replays (now and then a round without), at its
