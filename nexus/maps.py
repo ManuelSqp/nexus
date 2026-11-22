@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import math
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -107,19 +108,49 @@ def _parse_maps(payload: dict) -> list[MapInfo]:
     return out
 
 
+MAPS_MAX_AGE_S = 7 * 86400      # 4.56.2: the cached list is fetched again after a week (new maps: Summit)
+MAPS_RETRY_S = 3600              # offline: try again at most once an hour (the old list stays meanwhile)
+
+
 class MapRegistry:
     def __init__(self, cache_dir: Path):
         self.cache_file = Path(cache_dir) / "valorant_api_maps.json"
+        self.tried_file = Path(cache_dir) / "valorant_api_maps.tried"
         self._maps: list[MapInfo] | None = None
+
+    def _fetch(self) -> None:
+        r = requests.get(VALORANT_API_MAPS, timeout=30)
+        r.raise_for_status()
+        _parse_maps(r.json())                       # only a list that reads replaces the old one
+        self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self.cache_file.with_suffix(".tmp")
+        tmp.write_text(r.text)
+        tmp.replace(self.cache_file)
+
+    def _stale(self) -> bool:
+        """4.56.2: the list was only ever fetched once, so maps released after that (Summit) were missing
+        everywhere. Older than a week: fetch it again (at most once an hour if that fails; the old one stays)."""
+        now = time.time()
+        try:
+            if now - self.cache_file.stat().st_mtime < MAPS_MAX_AGE_S:
+                return False
+            if self.tried_file.exists() and now - self.tried_file.stat().st_mtime < MAPS_RETRY_S:
+                return False
+            self.tried_file.touch()
+        except OSError:
+            return False
+        return True
 
     def load(self, refresh: bool = False) -> list[MapInfo]:
         if self._maps is not None and not refresh:
             return self._maps
         if refresh or not self.cache_file.exists():
-            r = requests.get(VALORANT_API_MAPS, timeout=30)
-            r.raise_for_status()
-            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
-            self.cache_file.write_text(r.text)
+            self._fetch()
+        elif self._stale():
+            try:
+                self._fetch()
+            except Exception:                       # offline, valorant-api down: keep the list we have
+                pass
         self._maps = _parse_maps(json.loads(self.cache_file.read_text()))
         return self._maps
 

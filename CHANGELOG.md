@@ -4,6 +4,15 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.56.2
+- **Summit (and every map that comes out later) shows up.** The list of maps from valorant-api.com (callouts,
+  minimaps, where things are on them) was downloaded once and never again, so a map released after that was missing:
+  no Map angles or Map prep for Summit, and no callouts or minimap for Summit matches. Now the list is fetched again
+  when it's older than a week (offline: the old one stays, and it tries again at most once an hour; a broken download
+  never replaces it).
+- **Map angles on maps that name their callouts differently**: a site without a callout called *Main*, *Lobby* or
+  *Link* uses the site's callout furthest from it (within reach) as the way in.
+
 ## 4.56.1
 - **Smokes are solid in the drills**, as in the game: you could see the enemy through a smoke (it blocked sight for
   the drill already, but it was drawn see-through and the enemy model was drawn anyway). Now smokes and walls are
