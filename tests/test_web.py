@@ -3136,7 +3136,7 @@ def test_comp_sheet(app, monkeypatch):
     assert "hsla(120," in page and "Search the web for all maps" in page and "Comp sheet" in page
     me = names["adv1ce"]
     edit = c.get(f"/teams/{tid}/sheet?edit={me}").data.decode()
-    assert 'class="poolform"' in edit and "+ add agent" in edit
+    assert 'class="pe"' in edit and 'data-zone="can"' in edit      # 4.60: the drag editor
 
     # the owner saves a pool: own order, an added agent, one he won't play
     r = c.post(f"/teams/{tid}/sheet/pool/{me}", data={"order": "Viper,Jett,nobody", "no": "Sova"})

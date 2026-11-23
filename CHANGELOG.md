@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.60.0
+- **Comp sheet: a new agent pool editor.** You see your own pool first, big: every agent is a tile (icon, name,
+  games), your pool in order (best first, green to red), then *Can play* with every other agent (no more adding them
+  one by one) and *Won't play*. Drag tiles between them and within your pool, with the mouse or on a touch screen,
+  or with the keyboard (← → move, Enter in / out of the pool, Delete: won't play). It saves as you go ("saved").
+- **You edit only your own pool.** Before, the team owner could edit everyone's. Now each player edits his own
+  (linked by the in-game name under *Account*, or by the owner in *Team settings*); the owner keeps only the pools
+  of players nobody is linked to (*Edit for them*), since they can't do it themselves.
+- **The team's pools behind a switch** (*The team's pools*, remembered): the others read-only, a column each, top 8
+  and *Show all agents*. On by default when you aren't linked to a player.
+
 ## 4.59.1
 - **Code scanning** (the high alert "DOM text reinterpreted as HTML" in aim_maps.js from 4.58.0): the spot card
   (your agent's abilities, the options) and the *Practice what cost you rounds* box put everything into the page
