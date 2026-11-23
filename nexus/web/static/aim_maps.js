@@ -127,14 +127,22 @@
   const SITES = new Set(['clear', 'entry']), SPIKE = new Set(['retake', 'postplant']);
   const FOES = new Set(['entry', 'retake', 'postplant']);       // how many enemies: 1, 2 or 3
   let G = null, gTimer = 0, sel = null;
-  const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}, foes: 2, util: true};
+  const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}, foes: 2, util: true, agent: ''};
   // 4.56: the enemies' utility (what their side threw around these fights in your replays)
   const ENEMY = {hold: 'a', attack: 'd', entry: 'd', retake: 'a', postplant: 'd'};
+  // 4.58: your agent (their C, Q and E in the drill; ultimates aren't in the drills)
+  function agentPick() {
+    if (!ENEMY[tab] || !C.agents) return '';
+    const kit = C.agents[g.agent] || null;
+    return `<fieldset class="am-opt"><legend>${esc(T('Your agent'))}</legend><select id="am-g-agent"><option value="">${esc(T('none (no abilities)'))}</option>${
+      Object.keys(C.agents).map(a => `<option value="${esc(a)}" ${a === g.agent ? 'selected' : ''} translate="no">${esc(a)}</option>`).join('')}</select>
+      ${kit ? `<small class="muted">${Object.entries(kit).map(([k, n]) => `${k} <span translate="no">${esc(n)}</span>`).join(' · ')}</small>` : ''}</fieldset>`;
+  }
   const UTIL_NAME = {smoke: 'smokes', flash: 'flashes', damage: 'mollies', slow: 'slows', wall: 'walls', recon: 'recon', trap: 'traps'};
   try { Object.assign(g, JSON.parse(localStorage.getItem('nexus.drills.g') || '{}')); } catch (e) {}
   // only our own values (from the lists the page came with), whatever was saved or picked
   const own = (list, v, dflt) => { const i = list.indexOf(v); return i >= 0 ? list[i] : dflt; };
-  g.diff = own(C.diffs, g.diff, 'medium'); g.gun = own(C.guns, g.gun, 'Vandal'); g.foes = own(C.foes || [1, 2, 3], g.foes, 2); g.util = g.util !== false;
+  g.diff = own(C.diffs, g.diff, 'medium'); g.gun = own(C.guns, g.gun, 'Vandal'); g.foes = own(C.foes || [1, 2, 3], g.foes, 2); g.util = g.util !== false; g.agent = (C.agents || {})[g.agent] ? g.agent : '';
   g.styles = C.peeks.filter(k => Array.isArray(g.styles) && g.styles.includes(k));
   if (!g.styles.length) g.styles = ['wide'];
   g.map = typeof g.map === 'string' ? g.map : '';
@@ -250,6 +258,7 @@
     o.set('diff', g.diff); o.set('gun', g.gun); o.set('reps', String(g.reps[tab] || C.reps[tab]));
     if (FOES.has(tab)) o.set('foes', String(g.foes));
     if (ENEMY[tab] && !g.util) o.set('util', '0');
+    if (ENEMY[tab] && g.agent) o.set('agent', g.agent);
     return C.play.replace('MODE', tab).replace('MAP', encodeURIComponent(G.map)).replace('SID', s.id) + '?' + o;
   }
   function spotCard() {
@@ -277,7 +286,7 @@
     el.innerHTML = `<p class="muted small" translate="no">${esc(G.map)} · ${esc(s.dz)}</p>
       <h2 translate="no">${esc(title(s))}</h2>
       <p>${esc(T('Fought over'))} ${s.count} ${esc(T(s.count === 1 ? 'time in the replays.' : 'times in the replays.'))}${esc(won)} ${what}</p>
-      ${styles}${foes}${util}
+      ${styles}${foes}${util}${agentPick()}
       <fieldset class="am-opt"><legend>${esc(T(tab === 'track' ? 'How fast he strafes' : 'Difficulty'))}</legend>${C.diffs.map(k =>
         `<label class="am-chip"><input type="radio" name="am-diff" value="${k}" ${g.diff === k ? 'checked' : ''}> ${esc(T(DIFF[k]))}</label>`).join('')}</fieldset>
       <div class="am-row"><label>${esc(T('Gun'))} <select id="am-g-gun">${C.guns.map(n => `<option ${n === g.gun ? 'selected' : ''} translate="no">${esc(n)}</option>`).join('')}</select></label>
@@ -305,6 +314,7 @@
     else if (t.id === 'am-g-gun') g.gun = own(C.guns, t.value, g.gun);
     else if (t.name === 'am-foes') g.foes = own(C.foes || [1, 2, 3], +t.value, g.foes);
     else if (t.name === 'am-util') g.util = t.value === '1';
+    else if (t.id === 'am-g-agent') g.agent = (C.agents || {})[t.value] ? t.value : '';
     else if (t.id === 'am-g-reps') g.reps[tab] = own(REPS[tab], +t.value, C.reps[tab]);
     saveG(); spotCard();
   });

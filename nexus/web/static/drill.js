@@ -23,6 +23,10 @@
 // these fights in your replays (one round's worth a rep), at its real time: smokes and walls block sight, a flash
 // blinds you if you look at it, mollies burn you (you have 150), slows slow you, recon and traps reveal you (they
 // pre-aim: quicker, and they don't need to be looking your way).
+// 4.58: your own abilities (hold, attack, entry, retake, post-plant; the agent you pick on the spot): C, Q and E on
+// your keys, quick-cast where you aim (stats/kits.py says what each one is): smokes and walls block their sight,
+// a flash blinds whoever looks at it (you too), a molly burns them (and you), a concuss / nearsight / tether stops
+// them fighting you for a moment, recon and traps reveal them, a dash / teleport / anchor moves you.
 // The spots and routes come from the fights in all replays of the map (stats/drills.py spots()).
 (function () {
   'use strict';
@@ -64,6 +68,8 @@
   // molly damage a second (close to the game's); anything else that burns: DPS_DEFAULT
   const DPS = {Brimstone: 60, Phoenix: 60, 'KAY/O': 60, Killjoy: 45, Viper: 24, Raze: 55, Gekko: 40, Tejo: 50, Vyse: 40};
   const DPS_DEFAULT = 40, SLOW = 0.5, REVEAL_REACT = 0.6, SOLID_A = 1.8;
+  const KIT = O.kit || null, AGENT = O.agent || '';
+  const SLOT_OF = {ab_c: 'C', ab_q: 'Q', ab_e: 'E'};
   const AGENTS = Object.keys(C.agents || {});
   const RIFLES = ['Vandal', 'Phantom', 'Vandal', 'Phantom', 'Spectre', 'Sheriff'];
   const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -72,7 +78,8 @@
              flash: 0, until: 0, msg: '', lastT: 0, paused: false, saved: false, held: new Set(), dead: false,
              me: {x: 0, y: 0, z: 0, vx: 0, vz: 0, crouch: false, still: 0}, styles: {}, shots: [], track: null,
              hides: [], deaths: 0, kills: 0, spike: null, defusing: false, lefts: [],
-             U: [], hp: HP_ME, revealed: 0, slowed: false, burnt: 0, utilReps: 0};
+             U: [], hp: HP_ME, revealed: 0, slowed: false, burnt: 0, utilReps: 0,
+             kit: {}, anchor: {}, tp: null, fast: 0, fastMult: 1, casts: 0, toast: '', toastT: 0};
 
   // ------------------------------------------------------------------------------------------ where you stand
   function home() {                       // where a rep starts: [x, y, z, yaw]
@@ -220,6 +227,7 @@
   }
   function seesMe(f) {                      // can he see you (from his eyes, ahead of him when he holds a spot)?
     if (hiding(f)) return false;
+    if (S.t < (f.blind || 0) || S.t < (f.daze || 0)) return false;    // flashed, concussed, caught (4.58)
     const p = foeAt(f, S.t), e = [p[0], p[1] + 1.75, p[2]];
     if (f.fov && !(S.t < S.revealed)) {        // revealed: they know where you are
       const d = norm([S.me.x - p[0], 0, S.me.z - p[2]]), fwd = [Math.sin(p[3]), 0, -Math.cos(p[3])];
@@ -471,6 +479,7 @@
     S.dead = false; S.ammo = gun.mag; S.reload = 0; S.next = 0; S.first = null; S.flash = 0; S.msg = '';
     S.foes = []; S.spike = null; S.defusing = false;
     S.U = []; S.hp = HP_ME; S.revealed = 0; S.slowed = false;
+    resetKit();
     const uset = chooseUtil();
     if (MODE === 'death') {
       S.foes = [foe(0, S.R.paths[D.killer], {key: D.killer, agent: D.killer_agent, weapon: D.weapon, replay: true})];
@@ -560,20 +569,130 @@
       }
       if (!NM.live(u, S.t)) continue;
       const dh = Math.hypot(u.x - S.me.x, u.z - S.me.z), dy = Math.abs(u.y - S.me.y);
-      if (u.type === 'damage' && dh < NM.R_UTIL.damage && dy < 2.5) { S.hp -= (DPS[u.agent] || DPS_DEFAULT) * dt; S.burnt = S.t; }
+      if (u.type === 'damage' && dh < NM.R_UTIL.damage && dy < 2.5) {          // yours burns you too
+        S.hp -= (u.dps || DPS[u.agent] || DPS_DEFAULT) * dt; S.burnt = S.t;
+        if (u.mine) for (const f of S.foes) {                                    // and them
+          if (f.dead || hiding(f)) continue;
+          const p = foeAt(f, S.t);
+          if (Math.hypot(u.x - p[0], u.z - p[2]) < NM.R_UTIL.damage && Math.abs(u.y - p[1]) < 2.5) { f.hp -= (u.dps || DPS_DEFAULT) * dt; if (f.hp <= 0) kill(f); }
+        }
+      } else if (u.mine) continue;              // your own recon and traps don't reveal you
       else if (u.type === 'slow' && dh < NM.R_UTIL.slow && dy < 2.5) slowed = true;
       else if (u.type === 'recon' && dh < 30 && S.t - u.t0 < 4 && V().visible([u.x, u.y + 1, u.z], eye())) S.revealed = Math.max(S.revealed, S.t + 1.5);
       else if (u.type === 'trap' && dh < 2.5 && dy < 2.5) S.revealed = Math.max(S.revealed, S.t + 3);
     }
+    for (const u of S.U) {                    // your molly where they stand (out of your own reach above)
+      if (!u.mine || u.type !== 'damage' || !NM.live(u, S.t)) continue;
+      if (Math.hypot(u.x - S.me.x, u.z - S.me.z) < NM.R_UTIL.damage && Math.abs(u.y - S.me.y) < 2.5) continue;
+      for (const f of S.foes) {
+        if (f.dead || hiding(f)) continue;
+        const p = foeAt(f, S.t);
+        if (Math.hypot(u.x - p[0], u.z - p[2]) < NM.R_UTIL.damage && Math.abs(u.y - p[1]) < 2.5) { f.hp -= (u.dps || DPS_DEFAULT) * dt; if (f.hp <= 0) kill(f); }
+      }
+    }
     S.slowed = slowed;
     if (S.hp <= 0) { S.hp = 0; failRep(T('Burnt in their utility')); }
   }
-  function utilIntro() {                    // what they'll throw, on the start screen
+  function utilIntro() {                    // what they'll throw (and what you have), on the start screen
+    const mine = KIT ? `<p class="small">${esc(T('You play'))} <b translate="no">${esc(AGENT)}</b>: ${['C', 'Q', 'E'].filter(k => KIT[k]).map(s => `<kbd>${esc(keyName({C: 'ab_c', Q: 'ab_q', E: 'ab_e'}[s]))}</kbd> <span translate="no">${esc(KIT[s].name)}</span> ×${KIT[s].charges}`).join(' · ')} — ${esc(T('quick-cast where you aim; no ultimates.'))}</p>` : '';
+    return mine + theirs();
+  }
+  function theirs() {
     if (!UTIL || !SP) return '';
     const n = (SP.util || []).filter(s => s.some(u => u[2] === ENEMY_SIDE)).length;
     return n ? `<p class="muted small">${esc(T('They use their utility, as in'))} ${n} ${esc(T(n === 1 ? 'round of your replays' : 'rounds of your replays'))}: ${esc(T('smokes and walls block sight, look away from flashes, mollies burn (you have 150), recon and traps reveal you.'))}</p>` : '';
   }
   const wallAt = (x, z) => S.U.some(u => u.type === 'wall' && NM.live(u, S.t) && Math.hypot(u.x - x, u.z - z) < 1.0);
+
+  // ------------------------------------------------------------------------------------------ your abilities (4.58)
+  function resetKit() {
+    S.kit = {}; S.anchor = {}; S.tp = null; S.fast = 0; S.fastMult = 1;
+    for (const k of ['C', 'Q', 'E'].filter(k => (KIT || {})[k])) S.kit[k] = KIT[k].charges;
+  }
+  function toast(msg) { S.toast = msg; S.toastT = performance.now() / 1000; }
+  // where you aim: the first wall along your view (or the range; through walls for a few), on the floor below it
+  function aimPoint(range, through = false) {
+    const e = eye(), d = look();
+    let last = e;
+    for (let s = 0.5; s <= range; s += 0.5) {
+      const p = add(e, d, s);
+      if (!through && !V().visible(e, p)) break;
+      last = p;
+    }
+    const y = floor(last[0], last[2], last[1]);
+    return [last[0], y ?? Math.max(S.me.y, last[1] - EYE), last[2]];
+  }
+  function cast(slot) {
+    const a = KIT && KIT[slot];
+    if (!a || S.phase !== 'run' || S.dead || S.defusing) return;
+    if (a.kind === 'anchor' && S.anchor[slot]) {             // the second press: back to the marker
+      const p = S.anchor[slot];
+      if (Math.hypot(p[0] - S.me.x, p[2] - S.me.z) > a.range) { toast(T('Too far from your marker')); return; }
+      S.me.x = p[0]; S.me.y = p[1]; S.me.z = p[2]; S.me.vx = 0; S.me.vz = 0; S.anchor[slot] = null;
+      return;
+    }
+    if (!(S.kit[slot] > 0)) { toast(`${a.name}: ${T('none left')}`); return; }
+    S.kit[slot]--; S.casts++;
+    const mk = (type, p, t0, dur, extra = {}) => S.U.push({type, agent: AGENT, x: p[0], y: p[1], z: p[2], t0,
+      t1: dur === null ? null : t0 + dur, mine: true, arm: false, rel: 0, dur, ...extra});
+    switch (a.kind) {
+      case 'smoke': mk('smoke', aimPoint(a.range), S.t + 0.6, a.dur); break;
+      case 'flash': case 'flash_wall': mk('flash', aimPoint(a.range, a.kind === 'flash_wall'), S.t + (a.delay || 0.5), 0.5, {blind: a.dur}); break;
+      case 'damage': mk('damage', aimPoint(a.range), S.t + 0.7, a.dur, {dps: a.dps}); break;
+      case 'stun': mk('stun', aimPoint(a.range), S.t + 0.6, 0.8, {r: a.r, daze: a.dur}); break;
+      case 'recon': mk('recon', aimPoint(a.range), S.t + 0.6, a.dur); break;
+      case 'trap': mk('trap', aimPoint(a.range), S.t + 0.3, null, {daze: a.dur, used: false}); break;
+      case 'wall': {                          // across your view: a row of pieces
+        const p = aimPoint(a.range), rx = Math.cos(S.yaw), rz = Math.sin(S.yaw);
+        for (let k = -3; k <= 3; k++) mk('wall', [p[0] + rx * k * 1.2, p[1], p[2] + rz * k * 1.2], S.t + 0.3, a.dur);
+        break;
+      }
+      case 'dash': {                          // the way you're moving (or looking), up to dist, not through walls
+        const m = S.me, sp = Math.hypot(m.vx, m.vz);
+        const dx = sp > 0.5 ? m.vx / sp : Math.sin(S.yaw), dz = sp > 0.5 ? m.vz / sp : -Math.cos(S.yaw);
+        for (let s = 0.25; s <= a.dist; s += 0.25) {
+          const x = m.x + dx * 0.25, z = m.z + dz * 0.25, y = floor(x, z, m.y);
+          if (y === null || V().blocked(x, z, y) || wallAt(x, z)) break;
+          m.x = x; m.z = z; m.y = y;
+        }
+        break;
+      }
+      case 'teleport': S.tp = {t: S.t + (a.delay || 0.8), p: aimPoint(a.range)}; break;
+      case 'anchor': S.anchor[slot] = [S.me.x, S.me.y, S.me.z]; toast(`${a.name}: ${T('press again to go back')}`); break;
+      case 'speed': S.fast = S.t + a.dur; S.fastMult = a.mult || 1.25; break;
+    }
+  }
+  function myTick() {                         // what your abilities do to them
+    if (S.tp && S.t >= S.tp.t) { const p = S.tp.p; S.me.x = p[0]; S.me.y = p[1]; S.me.z = p[2]; S.me.vx = 0; S.me.vz = 0; S.tp = null; }
+    for (const u of S.U) {
+      if (!u.mine) continue;
+      const pops = u.t0 > S.lastT && u.t0 <= S.t, at = [u.x, u.y + 1.2, u.z];
+      for (const f of S.foes) {
+        if (f.dead || hiding(f)) continue;
+        const p = foeAt(f, S.t), e = [p[0], p[1] + 1.6, p[2]];
+        if (u.type === 'flash' && pops && V().visible(e, at)) {           // looking at it: blind
+          const d = norm([at[0] - e[0], 0, at[2] - e[2]]), fwd = [Math.sin(p[3]), 0, -Math.cos(p[3])];
+          if (dot(d, fwd) > Math.cos(80 * D2R)) { f.blind = S.t + u.blind; f.sees = null; }
+        } else if (u.type === 'stun' && pops && Math.hypot(p[0] - u.x, p[2] - u.z) < u.r && Math.abs(p[1] - u.y) < 3) {
+          f.daze = S.t + u.daze; f.sees = null;
+        } else if (u.type === 'recon' && NM.live(u, S.t) && Math.hypot(p[0] - u.x, p[2] - u.z) < 30 && V().visible([u.x, u.y + 1, u.z], e)) {
+          f.rev = S.t + 1.2;
+        } else if (u.type === 'trap' && NM.live(u, S.t) && !u.used && Math.hypot(p[0] - u.x, p[2] - u.z) < 2.5 && Math.abs(p[1] - u.y) < 2.5) {
+          f.rev = S.t + u.daze + 1; f.daze = S.t + u.daze; f.sees = null; u.used = true; u.t1 = S.t + 1;
+        }
+      }
+    }
+  }
+  function kitHtml() {                        // your abilities, next to the ammo
+    if (!KIT) return '';
+    const parts = ['C', 'Q', 'E'].filter(k => KIT[k]).map(s => {
+      const a = KIT[s], key = keyName({C: 'ab_c', Q: 'ab_q', E: 'ab_e'}[s]), n = S.kit[s] ?? a.charges;
+      const back = a.kind === 'anchor' && S.anchor[s];
+      return `<span class="${n > 0 || back ? '' : 'muted'}"><kbd>${esc(key)}</kbd> ${esc(a.name)} ${back ? '↩' : '×' + n}</span>`;
+    });
+    const t = S.toast && performance.now() / 1000 - S.toastT < 2 ? ` <span class="warn">${esc(S.toast)}</span>` : '';
+    return `<div class="dr-kit">${parts.join(' ')}${t}</div>`;
+  }
 
   function nearestOn(R, p) {                // where an enemy looks: the nearest bit of a route (not on top of him)
     let best = R[0], bd = Infinity;
@@ -623,7 +742,7 @@
     const m = S.me, has = holds;
     m.crouch = has('crouch');
     if (S.defusing) { m.vx = 0; m.vz = 0; m.still += dt; return; }          // down on the spike
-    const max = (m.crouch ? CROUCH : has('walk') ? WALK : RUN) * (S.slowed ? SLOW : 1);
+    const max = (m.crouch ? CROUCH : has('walk') ? WALK : RUN) * (S.slowed ? SLOW : 1) * (S.t < S.fast ? S.fastMult : 1);
     const f = [Math.sin(S.yaw), -Math.cos(S.yaw)], r = [Math.cos(S.yaw), Math.sin(S.yaw)];
     let wx = 0, wz = 0;
     if (has('forward')) { wx += f[0]; wz += f[1]; }
@@ -669,7 +788,7 @@
       if (MODE === 'entry' && S.phase === 'run') entryTick();
       if (SPIKE && S.phase === 'run') spikeTick(dt);
       if (MODE === 'hold' && S.phase === 'run' && S.t > 40) failRep(T('Out of time'));
-      if (UTIL && S.phase === 'run') utilTick(dt);
+      if ((UTIL || KIT) && S.phase === 'run') { utilTick(dt); if (KIT) myTick(); }
       flashes();
       if (S.phase === 'run' && S.firing && gun.auto) shoot();
     }
@@ -814,6 +933,12 @@
       g.fillStyle = '#ff3b4e'; g.strokeStyle = '#fff'; g.lineWidth = 2;
       g.beginPath(); g.moveTo(x, y - 8); g.lineTo(x + 7, y); g.lineTo(x, y + 8); g.lineTo(x - 7, y); g.closePath(); g.fill(); g.stroke();
     }
+    for (const f of S.foes) {                 // revealed by your recon / trap (4.58)
+      if (f.dead || !(S.t < (f.rev || 0))) continue;
+      const p = foeAt(f, S.t), [x, y] = toR(p[0], p[2]);
+      g.fillStyle = '#ff3b4e'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
+      g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.fill(); g.stroke();
+    }
     if (MODE !== 'clear') return;
     for (const h of S.hides) {
       const [x, y] = toR(h.p[0], h.p[2]);
@@ -871,11 +996,11 @@
     }).join('');
     $('dr-rep').textContent = `${T('Rep')} ${Math.min(opt.reps, S.reps.length + (S.phase === 'between' ? 0 : 1))} / ${opt.reps}`;
     const rel = S.reload > performance.now() / 1000;
-    const state = !UTIL || S.phase === 'done' ? '' : [
+    const state = !(UTIL || KIT) || S.phase === 'done' ? '' : [
       S.hp < HP_ME ? `<span class="${S.hp < 60 ? 'bad' : 'warn'}">♥ ${Math.ceil(S.hp)}</span>` : '',
       S.t < S.revealed ? `<span class="bad">${esc(T('revealed'))}</span>` : '',
       S.slowed ? `<span class="warn">${esc(T('slowed'))}</span>` : ''].filter(Boolean).map(x => x + ' · ').join('');
-    $('dr-ammo').innerHTML = state + (rel ? `<b>${esc(T('Reloading…'))}</b>` : `<b>${S.ammo}</b> / ${gun.mag} · <span translate="no">${esc(gun.name)}</span>`);
+    $('dr-ammo').innerHTML = kitHtml() + state + (rel ? `<b>${esc(T('Reloading…'))}</b>` : `<b>${S.ammo}</b> / ${gun.mag} · <span translate="no">${esc(gun.name)}</span>`);
     $('dr-flash').style.opacity = String(Math.min(1, S.flash * 1.1));
     $('dr-msg').innerHTML = S.msg;
     $('dr-msg').hidden = !S.msg || S.phase === 'done';
@@ -1056,6 +1181,7 @@
       else if (a === 'ads') S.ads = down && (gun.zoom || 1) > 1;
       else if (!down) continue;
       else if (a === 'reload') startReload();
+      else if (SLOT_OF[a]) cast(SLOT_OF[a]);
       else if (a === 'restart') { if (document.pointerLockElement !== canvas) lock(); S.paused = false; restart(); }
       else if (a === 'next') { if (S.phase === 'between' && !S.paused) S.until = 0; }
       else if (a === 'watch') { if (MODE === 'death' && (document.pointerLockElement === canvas || S.phase === 'done')) { if (S.phase === 'done') lock(); watch(); } }
@@ -1153,6 +1279,8 @@
                        goTo: p => { S.me.x = p[0]; S.me.y = p[1]; S.me.z = p[2]; },          // for tests: stand there
                        trackSecs: s => { if (S.track) S.track.secs = s; },                  // for tests: shorter
                        foeAt: (i = 0) => (S.foes[i] ? foeAt(S.foes[i], S.t) : null), spot: () => SP,
-                       foeInfo: (i = 0) => (S.foes[i] ? {at: S.foes[i].at, swing: S.foes[i].swing || null, seen: S.foes[i].seen} : null),
+                       foeInfo: (i = 0) => (S.foes[i] ? {at: S.foes[i].at, swing: S.foes[i].swing || null, seen: S.foes[i].seen,
+                                                          hp: S.foes[i].hp, blind: S.foes[i].blind || 0, daze: S.foes[i].daze || 0, rev: S.foes[i].rev || 0} : null),
+                       kit: () => ({...S.kit}),
                        foeDead: i => !!(S.foes[i] && S.foes[i].dead)};
 })();
