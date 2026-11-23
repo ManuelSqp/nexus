@@ -53,7 +53,7 @@ def positions(mi) -> list[dict]:
     out = []
     for site in ("A", "B", "C"):
         s = by.get((site, "site"))
-        m = by.get((site, "main")) or by.get((site, "lobby")) or by.get((site, "link"))
+        m = by.get((site, "main")) or by.get((site, "lobby")) or by.get((site, "link")) or _approach(mi, site, s)
         if not s or not m:
             continue
         for stand, face, name, key in ((s, m, f"Hold {site} Site, facing {m.label}", f"{site}-hold"),
@@ -62,6 +62,24 @@ def positions(mi) -> list[dict]:
             if len(sp) >= MIN_SPOTS:
                 out.append({"id": key, "name": name, "stand": stand.label, "face": face.label, "spots": sp})
     return out
+
+
+def _approach(mi, site: str, s):
+    """4.56.2: a site without a callout called Main, Lobby or Link (newer maps name them otherwise): the way in is
+    its callout furthest from the site that's still within reach."""
+    if not s:
+        return None
+    per_m = abs(mi.x_mult) * 100 or 0.007
+    su, sv = mi.to_uv(s.x, s.y)
+    best, bd = None, 0.0
+    for c in mi.callouts:
+        if c.super_region != site or c is s or c.region.lower() in ("site", "spawn"):
+            continue
+        u, v = mi.to_uv(c.x, c.y)
+        d = math.hypot(u - su, v - sv) / per_m
+        if bd < d <= FAR:
+            best, bd = c, d
+    return best
 
 
 def for_maps(reg, names: list[str]) -> dict[str, list[dict]]:
