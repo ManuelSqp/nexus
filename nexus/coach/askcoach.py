@@ -14,6 +14,7 @@ from ..stats import trainer as tr
 from ..stats.aggregate import by_agent, by_map
 from ..stats.habits import track
 from ..stats.weekly import player_facts
+from . import gamepick as gp
 from . import websearch as ws
 from .llm import NoAnswer
 from .prompts import field_guide
@@ -25,6 +26,8 @@ knows this player: usually 3-8 sentences, a short list when there are steps.
 - Quote the number a statement about the player rests on. A number marked "early sign" rests on few games or
   rounds: say it's a first sign, not a fact. "context" has numbers weighted to recent games and the current
   patch, by buy state and by lobby strength; prefer them over raw totals when they differ.
+- "selected_games" (when there): the games this question is about, picked from all their stored games, one by one
+  and added up ("together"). Answer from those; "last_games" are their newest games, one line each.
 - "goals" are the player's goals and whether they were met: build on what worked, change approach where a
   goal was missed. "check_ins" are the player's own answers after matches.
 - About the game (agents, abilities, maps, patches, pros, settings, aim trainers): use the web results when
@@ -79,8 +82,18 @@ def facts(name: str, rows: list[dict], kovaaks_runs: list[dict] | None = None, t
 
 
 def answer(llm, player: str, language: str, question: str, history: list[dict], data: dict,
-           search=None, step=lambda s: None) -> dict:
-    """-> {answer, sources: [{title, url}], searched: [queries], search_errors: [...]}"""
+           search=None, step=lambda s: None, rows: list[dict] | None = None) -> dict:
+    """-> {answer, sources: [{title, url}], searched: [queries], search_errors: [...], picked: why | ""}
+    rows (4.57): all the player's stored games: the coach picks the ones the question is about."""
+    picked = ""
+    if rows:
+        data = dict(data)
+        data["last_games"] = gp.last_games(rows)
+        step("Picking the games")
+        f = gp.plan(llm, question, history, rows)
+        if f is not None:
+            data["selected_games"] = gp.block(rows, f)
+            picked = f"{data['selected_games']['which']} ({data['selected_games']['found']} games)"
     context = yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=120)
     sources: list[dict] = []
     queries: list[str] = []
@@ -102,4 +115,4 @@ def answer(llm, player: str, language: str, question: str, history: list[dict], 
     if not text:
         raise NoAnswer("the model gave no answer")
     return {"answer": text, "sources": ws.cited(sources, out.get("sources")), "searched": queries,
-            "search_errors": errors[:2]}
+            "search_errors": errors[:2], "picked": picked}
