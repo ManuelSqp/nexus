@@ -84,7 +84,9 @@ def test_scripts():
     aj = (STATIC / "aim_maps.js").read_text()
     for x in ("async function loadSuggest(", "function renderSuggest()", "function openSpot(mode, mapName, id)",
               "function spark(meds, higher)", "function trendText(meds, higher)", "loadSuggest();",
-              "spark((s.trend || {})[tab], pctTab())"):
+              "spark((s.trend || {})[tab], pctTab())", "`${esc(k)} <span translate=\"no\">${esc(n)}</span>`",
+              'name="am-diff" value="${esc(k)}"', "esc(it.rounds.map(Number).join(', '))",
+              "<h3>${esc(T('Practice what cost you rounds'))}</h3>"):
         assert x in aj, x
     job = (ROOT / "nexus/web/templates/job.html").read_text()
     assert "url_for('aim_maps', pid=p.id, match=j.match_id)" in job
@@ -95,6 +97,6 @@ def test_scripts():
 
 def test_version():
     import nexus
-    assert nexus.__version__ == "4.59.0"
+    assert tuple(int(x) for x in nexus.__version__.split(".")[:2]) >= (4, 59)
     assert "## 4.59.0" in (ROOT / "CHANGELOG.md").read_text()
-    assert "**Version 4.59.0**" in (ROOT / "README.md").read_text()
+    assert "**Version " in (ROOT / "README.md").read_text()

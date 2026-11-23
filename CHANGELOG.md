@@ -4,6 +4,12 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.59.1
+- **Code scanning** (the high alert "DOM text reinterpreted as HTML" in aim_maps.js from 4.58.0): the spot card
+  (your agent's abilities, the options) and the *Practice what cost you rounds* box put everything into the page
+  escaped. (The 4.59.0 pull request didn't show it again because code scanning only lists new alerts there; it was
+  still open on main.)
+
 ## 4.59.0
 - **Practice what cost you rounds.** Aim on maps opens with your last match: every spot you died at, as the drill on
   that spot (died retaking B → *Retake B*; died after planting → *Post-plant*; died holding an angle → *Hold* on it;
