@@ -162,6 +162,7 @@ def register(app, store, sr, view_profile) -> None:
                 "play": url_for("aim_play", pid=pid, mode="MODE", map_name="MAP", sid="SID"),
                 "guns": list(dr.GUNS), "diffs": list(DIFFS), "peeks": list(PEEKS), "reps": DEFAULT_REPS,
                 "foes": list(FOES), "util_modes": list(UTIL_MODES),
+                "suggest_api": url_for("aim_suggest_api", pid=pid), "match": request.args.get("match", "")[:80],
                 "agents": {k: {s: v["name"] for s, v in kits.kit(k).items()} for k in sorted(kits.KITS)}}
         return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot)
 
@@ -268,11 +269,36 @@ def register(app, store, sr, view_profile) -> None:
         runs = dr.read_runs(stats_dir(pid))
         for lst in ("angles", "sites", "retakes"):
             for a in sp[lst]:
-                a["best"] = {k: dr.summary(runs.get(f"g-{k}-{a['id']}", []), k)["best"]
-                             for k in MODES if LISTS[k] == lst}
+                sm = {k: dr.summary(runs.get(f"g-{k}-{a['id']}", []), k) for k in MODES if LISTS[k] == lst}
+                a["best"] = {k: v["best"] for k, v in sm.items()}
+                a["trend"] = {k: v["medians"][-12:] for k, v in sm.items() if v["medians"]}     # 4.59
         j = jobs.get(p.id) or {}
         return jsonify(maps=[{"name": m, "matches": len(by[m])} for m in maps], map=name, pending=pending,
                        working=bool(j.get("running")), **sp)
+
+    @app.get("/api/profiles/<int:pid>/aim/suggest")
+    def aim_suggest_api(pid: int):
+        """4.59: the drills a match points to (?match=, else the newest one whose drills are worked out)."""
+        p, _e = view_profile(pid)
+        want = (request.args.get("match") or "").lower()
+        mids = [want] if want else my_matches(p, 8)
+        for mid in mids:
+            brief = match_brief(store, mid, p.riot_id) or {}
+            name = brief.get("map") or ""
+            fights = dr.read_fights(data_dir, mid, signature(mid, name)) if name else None
+            if fights is None:
+                if want and name:
+                    start_job(p, [mid])
+                    return jsonify(match=mid, map=name, pending=True, items=[])
+                continue
+            by = map_matches()
+            if name not in by:
+                continue
+            sp, _pending = map_spots(p, name, by[name], False)
+            items = dr.suggest(p.riot_id, fights, sp)
+            return jsonify(match=mid, map=name, pending=False, started=brief.get("started_at") or "",
+                           score=brief.get("score") or "", items=items)
+        return jsonify(match="", map="", pending=False, items=[])
 
     @app.get("/profiles/<int:pid>/aim/play/<mode>/<map_name>/<sid>")
     def aim_play(pid: int, mode: str, map_name: str, sid: str):

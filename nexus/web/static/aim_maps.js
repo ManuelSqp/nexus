@@ -164,6 +164,60 @@
   const list = () => (!G ? [] : SITES.has(tab) ? G.sites : SPIKE.has(tab) ? (G.retakes || []) : G.angles);
   const where = s => (SITES.has(tab) ? (s.hides[0] || s.route[s.route.length - 1]) : SPIKE.has(tab) ? s.plant : s.hold);
   const pctTab = () => tab === 'track' || tab === 'clear';
+  // 4.59: your sessions on a spot (the median of each, oldest first) as a small line: better is up
+  function spark(meds, higher) {
+    if (!meds || meds.length < 2) return '';
+    const W = 60, H = 16, lo = Math.min(...meds), hi = Math.max(...meds), k = hi > lo ? (H - 4) / (hi - lo) : 0;
+    const pts = meds.map((v, i) => `${(i / (meds.length - 1) * (W - 2) + 1).toFixed(1)},${(higher ? H - 2 - (v - lo) * k : 2 + (v - lo) * k).toFixed(1)}`);
+    const up = higher ? meds[meds.length - 1] >= meds[0] : meds[meds.length - 1] <= meds[0];
+    return `<svg class="am-spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true"><polyline fill="none" stroke="${up ? '#5fe0c6' : '#ff7d8b'}" stroke-width="1.8" points="${pts.join(' ')}"/></svg>`;
+  }
+  function trendText(meds, higher) {
+    if (!meds || !meds.length) return '';
+    const f = v => (higher ? Math.round(v) + ' %' : v.toFixed(2) + ' s');
+    if (meds.length === 1) return `${T('1 session:')} ${f(meds[0])}`;
+    const n = Math.min(3, Math.floor(meds.length / 2)), a = meds.slice(0, n), b = meds.slice(-n);    // the first and last few
+    const m = v => v.slice().sort((x, y) => x - y)[Math.floor(v.length / 2)];
+    const ma = m(a), mb = m(b), better = higher ? mb > ma : mb < ma, same = Math.abs(mb - ma) < (higher ? 2 : 0.03);
+    return `${meds.length} ${T('sessions:')} ${f(ma)} → ${f(mb)} <span class="${same ? 'muted' : better ? 'good' : 'bad'}">${T(same ? 'about the same' : better ? 'better' : 'worse')}</span>${spark(meds, higher)}`;
+  }
+
+  // 4.59: what your last match points to: the drill on each spot you died at, the most deaths first
+  const MODE_NAME = {hold: 'Hold', attack: 'Take', entry: 'Entry', retake: 'Retake', postplant: 'Post-plant'};
+  let SUG = null;
+  async function loadSuggest(again = 0) {
+    if (!C.suggest_api) return;
+    try {
+      const r = await fetch(C.suggest_api + (C.match ? `?match=${encodeURIComponent(C.match)}` : ''), {credentials: 'same-origin'});
+      SUG = await r.json();
+    } catch (e) { return; }
+    if (SUG.pending && again < 20) setTimeout(() => loadSuggest(again + 1), 3000);
+    renderSuggest();
+  }
+  function renderSuggest() {
+    const box = $('am-suggest');
+    if (!box || !SUG || (!SUG.items.length && !SUG.pending)) { if (box) box.hidden = true; return; }
+    box.hidden = false;
+    const when = SUG.started ? new Date(SUG.started).toLocaleDateString() : '';
+    const head = `${T(C.match ? 'This match' : 'Your last match')}: <span translate="no">${esc(SUG.map)}</span>${SUG.score ? ' ' + esc(SUG.score) : ''}${when ? ' · ' + esc(when) : ''}`;
+    box.innerHTML = `<h3>${T('Practice what cost you rounds')}</h3><p class="small muted">${head}${SUG.pending ? ' · ' + esc(T('working it out…')) : ''}</p>
+      <ul>${SUG.items.map((it, i) => `<li><button type="button" data-sug="${i}"><b><span>${esc(T(MODE_NAME[it.mode] || it.mode))}</span> <span translate="no">${esc(it.mode === 'retake' || it.mode === 'postplant' ? it.dz : fromTo(it.mode === 'hold' ? it.az : it.dz, it.mode === 'hold' ? it.dz : it.az))}</span></b>
+        <small>${it.deaths}× ${esc(T(it.deaths === 1 ? 'death' : 'deaths'))} · ${esc(T(it.rounds.length === 1 ? 'round' : 'rounds'))} ${it.rounds.join(', ')}</small></button></li>`).join('')}</ul>`;
+  }
+  function openSpot(mode, mapName, id) {
+    sel = id;
+    if (!G || G.map !== mapName) { g.map = mapName; saveG(); G = null; }
+    show(mode);
+    if (G) renderGen();
+    $('am-gen').scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-sug]');
+    if (!b || !SUG) return;
+    const it = SUG.items[+b.dataset.sug];
+    if (it) openSpot(it.mode, SUG.map, it.id);
+  });
+
   function renderGen() {
     const [head, text] = INTRO[tab];
     $('am-g-title').textContent = T(head); $('am-g-text').textContent = T(text);
@@ -185,7 +239,7 @@
     $('am-g-list').innerHTML = L.slice(0, 40).map(s => {
       const best = (s.best || {})[tab];
       const b = best === null || best === undefined ? '' : `<span class="good">${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>`;
-      return `<li><button type="button" data-sid="${esc(s.id)}" class="${s.id === sel ? 'on' : ''}"><span translate="no">${esc(title(s))}</span><small>×${s.count}${b ? ' · ' + b : ''}</small></button></li>`;
+      return `<li><button type="button" data-sid="${esc(s.id)}" class="${s.id === sel ? 'on' : ''}"><span translate="no">${esc(title(s))}</span><small>×${s.count}${b ? ' · ' + b : ''}${spark((s.trend || {})[tab], pctTab())}</small></button></li>`;
     }).join('');
     plan();
     spotCard();
@@ -292,7 +346,8 @@
       <div class="am-row"><label>${esc(T('Gun'))} <select id="am-g-gun">${C.guns.map(n => `<option ${n === g.gun ? 'selected' : ''} translate="no">${esc(n)}</option>`).join('')}</select></label>
         <label>${esc(T(tab === 'hold' ? 'Peeks' : 'Reps'))} <select id="am-g-reps">${REPS[tab].map(n => `<option ${n === reps ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
       <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${reps} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
-        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>`;
+        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>
+      ${(s.trend || {})[tab] ? `<p class="small">${trendText(s.trend[tab], pctTab())}</p>` : ''}`;
   }
   $('am-g-map').addEventListener('change', e => { g.map = own((G ? G.maps : []).map(m => m.name), e.target.value, g.map); saveG(); sel = null; G = null; plan(); loadSpots(); });
   $('am-g-list').addEventListener('click', e => { const b = e.target.closest('[data-sid]'); if (b) { sel = b.dataset.sid; renderGen(); } });
@@ -343,4 +398,5 @@
   window.addEventListener('hashchange', () => { const t = tabOf(location.hash.slice(1)); if (t && t !== tab) show(t); });
   show(tab);
   load();
+  loadSuggest();
 })();

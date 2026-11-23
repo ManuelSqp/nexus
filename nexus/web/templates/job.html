@@ -9,6 +9,7 @@
   </div>
   <div class="acts">
     {% if j.vod_path %}<a class="btn sm" href="{{ url_for('vod_review', jid=j.id) }}">Review the recording together</a>{% endif %}
+    {% if p and j.match_id %}<a class="btn sm" href="{{ url_for('aim_maps', pid=p.id, match=j.match_id) }}">Practice what cost you rounds</a>{% endif %}
     <form method="post" action="{{ url_for('job_retry', jid=j.id) }}" id="retry" style="display:{{ 'inline' if j.status in ('error','done') else 'none' }}"><button class="btn sm">Run again</button></form>
     <form method="post" action="{{ url_for('job_delete', jid=j.id) }}" onsubmit="return confirm('Delete this report?')"><button class="btn sm danger ghost">Delete</button></form>
   </div>

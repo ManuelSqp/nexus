@@ -6,6 +6,8 @@
 {{ vc.pagehead('Aim on maps', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id))],
    'Aim drills on the real maps, with the game\'s agents') }}
 
+<section class="card am-suggest" id="am-suggest" hidden></section>
+
 <div class="am-tabs" role="tablist" aria-label="Kind of drill">
   <button type="button" role="tab" aria-selected="true" class="on" data-tab="deaths">Your deaths <span id="am-n"></span></button>
   <button type="button" role="tab" aria-selected="false" data-tab="hold">Hold an angle</button>
