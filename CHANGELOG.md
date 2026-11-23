@@ -4,6 +4,11 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.56.3
+- **No more seeing enemies through walls in Aim on maps.** The replay viewer's *Outlines* (players behind walls drawn
+  faintly) is saved in your browser and the drills used the same setting: once it was on in a replay, enemies showed
+  through walls in the drills too. A drill never draws them now; the replay viewer keeps your setting.
+
 ## 4.56.2
 - **Summit (and every map that comes out later) shows up.** The list of maps from valorant-api.com (callouts,
   minimaps, where things are on them) was downloaded once and never again, so a map released after that was missing:

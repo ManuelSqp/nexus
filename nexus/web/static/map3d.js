@@ -5,6 +5,9 @@
 (function () {
   'use strict';
   const C = window.NEXUS_MAP3D;
+  // 4.56.3: the replay viewer's "Outlines" (players behind walls) is saved in the browser and was shared with the
+  // drills: enemies showed through walls in Aim on maps. A drill never draws them (the setting stays for replays).
+  const NO_XRAY = !!(C && C.drill);
   if (!C) return;
   const $ = id => document.getElementById(id);
   const T = s => (window.vcT ? window.vcT(s) : s);
@@ -603,7 +606,7 @@
       }
     };
     pass(1);
-    if (opt.xray) {                                  // the hidden parts, faint
+    if (opt.xray && !NO_XRAY) {                      // the hidden parts, faint (never in a drill: 4.56.3)
       gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false); gl.depthFunc(gl.GREATER);
       pass(0.35);
       gl.depthFunc(gl.LESS); gl.depthMask(true); gl.disable(gl.BLEND);
