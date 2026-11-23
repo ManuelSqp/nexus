@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.56.3** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.57.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -285,7 +285,9 @@ teammates come in while you watch. Everyone in a team with that player can watch
 and the report's owner can remove it.
 
 **Ask the coach:** *Practice › Ask the coach* is a chat with the coach about one player. It knows the player's stats,
-habits, aim and KovaaK's scores and remembers the conversation (per user and player).
+habits, aim and KovaaK's scores and remembers the conversation (per user and player). 4.57: it picks the games a
+question is about from all the stored ones ("my last two Premier games", "my KAY/O games") and looks at those one by
+one; under the answer, *Games: …* says which.
 
 **Nexus for Windows:** [desktop/](desktop/README.md) is an app that shows Nexus in its own window and adds
 *This PC* to the menu. It puts the coach's KovaaK's playlists into KovaaK's, sends new KovaaK's scores, and cuts

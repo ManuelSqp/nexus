@@ -44,6 +44,7 @@
     <div class="a">{{ it.a|askfmt }}</div>
     {% if it.sources %}<ul class="srcs">{% for s in it.sources %}<li><a href="{{ s.url }}" target="_blank" rel="noopener noreferrer nofollow" title="{{ s.url }}" translate="no"><span>{{ loop.index }}</span>{{ s.title }}</a></li>{% endfor %}</ul>{% endif %}
     <div class="meta"><span>{{ it.t|epoch }}</span>{% if it.model %}<span translate="no">{{ it.model }}</span>{% endif %}
+      {% if it.picked %}<span>Games: {{ it.picked }}</span>{% endif %}
       {% if it.searched %}<span>Searched: <span translate="no">{{ it.searched|join(' · ') }}</span></span>{% endif %}
       {% if it.search_errors %}<span style="color:var(--amber)">Web search failed: {{ it.search_errors[0] }}</span>{% endif %}</div>
   </div>
@@ -89,7 +90,7 @@
     if (it.a !== undefined) {
       h += `<div class="a">${fmt(it.a)}</div>`;
       if (it.sources && it.sources.length) h += '<ul class="srcs">' + it.sources.map((s, i) => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer nofollow" title="${esc(s.url)}" translate="no"><span>${i + 1}</span>${esc(s.title)}</a></li>`).join('') + '</ul>';
-      h += `<div class="meta"><span>${when(it.t)}</span>${it.model ? `<span translate="no">${esc(it.model)}</span>` : ''}${it.searched && it.searched.length ? `<span>${T('Searched:')} <span translate="no">${esc(it.searched.join(' · '))}</span></span>` : ''}${it.search_errors && it.search_errors.length ? `<span style="color:var(--amber)">${T('Web search failed:')} ${esc(it.search_errors[0])}</span>` : ''}</div>`;
+      h += `<div class="meta"><span>${when(it.t)}</span>${it.model ? `<span translate="no">${esc(it.model)}</span>` : ''}${it.picked ? `<span>${T('Games:')} ${esc(it.picked)}</span>` : ''}${it.searched && it.searched.length ? `<span>${T('Searched:')} <span translate="no">${esc(it.searched.join(' · '))}</span></span>` : ''}${it.search_errors && it.search_errors.length ? `<span style="color:var(--amber)">${T('Web search failed:')} ${esc(it.search_errors[0])}</span>` : ''}</div>`;
     } else {
       h += '<div class="a thinking"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="step"></span></div>';
     }

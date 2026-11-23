@@ -4,6 +4,19 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.57.0
+- **Ask the coach picks the games your question is about.** Before answering, the coach sees all your stored games
+  (how many per mode, agent and map, from when to when, the newest ones one by one) and picks the ones the question
+  needs: "my last two Premier games", "KAY/O or Clove lately?", "Summit this month". Those games go into its data one
+  by one (mode, map, agent, result, K/D/A, ACS, ADR, KAST, first kills and deaths, headshots) plus what they add up
+  to, by agent when there's more than one. A question that isn't about particular games keeps the usual picture.
+  It always sees your newest 8 games too. Under the answer: *Games: …* says which ones it used.
+- **A player who changes their Riot ID keeps their profile.** Each import checks who the account is now (by its
+  account id from your games); if the name changed, the profile takes the new name and keeps its games, drills and
+  notes. If you had already added them again under the new name and that player has no games yet, it's folded in
+  (its team place goes to the renamed player). If both have games, the import says so and leaves them alone.
+- German texts.
+
 ## 4.56.3
 - **No more seeing enemies through walls in Aim on maps.** The replay viewer's *Outlines* (players behind walls drawn
   faintly) is saved in your browser and the drills used the same setting: once it was on in a replay, enemies showed

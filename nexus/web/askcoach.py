@@ -92,11 +92,13 @@ def register(app, store, sr, view_profile, filter_rows) -> None:
                 data.update(sr.coach_extras(pid, rows, store.data_dir / "cache"))     # 4.15
                 f = path(pid, uid)
                 hist = _read(f).get("items", [])
-                out = ac.answer(llm, p.name, p.language or "English", q, hist, data, search=search, step=step)
+                out = ac.answer(llm, p.name, p.language or "English", q, hist, data, search=search, step=step,
+                                rows=rows)
                 with _lock:
                     d = _read(f)
                     d.setdefault("items", []).append({"q": q, "a": out["answer"], "sources": out["sources"],
                                                       "searched": out["searched"], "search_errors": out["search_errors"],
+                                                      "picked": out.get("picked", ""),
                                                       "model": getattr(llm, "model", ""), "t": time.time()})
                     del d["items"][:-MAX_ITEMS]
                     f.parent.mkdir(parents=True, exist_ok=True)

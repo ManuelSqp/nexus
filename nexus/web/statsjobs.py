@@ -94,6 +94,7 @@ class StatsRunner:
             cfg = self.store.build_config(p)
             client = pipeline.get_client(cfg)
             client.on_wait = lambda m: self._log(key, m)
+            p = self.follow_rename(p, client, lambda m: self._log(key, m))          # 4.57
             self._log(key, f"· Importing {p.riot_id} ({p.region.upper()}) ...")
             res = import_games(client, p.region, p.platform, p.name, p.tag, self.games(pid),
                                cfg.path(cfg.paths.cache_dir), lambda m: self._log(key, m),
@@ -114,6 +115,56 @@ class StatsRunner:
             self._log(key, "✗ " + str(e))
             self._log(key, traceback.format_exc(limit=3))
             self._set(key, status="error", error=str(e) or e.__class__.__name__)
+
+    def follow_rename(self, p, client, log=lambda m: None):
+        """4.57: a player who changed their Riot ID keeps their profile. The account id (puuid) from their games
+        says who they are now; the profile takes the new name (its games, drills and notes stay). A player you added
+        again under the new name with no games yet is folded in: their team places go to this one. -> the profile"""
+        from ..henrik import account_by_puuid
+        puuid = self.games(p.id).load().get("puuid") or ""
+        if not puuid:
+            return p
+        try:
+            acc = account_by_puuid(client, puuid)
+        except Exception as e:                       # not worth stopping the import for
+            log(f"  ! couldn't check the Riot ID: {e}")
+            return p
+        name, tag = str(acc.get("name") or "").strip(), str(acc.get("tag") or "").strip().lstrip("#")
+        if not name or not tag or (name.lower(), tag.lower()) == (p.name.lower(), p.tag.lower()):
+            return p
+        new = f"{name}#{tag}"
+        dup = next((q for q in (self.store.profiles(p.owner_id) if p.owner_id is not None else [])
+                    if q.id != p.id and (q.name.lower(), q.tag.lower()) == (name.lower(), tag.lower())), None)
+        if dup is not None:
+            if self.games(dup.id).load()["games"] or self.store.jobs(dup.id, 1):
+                log(f"  ! {p.riot_id} is now {new}, but you also have {new} with games of its own: "
+                    "delete the one you don't want, then import again")
+                return p
+            self._fold(dup.id, p.id)
+            log(f"· {new} (added again, no games yet) folded into this player")
+        self.store.update_profile(p.id, name=name, tag=tag)
+        log(f"· {p.riot_id} is now {new}: renamed (their games stay)")
+        return self.store.profile(p.id) or p
+
+    def _fold(self, gone: int, keep: int) -> None:
+        """A duplicate without games goes; its team places go to the one we keep."""
+        import shutil
+        owner = (self.store.profile(keep) or self.store.profile(gone)).owner_id
+        for t in self.store.teams(owner) if owner is not None else []:
+            ms = t.member_list
+            if not any(m.get("pid") == gone for m in ms):
+                continue
+            have = any(m.get("pid") == keep for m in ms)
+            out = []
+            for m in ms:
+                if m.get("pid") == gone:
+                    if have:
+                        continue
+                    m = {**m, "pid": keep}
+                out.append(m)
+            self.store.update_team(t.id, members=out)
+        self.store.delete_profile(gone)
+        shutil.rmtree(self.store.profile_dir(gone), ignore_errors=True)
 
     def submit_tips(self, pid: int, map_name: str, queue: str, all_rows: list[dict], llm_choice: str = "") -> str:
         key = f"tips:{pid}:{slug(map_name)}:{queue}"
