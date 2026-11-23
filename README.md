@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.57.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.58.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -759,6 +759,11 @@ really threw around these fights in your replays, one round's worth a rep, at it
 the plant). Smokes and walls block sight both ways, a flash blinds you if you look at it, mollies burn you (you have
 150; the damage a second is close to each agent's), slows slow you, recon and traps reveal you (they pre-aim: quicker,
 and they don't need to look your way). It can be switched off per drill (*Their utility* on the spot).
+
+**Your abilities (4.58).** Pick *Your agent* on the spot: their C, Q and E (`nexus/stats/kits.py`) are on your keys
+in the drill, quick-cast where you aim: smokes and walls block sight, flashes blind whoever faces them (you too),
+mollies burn, concusses and tethers stop them fighting you, recon and traps reveal them, dashes, teleports and
+anchors move you. No ultimates.
 
 ### Run it permanently
 

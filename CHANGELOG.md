@@ -4,6 +4,29 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.58.0
+- **Your own abilities in Aim on maps** (hold, attack, entry, retake, post-plant). Pick **Your agent** on the spot
+  card; in the drill their C, Q and E are on your keys (*Options & keys*: Ability C on Z by default, since C is
+  crouch here; Q and E on Q and E), quick-cast where you aim, with the agent's charges for the rep. Ultimates aren't
+  in the drills. What they do:
+  - **Smokes** (Omen, Brimstone, Astra, Clove, Jett, Viper, Harbor, Cypher's cage) block their sight and yours.
+  - **Flashes** (KAY/O, Phoenix, Skye, Reyna, Yoru, Gekko, Vyse, Omen's Paranoia; Breach's Flashpoint through
+    walls) pop where you aim after the agent's delay: anyone facing it is blind for about 2 s and can't fight you.
+    Look away from your own: it blinds you too.
+  - **Mollies** (Brimstone, Viper, KAY/O, Killjoy, Phoenix, Raze, Gekko, Sova's Shock Bolt, Breach's Aftershock…)
+    burn whoever stands in them, at close to the game's damage: molly the spike in post-plant. Yours burns you too.
+  - **Concuss, nearsight, tethers** (Breach, Skye, Neon, Fade, Astra, Deadlock, Tejo): they can't fight you for a
+    few seconds.
+  - **Recon** (Sova's dart and drone, Fade's Haunt, KAY/O's knife, Cypher's camera, Killjoy's turret, Tejo's drone)
+    and **traps** (Cypher, Killjoy, Chamber, Deadlock): revealed enemies show on the minimap; a trap also catches the
+    first one who walks into it.
+  - **Walls** (Sage, Viper, Phoenix, Neon, Harbor, Deadlock, Iso, Vyse) block sight across where you aim.
+  - **Movement**: Jett's Tailwind, Raze's Blast Pack and Waylay's Lightspeed dash; Omen's Shrouded Step teleports
+    where you aim; Chamber's Rendezvous, Yoru's Gatecrash and Waylay's Refract leave a marker and take you back on the
+    second press; Neon's High Gear makes you faster.
+  - Abilities that don't change a fight in a drill (heals, decoys, slows) aren't in it. Your abilities and their
+    charges show next to the ammo.
+
 ## 4.57.0
 - **Ask the coach picks the games your question is about.** Before answering, the coach sees all your stored games
   (how many per mode, agent and map, from when to when, the newest ones one by one) and picks the ones the question

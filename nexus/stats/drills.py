@@ -568,6 +568,10 @@ ACTIONS = {
     "crouch": ("Crouch", "KeyC"),
     # 4.54: retakes. 4 is the game's own key for the spike (held to defuse).
     "defuse": ("Defuse (hold)", "Digit4"),
+    # 4.58: your agent's abilities in Aim on maps (C is crouch here, so its ability starts on Z: change it if you like)
+    "ab_c": ("Ability C", "KeyZ"),
+    "ab_q": ("Ability Q", "KeyQ"),
+    "ab_e": ("Ability E", "KeyE"),
 }
 FIXED = {"Escape"}           # always stops a drill
 
