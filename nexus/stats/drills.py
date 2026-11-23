@@ -24,7 +24,8 @@ import os
 import time
 from pathlib import Path
 
-VERSION = 4                   # 2 (4.52): the fights of every match too (the general drills' spots); 3 (4.54): the
+VERSION = 5                   # 5 (4.59): who died in a fight (the drills a match suggests);
+                              # 2 (4.52): the fights of every match too (the general drills' spots); 3 (4.54): the
                               # spike (post-plant fights: retakes, post-plants); 4 (4.56): the utility around a fight
 LEAD_S = 1.5                  # the drill starts this long before the killer first had you in view
 MIN_LEAD_S = 2.5              # and at least this long before the kill
@@ -225,6 +226,9 @@ def fights_of(ctx) -> list[dict]:
             if util:
                 fight["util"] = util
             fight["t"] = round(t, 2)
+            vic = m.players.get(k.victim)
+            if vic is not None:                         # 4.59: whose death it was (Riot ID, lower case)
+                fight["victim"] = f"{vic.name}#{vic.tag}".lower()
             out.append(fight)
     return out
 
@@ -254,6 +258,44 @@ def _fight_util(util: list, sides: dict, t: float, near: list, until: float, rad
                     round(u["z"], 2)])
     out.sort(key=lambda x: x[3])
     return out[:UTIL_MAX]
+
+
+def suggest(riot_id: str, fights: list[dict], sp: dict, n: int = 5) -> list[dict]:
+    """4.59: the general drills a match points to: each of this player's deaths in it, as the drill on the spot it
+    happened at (after a plant: retake as a defender, post-plant as an attacker; before it: hold the angle as a
+    defender, entry onto a site or take the spot as an attacker), the most deaths first.
+    -> [{mode, id, dz, az, deaths, rounds}]"""
+    me = riot_id.lower()
+    near = lambda p, q: math.hypot(p[0] - q[0], p[2] - q[2])      # noqa: E731
+    got: dict[tuple, dict] = {}
+    for f in fights:
+        if f.get("victim") != me:
+            continue
+        defender = f["won"] == "attack"             # an attacker killed me: I was defending
+        spot, mode = None, None
+        if f.get("post") is not None:
+            mode = "retake" if defender else "postplant"
+            spot = next((s for s in sp.get("retakes", []) if s["site"] == f.get("site")), None)
+        elif defender:
+            mode = "hold"
+            cand = [a for a in sp.get("angles", []) if near(a["hold"], f["d"]) <= 8.0]
+            spot = min(cand, key=lambda a: near(a["hold"], f["d"])) if cand else None
+        else:
+            site = next((s for s in sp.get("sites", []) if s["dz"] == f.get("dz")), None)
+            if site is not None:
+                mode, spot = "entry", site
+            else:
+                mode = "attack"
+                cand = [a for a in sp.get("angles", []) if near(a["hold"], f["d"]) <= 8.0]
+                spot = min(cand, key=lambda a: near(a["hold"], f["d"])) if cand else None
+        if spot is None:
+            continue
+        g = got.setdefault((mode, spot["id"]), {"mode": mode, "id": spot["id"], "dz": spot["dz"],
+                                               "az": spot.get("az", ""), "deaths": 0, "rounds": []})
+        g["deaths"] += 1
+        if f.get("round") is not None and f["round"] + 1 not in g["rounds"]:
+            g["rounds"].append(f["round"] + 1)
+    return sorted(got.values(), key=lambda g: (-g["deaths"], g["rounds"][:1]))[:n]
 
 
 def _util_sets(fs: list, shift=None, n: int = 10) -> list:

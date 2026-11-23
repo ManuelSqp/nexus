@@ -110,3 +110,10 @@
 .dr-facts .dr-wide{grid-column:1/-1}
 .dr-bins{display:flex;gap:2px}.dr-bins i{flex:1 1 0;height:16px;border-radius:2px;background:#2a2f45}
 .dr-bins i.beat{background:#2fc4b2}.dr-bins i.slow{background:#e2a23a}.dr-bins i.miss{background:#e2505f}
+
+/* 4.59: what your last match points to; your sessions on a spot */
+.am-suggest{margin:0 0 14px;padding:12px 14px}.am-suggest h3{margin:0 0 4px;font-size:15px}
+.am-suggest ul{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.am-suggest button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:inherit;cursor:pointer}
+.am-suggest button:hover{border-color:var(--accent,#ff4f8b)}.am-suggest small{color:var(--muted)}
+.am-spark{vertical-align:middle;margin-left:6px}

@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.59.0
+- **Practice what cost you rounds.** Aim on maps opens with your last match: every spot you died at, as the drill on
+  that spot (died retaking B → *Retake B*; died after planting → *Post-plant*; died holding an angle → *Hold* on it;
+  died going onto a site → *Entry*, elsewhere as an attacker → *Take* the spot), the most deaths first, with the
+  rounds. Click one: it opens that tab, map and spot, ready to play. A match's report has a button for it too
+  (*Practice what cost you rounds*), with that match.
+- **Your progress on each spot.** Every spot in the list shows a small line of your sessions (the median of each,
+  green when it's getting better), and the spot shows the first sessions against the last ones ("6 sessions: 2.41 s →
+  1.87 s better") next to your best.
+- The drills of every match are worked out once more in the background (they now keep whose death each fight was).
+
 ## 4.58.0
 - **Your own abilities in Aim on maps** (hold, attack, entry, retake, post-plant). Pick **Your agent** on the spot
   card; in the drill their C, Q and E are on your keys (*Options & keys*: Ability C on Z by default, since C is

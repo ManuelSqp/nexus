@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.58.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.59.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -764,6 +764,10 @@ and they don't need to look your way). It can be switched off per drill (*Their 
 in the drill, quick-cast where you aim: smokes and walls block sight, flashes blind whoever faces them (you too),
 mollies burn, concusses and tethers stop them fighting you, recon and traps reveal them, dashes, teleports and
 anchors move you. No ultimates.
+
+**What cost you rounds (4.59).** Aim on maps opens with your last match: each spot you died at as the drill on it
+(retake, post-plant, hold, entry, take), the most deaths first; a match's report links there with that match. Each
+spot shows your sessions on it as a small line, and the first ones against the last.
 
 ### Run it permanently
 
