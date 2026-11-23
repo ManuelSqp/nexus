@@ -136,7 +136,7 @@
     const kit = C.agents[g.agent] || null;
     return `<fieldset class="am-opt"><legend>${esc(T('Your agent'))}</legend><select id="am-g-agent"><option value="">${esc(T('none (no abilities)'))}</option>${
       Object.keys(C.agents).map(a => `<option value="${esc(a)}" ${a === g.agent ? 'selected' : ''} translate="no">${esc(a)}</option>`).join('')}</select>
-      ${kit ? `<small class="muted">${Object.entries(kit).map(([k, n]) => `${k} <span translate="no">${esc(n)}</span>`).join(' · ')}</small>` : ''}</fieldset>`;
+      ${kit ? `<small class="muted">${Object.entries(kit).map(([k, n]) => `${esc(k)} <span translate="no">${esc(n)}</span>`).join(' · ')}</small>` : ''}</fieldset>`;
   }
   const UTIL_NAME = {smoke: 'smokes', flash: 'flashes', damage: 'mollies', slow: 'slows', wall: 'walls', recon: 'recon', trap: 'traps'};
   try { Object.assign(g, JSON.parse(localStorage.getItem('nexus.drills.g') || '{}')); } catch (e) {}
@@ -175,11 +175,11 @@
   function trendText(meds, higher) {
     if (!meds || !meds.length) return '';
     const f = v => (higher ? Math.round(v) + ' %' : v.toFixed(2) + ' s');
-    if (meds.length === 1) return `${T('1 session:')} ${f(meds[0])}`;
+    if (meds.length === 1) return `${esc(T('1 session:'))} ${esc(f(+meds[0]))}`;
     const n = Math.min(3, Math.floor(meds.length / 2)), a = meds.slice(0, n), b = meds.slice(-n);    // the first and last few
     const m = v => v.slice().sort((x, y) => x - y)[Math.floor(v.length / 2)];
     const ma = m(a), mb = m(b), better = higher ? mb > ma : mb < ma, same = Math.abs(mb - ma) < (higher ? 2 : 0.03);
-    return `${meds.length} ${T('sessions:')} ${f(ma)} → ${f(mb)} <span class="${same ? 'muted' : better ? 'good' : 'bad'}">${T(same ? 'about the same' : better ? 'better' : 'worse')}</span>${spark(meds, higher)}`;
+    return `${esc(String(meds.length))} ${esc(T('sessions:'))} ${esc(f(+ma))} → ${esc(f(+mb))} <span class="${same ? 'muted' : better ? 'good' : 'bad'}">${esc(T(same ? 'about the same' : better ? 'better' : 'worse'))}</span>${spark(meds.map(Number), higher)}`;
   }
 
   // 4.59: what your last match points to: the drill on each spot you died at, the most deaths first
@@ -199,10 +199,10 @@
     if (!box || !SUG || (!SUG.items.length && !SUG.pending)) { if (box) box.hidden = true; return; }
     box.hidden = false;
     const when = SUG.started ? new Date(SUG.started).toLocaleDateString() : '';
-    const head = `${T(C.match ? 'This match' : 'Your last match')}: <span translate="no">${esc(SUG.map)}</span>${SUG.score ? ' ' + esc(SUG.score) : ''}${when ? ' · ' + esc(when) : ''}`;
-    box.innerHTML = `<h3>${T('Practice what cost you rounds')}</h3><p class="small muted">${head}${SUG.pending ? ' · ' + esc(T('working it out…')) : ''}</p>
-      <ul>${SUG.items.map((it, i) => `<li><button type="button" data-sug="${i}"><b><span>${esc(T(MODE_NAME[it.mode] || it.mode))}</span> <span translate="no">${esc(it.mode === 'retake' || it.mode === 'postplant' ? it.dz : fromTo(it.mode === 'hold' ? it.az : it.dz, it.mode === 'hold' ? it.dz : it.az))}</span></b>
-        <small>${it.deaths}× ${esc(T(it.deaths === 1 ? 'death' : 'deaths'))} · ${esc(T(it.rounds.length === 1 ? 'round' : 'rounds'))} ${it.rounds.join(', ')}</small></button></li>`).join('')}</ul>`;
+    const head = `${esc(T(C.match ? 'This match' : 'Your last match'))}: <span translate="no">${esc(SUG.map)}</span>${SUG.score ? ' ' + esc(SUG.score) : ''}${when ? ' · ' + esc(when) : ''}`;
+    box.innerHTML = `<h3>${esc(T('Practice what cost you rounds'))}</h3><p class="small muted">${head}${SUG.pending ? ' · ' + esc(T('working it out…')) : ''}</p>
+      <ul>${SUG.items.map((it, i) => `<li><button type="button" data-sug="${+i}"><b><span>${esc(T(MODE_NAME[it.mode] || it.mode))}</span> <span translate="no">${esc(it.mode === 'retake' || it.mode === 'postplant' ? it.dz : fromTo(it.mode === 'hold' ? it.az : it.dz, it.mode === 'hold' ? it.dz : it.az))}</span></b>
+        <small>${esc(String(+it.deaths))}× ${esc(T(it.deaths === 1 ? 'death' : 'deaths'))} · ${esc(T(it.rounds.length === 1 ? 'round' : 'rounds'))} ${esc(it.rounds.map(Number).join(', '))}</small></button></li>`).join('')}</ul>`;
   }
   function openSpot(mode, mapName, id) {
     sel = id;
@@ -327,7 +327,7 @@
       : `${s.hides.length} ${T('hiding places; the route attackers took most.')}`;
     const won = SITES.has(tab) ? '' : ` ${T('Defenders won')} ${Math.round(s.won_def / s.count * 100)} %.`;
     const foes = !FOES.has(tab) ? '' : `<fieldset class="am-opt"><legend>${esc(T(tab === 'postplant' ? 'Retakers' : tab === 'retake' ? 'Attackers' : 'Defenders'))}</legend>${(C.foes || [1, 2, 3]).map(n =>
-      `<label class="am-chip"><input type="radio" name="am-foes" value="${n}" ${g.foes === n ? 'checked' : ''}> ${n}</label>`).join('')}</fieldset>`;
+      `<label class="am-chip"><input type="radio" name="am-foes" value="${esc(String(n))}" ${g.foes === n ? 'checked' : ''}> ${esc(String(n))}</label>`).join('')}</fieldset>`;
     const side = ENEMY[tab], sets = side ? (s.util || []).filter(set => set.some(u => u[2] === side)) : [];
     const kinds = [...new Set(sets.flat().filter(u => u[2] === side).map(u => u[0]))].filter(k => UTIL_NAME[k]);
     const util = !side ? '' : `<fieldset class="am-opt"><legend>${esc(T('Their utility'))}</legend>${sets.length
@@ -342,9 +342,9 @@
       <p>${esc(T('Fought over'))} ${s.count} ${esc(T(s.count === 1 ? 'time in the replays.' : 'times in the replays.'))}${esc(won)} ${what}</p>
       ${styles}${foes}${util}${agentPick()}
       <fieldset class="am-opt"><legend>${esc(T(tab === 'track' ? 'How fast he strafes' : 'Difficulty'))}</legend>${C.diffs.map(k =>
-        `<label class="am-chip"><input type="radio" name="am-diff" value="${k}" ${g.diff === k ? 'checked' : ''}> ${esc(T(DIFF[k]))}</label>`).join('')}</fieldset>
+        `<label class="am-chip"><input type="radio" name="am-diff" value="${esc(k)}" ${g.diff === k ? 'checked' : ''}> ${esc(T(DIFF[k]))}</label>`).join('')}</fieldset>
       <div class="am-row"><label>${esc(T('Gun'))} <select id="am-g-gun">${C.guns.map(n => `<option ${n === g.gun ? 'selected' : ''} translate="no">${esc(n)}</option>`).join('')}</select></label>
-        <label>${esc(T(tab === 'hold' ? 'Peeks' : 'Reps'))} <select id="am-g-reps">${REPS[tab].map(n => `<option ${n === reps ? 'selected' : ''}>${n}</option>`).join('')}</select></label></div>
+        <label>${esc(T(tab === 'hold' ? 'Peeks' : 'Reps'))} <select id="am-g-reps">${REPS[tab].map(n => `<option ${n === reps ? 'selected' : ''}>${esc(String(n))}</option>`).join('')}</select></label></div>
       <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${reps} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
         ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>
       ${(s.trend || {})[tab] ? `<p class="small">${trendText(s.trend[tab], pctTab())}</p>` : ''}`;
