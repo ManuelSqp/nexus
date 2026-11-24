@@ -17,7 +17,7 @@ import re
 import threading
 from pathlib import Path
 
-from flask import abort, g, jsonify, render_template, request, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .. import replayfile
 from ..stats import drills as dr
@@ -31,6 +31,7 @@ MATCHES = {"10": 10, "30": 30, "all": 400}     # "From" on the page: the last th
 SPOT_MATCHES = 60                               # 4.52: the spots of a map come from its last this-many replays
 MODES = ("hold", "attack", "track", "clear", "entry", "retake", "postplant")    # 4.54: entry, retake, post-plant
 GENERAL_ID = re.compile(r"^g-(" + "|".join(MODES) + r")-[0-9a-f]{10}$")
+QUEUE_G = re.compile(r"^g-(" + "|".join(MODES) + r")-([0-9a-f]{10})@([A-Za-z' ]{2,24})$")   # 4.67: a general drill in a queue
 PEEKS = ("wide", "jiggle", "crouch", "jump", "two")
 DIFFS = {"easy": 0.9, "medium": 0.6, "hard": 0.42, "pro": 0.3}   # the enemies' reaction time (s)
 DEFAULT_REPS = {"hold": 20, "attack": 5, "track": 1, "clear": 3, "entry": 5, "retake": 5, "postplant": 10}
@@ -205,7 +206,7 @@ def register(app, store, sr, view_profile) -> None:
             abort(404)
         setup = _read(stats_dir(pid) / "trainer.json", {}).get("setup", {})
         runs = dr.read_runs(stats_dir(pid)).get(drill_id, [])
-        nxt = [x for x in (request.args.get("queue") or "").split(",") if x and x != drill_id][:40]
+        nxt = queue_of(drill_id)
         ext = app.extensions["nexus"]
         boot = {"map": d["map"], "api": "/api/maps3d/", "drill": d, "pid": pid, "replay": False, "mode": "death",
                 "round_api": f"/api/replay/{d['mid']}/round/{d['round']}?pid={pid}",
@@ -214,9 +215,7 @@ def register(app, store, sr, view_profile) -> None:
                 "keys": read_keys(data_dir, g.user.id), "actions": [[a, lbl] for a, (lbl, _d) in dr.ACTIONS.items()],
                 "keys_api": url_for("aim_keys"), "defaults": dr.default_keys(), "gun": dr.gun(d["my_weapon"]), "his_gun": dr.gun(d["weapon"]),
                 "guns": {n: dr.gun(n) for n in dr.GUNS}, "hp": dr.HP, "history": dr.summary(runs),
-                "list": url_for("aim_maps", pid=pid), "queue": nxt,
-                "next": url_for("aim_drill", pid=pid, drill_id=nxt[0]) + ("?queue=" + ",".join(nxt[1:]) if nxt[1:] else "")
-                if nxt else "",
+                "list": url_for("aim_maps", pid=pid), "queue": nxt, "next": item_url(pid, nxt), "step": step(nxt),
                 "util_col": COLS,
                 "watch": url_for("replay_view", pid=pid, match_id=d["mid"]) + f"?round={d['round']}",
                 "agents": ext.get("agents_boot", dict)(),
@@ -239,6 +238,76 @@ def register(app, store, sr, view_profile) -> None:
         with _lock:
             data = dr.add_run(stats_dir(pid), drill_id, run)
         return jsonify(ok=True, history=dr.summary(data.get(drill_id, []), run["kind"]))
+
+    # ---------------------------------------------------------------- 4.67: drills in a row (the warm-up)
+    def queue_of(current: str) -> list[str]:
+        """?queue=: the drills still to come (death drill ids, or general ones as g-<mode>-<spot>@<map>)."""
+        out = []
+        for x in (request.args.get("queue") or "").split(",")[:40]:
+            x = x.strip()
+            if x and x != current and (QUEUE_G.match(x) or re.fullmatch(r"[A-Za-z0-9_-]{1,80}", x)) and x not in out:
+                out.append(x)
+        return out
+
+    def step(rest: list[str]) -> str:
+        """"2/5" in a warm-up (?wt= the number of drills in it)."""
+        try:
+            total = int(request.args.get("wt") or 0)
+        except ValueError:
+            return ""
+        return f"{total - len(rest)}/{total}" if 0 < total <= 40 and len(rest) < total else ""
+
+    def item_url(pid: int, items: list[str], total: int | None = None) -> str:
+        """The page of the first drill in items, with the rest as its queue."""
+        if not items:
+            return ""
+        total = total or request.args.get("wt", type=int)
+        q = {"queue": ",".join(items[1:])} if items[1:] else {}
+        if total:
+            q["wt"] = total
+        m = QUEUE_G.match(items[0])
+        if m:
+            mode, sid, name = m.groups()
+            return url_for("aim_play", pid=pid, mode=mode, map_name=name, sid=sid, reps=dr.WARM_REPS[mode], **q)
+        return url_for("aim_drill", pid=pid, drill_id=items[0], **q)
+
+    @app.get("/profiles/<int:pid>/aim/warmup")
+    def aim_warmup(pid: int):
+        """4.67: the daily warm-up: what slipped this week, what your newest match points to, a tracking drill."""
+        p, _e = view_profile(pid)
+        runs = dr.read_runs(stats_dir(pid))
+        week = dr.weekly(runs)
+        mid, name, items, sp = newest_suggest(p)
+        by = map_matches()
+        if sp is None and by:                                    # no suggestions: your most played map
+            name = max(by, key=lambda m: len(by[m]))
+            sp, _pending = map_spots(p, name, by[name], False)
+        track = None
+        if sp and sp.get("angles"):                              # the angle you tracked least
+            a = min(sp["angles"], key=lambda a: (len(runs.get(f"g-track-{a['id']}", [])), -a.get("count", 0)))
+            track = (a["id"], name)
+        fallback = []
+        if sp:
+            fallback = [dr.token("hold", a["id"], name) for a in sp.get("angles", [])[:3]]
+            fallback += [dr.token("retake", r["id"], name) for r in sp.get("retakes", [])[:1]]
+        q = dr.warmup(week, items, name or "", track, fallback)
+        if not q:
+            flash("Nothing to warm up with yet: Nexus needs your replays to make drills on the maps (Replays).", "error")
+            return redirect(url_for("aim_maps", pid=pid))
+        return redirect(item_url(pid, q, len(q)))
+
+    def newest_suggest(p) -> tuple[str, str, list, dict | None]:
+        """The newest match whose drills are worked out: (match, map, suggestions, spots of the map)."""
+        by = map_matches()
+        for mid in my_matches(p, 8):
+            brief = match_brief(store, mid, p.riot_id) or {}
+            name = brief.get("map") or ""
+            fights = dr.read_fights(data_dir, mid, signature(mid, name)) if name else None
+            if fights is None or name not in by:
+                continue
+            sp, _pending = map_spots(p, name, by[name], False)
+            return mid, name, dr.suggest(p.riot_id, fights, sp), sp
+        return "", "", [], None
 
     # ---------------------------------------------------------------- 4.52: general drills on the map's real spots
     def map_matches() -> dict[str, list[str]]:
@@ -355,7 +424,9 @@ def register(app, store, sr, view_profile) -> None:
                 "keys": read_keys(data_dir, g.user.id), "actions": [[k, lbl] for k, (lbl, _d) in dr.ACTIONS.items()],
                 "keys_api": url_for("aim_keys"), "defaults": dr.default_keys(), "gun": dr.gun(gun_name),
                 "guns": {n: dr.gun(n) for n in dr.GUNS}, "hp": dr.HP, "history": dr.summary(runs, mode),
-                "list": url_for("aim_maps", pid=pid) + f"#{mode}", "util_col": COLS, "queue": [], "next": "",
+                "list": url_for("aim_maps", pid=pid) + f"#{mode}", "util_col": COLS,
+                "queue": queue_of(dr.token(mode, sid, name)), "next": item_url(pid, queue_of(dr.token(mode, sid, name))),
+                "step": step(queue_of(dr.token(mode, sid, name))),
                 "agents": ext.get("agents_boot", dict)(),
                 **ext.get("motion_boot", lambda: {"anims": None, "guns": {}})()}
         return render_template("drill_view.html", p=p, active_pid=pid, d={"map": name, "where": title}, boot=boot)

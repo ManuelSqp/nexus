@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.67.0
+- **Daily warm-up.** *Start the warm-up* on Practice › Aim on maps plays up to 6 drills in a row, about 10
+  minutes: the drills that slipped this week, the ones your newest match points to ("practice what cost you
+  rounds"), the tracking drill you played least, then drills you got better at, to keep them. Shorter than usual
+  (e.g. 10 reps for holding an angle, 3 retakes); the drill page says "Warm-up 2/5" and *Next drill* goes on. Any
+  drill can now have general drills and your deaths in one queue.
+- **The team's drill week on Discord.** Team › Practice: *Weekly drills summary on Discord* posts every Sunday at
+  20:00 (to the weekly-focus channel) who drilled how much (sessions, reps, days), each player's biggest step,
+  the team's biggest step, who didn't drill yet, and how many sessions were on this week's map and which kinds
+  of drill nobody played there. *Post this week's drills* posts it right away.
+
 ## 4.66.0
 - **The coach knows your practice.** Ask the coach (and the team coach) now gets your drills from Aim on maps:
   when you last drilled, sessions this week and last week, how many of the last 8 weeks you drilled, each kind

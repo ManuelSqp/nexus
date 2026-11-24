@@ -184,6 +184,12 @@ def register(app, store, sr, get_team) -> None:
         if f.get("action") == "remake":
             make(t, week_id())
             flash("Practice plan made again from the team's current numbers.", "ok")
+        elif f.get("action") == "post_drills":                # 4.67: the team's drill week
+            try:
+                post_drills(t)
+                flash("Posted this week's drills to Discord.", "ok")
+            except Exception as e:
+                flash(f"Not posted: {e}", "error")
         elif f.get("action") == "post":
             from ..discord import channel, post as dpost
             url = channel(t.discord_info, "focus")
@@ -205,11 +211,53 @@ def register(app, store, sr, get_team) -> None:
             except ValueError:
                 minutes = 90
             info = t.sync_info
-            info["practice"] = {"days": days or pr.DEFAULT_DAYS, "time": time, "minutes": minutes, "post": f.get("post") == "1"}
+            info["practice"] = {"days": days or pr.DEFAULT_DAYS, "time": time, "minutes": minutes, "post": f.get("post") == "1",
+                                "drills_week": f.get("drills_week") == "1"}
             store.update_team(tid, sync=info)
             make(store.team(tid), week_id())
             flash("Practice days saved; this week's plan was made again.", "ok")
         return redirect(url_for("team_practice", tid=tid))
+
+    def drills_of(t) -> dict:
+        """4.67: the team's drill week (starters and subs), with this Premier week's map as the focus."""
+        from ..stats import drills as dr
+        from .stats_views import week_map_of
+        players = []
+        for mm in t.member_list:
+            p = store.profile(mm["pid"])
+            if p:
+                players.append((p.name, dr.read_runs(sr.games(p.id).path.parent)))
+        focus = week_map_of(app, t) or (list(t.map_list)[0] if t.map_list else None)
+        return dr.team_week(players, focus)
+
+    def post_drills(t) -> None:
+        from ..discord import channel, drills_embeds, post as dpost
+        url = channel(t.discord_info, "focus")
+        if not url:
+            raise RuntimeError("Add a Discord webhook under Team settings first.")
+        dpost(url, "", drills_embeds(t.name, week_id(), drills_of(t)))
+
+    def tick_drills(now: datetime | None = None) -> list[int]:
+        """4.67: Sundays from 20:00, once a week: the team's drill week to Discord (if on)."""
+        now = now or datetime.now()
+        if now.weekday() != 6 or now.hour < 20:
+            return []
+        done = []
+        for t in store.all_teams():
+            if not cfg_of(t).get("drills_week") or t.sync_info.get("drills_week_sent") == week_id():
+                continue
+            info = t.sync_info
+            info["drills_week_sent"] = week_id()
+            store.update_team(t.id, sync=info)
+            try:
+                post_drills(t)
+                done.append(t.id)
+            except Exception:
+                pass
+        return done
+
+    app.extensions["nexus"].setdefault("ticks", []).append(tick_drills)
+    app.extensions["nexus"]["drills_week"] = drills_of
 
     def tick() -> list[int]:
         """On practice days, 60 min before: a reminder to Discord (if on) and to everyone's devices."""

@@ -131,3 +131,6 @@
 .am-week .up{color:var(--win)}.am-week .down{color:var(--red)}
 .aw-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin-top:12px}
 .aw-lists ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.7}
+
+/* 4.67: the daily warm-up */
+.am-warm{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}

@@ -1044,7 +1044,7 @@
     if (S.phase === 'ready' || S.paused) {
       el.hidden = false;
       const moveKeys = MOVING ? ` · ${['forward', 'left', 'back', 'right'].map(keyName).join('')} ${esc(T('move'))} · ${esc(keyName('walk'))} ${esc(T('walk'))} · ${esc(keyName('crouch'))} ${esc(T('crouch'))}` : '';
-      el.innerHTML = `<h2>${esc(S.paused ? T('Paused') : MODE === 'death' ? T('Your death as a drill') : title())}</h2>` +
+      el.innerHTML = `<h2>${C.step ? `<span class="muted">${esc(T('Warm-up'))} ${esc(C.step)} · </span>` : ''}${esc(S.paused ? T('Paused') : MODE === 'death' ? T('Your death as a drill') : title())}</h2>` +
         `<p>${esc(T(INTRO[MODE]))}</p>` + utilIntro() +
         (MODE === 'death' ? `<p class="dr-his">${esc(T('His time'))}: <b>${D.his !== null && D.his !== undefined ? D.his.toFixed(2) + ' s' : '–'}</b></p>` : '') +
         `<p class="muted small">${esc(keyName('shoot'))} ${esc(T('shoot'))} · ${esc(keyName('reload'))} ${esc(T('reload'))}${moveKeys}${MODE === 'retake' ? ` · ${esc(keyName('defuse'))} ${esc(T('defuse (hold)'))}` : ''} · ${esc(keyName('restart'))} ${esc(T('again'))}${MODE === 'death' ? ` · ${esc(keyName('watch'))} ${esc(T('watch how he did it'))}` : ''} · Esc ${esc(T('stop'))}</p>` +
