@@ -4,6 +4,16 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.62.0
+- **Comp styles.** The comps page has a *Style* switch: *Balanced* (as before), *Aggressive* (fast hits and early
+  fights: entry duelists, flashes, stuns; a second duelist is fine), *Defensive* (holding sites and retakes: set-ups,
+  recon, flank watch; a second sentinel is fine) and *Utility execute* (set-piece site takes: smokes, walls, flashes,
+  damage; a second controller is fine). Each agent gets points for how well it fits the style, on top of the
+  player's own numbers, so players are still put on agents they play well; the cards say "fits an aggressive
+  style". The comps at a glance, the other options, the fill-ins and *Use this comp* all follow the style. A role
+  mix you set in the team's map meta still comes first, and *Most comfortable* doesn't use styles.
+- The style is kept per team for your login; drafts made from a suggested comp use it too.
+
 ## 4.61.1
 - **Code scanning** (three high alerts on main):
   - *Uncontrolled data used in path expression* (`web/replays.py`, `stats/drills.py`): the match cache and the

@@ -92,6 +92,13 @@
   {% else %}
   <p class="muted small" style="margin:0">Comps made with: <b>{{ comp_label }}</b>{% if follow_pools %} · <span>following your agent pools</span> (<a href="{{ url_for('team_sheet', tid=t.id) }}#pool">comp sheet</a>){% endif %}. The team owner changes it here.</p>
   {% endif %}
+  {# 4.62: comp styles: the comps made for the way you want to play #}
+  <div class="row cstyle" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+    <b>Style</b>
+    <div class="subtabs" role="navigation" aria-label="Comp style" style="margin:0">{% for k, label in styles.items() %}<a class="{{ 'on' if style == k }}" href="{{ url_for('team', tid=t.id, map=sel, style=k) }}#compmaker" data-tip="{{ style_about[k] }}">{{ label }}</a>{% endfor %}</div>
+    {% if comp_method == 'comfort' %}<span class="muted small">"Most comfortable" only counts games: styles don't change it.</span>
+    {% else %}<span class="muted small">{{ style_about[style] }}. Kept for this team; drafts made from a comp use it too.</span>{% endif %}
+  </div>
 </section>
 
 {% if comp_method == 'web' %}
@@ -165,7 +172,7 @@
 <section class="card" id="detail">
   <div class="row between">
     <div class="subtabs maptabs" role="navigation" aria-label="Map">{% for x in plan %}<a class="{{ 'on' if x.map == sel }}" href="{{ url_for('team', tid=t.id, map=x.map) }}#detail">{{ x.map }}</a>{% endfor %}</div>
-    {% if m.main.ok %}<span class="muted small">{{ m.main.pattern }}{% if m.meta and m.meta.roles %} · role mix from your meta{% endif %} · <span>{{ comp_label }}</span></span>{% endif %}
+    {% if m.main.ok %}<span class="muted small">{{ m.main.pattern }}{% if m.meta and m.meta.roles %} · role mix from your meta{% endif %} · <span>{{ comp_label }}</span>{% if style != 'balanced' and comp_method != 'comfort' %} · <span>{{ styles[style] }}</span>{% endif %}</span>{% endif %}
   </div>
   {% if not m.main.ok %}
     <p class="warnc" style="margin-top:12px">{% if m.main.no_data %}No games for {{ m.main.no_data|join(', ') }} yet. Update their stats.{% else %}{{ m.main.reason }}{% endif %}</p>
@@ -219,7 +226,7 @@
       <span class="muted small">{% if c.web and c.web.sources %}<span>Sources:</span> {% for src in c.web.sources %}<a href="{{ src.url }}" target="_blank" rel="noopener noreferrer" data-tip="{{ src.title }}">[{{ loop.index }}]</a> {% endfor %}{% else %}{{ comp_label }}{% endif %}</span>
       {% if not o.ours %}
       <form method="post" action="{{ url_for('team_drafts', tid=t.id) }}" style="margin:0">
-        <input type="hidden" name="map" value="{{ sel }}"><input type="hidden" name="from" value="comp:{{ o.i }}"><input type="hidden" name="status" value="main">
+        <input type="hidden" name="map" value="{{ sel }}"><input type="hidden" name="from" value="comp:{{ o.i }}"><input type="hidden" name="status" value="main"><input type="hidden" name="style" value="{{ style }}">
         <button class="btn sm ghost" data-tip="Saves it as a draft marked 'our comp' for {{ sel }}: the Discord prep and the availability use it. You can still change it in Drafts.">Use this comp</button>
       </form>{% endif %}
     </div>

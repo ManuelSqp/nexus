@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import time
 
-from flask import abort, flash, g, jsonify, redirect, render_template, request, send_file, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from ..maps import AgentRegistry
 from ..stats import roles
@@ -688,8 +688,15 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         web = sr.read_webcomps(tid) if method == "web" else None
         rules_text = store.get("comp_rules_yaml")
         local = local_meta(filter_rows(owner_rows(t.owner_id), t.queue))
+        from ..stats import compstyle
+        kept = dict(session.get("compstyle") or {})          # 4.62: the comp style, kept per team for this login
+        style = compstyle.clean(request.args.get("style") or kept.get(str(tid)))
+        if request.args.get("style") in compstyle.STYLES and kept.get(str(tid)) != style:
+            kept[str(tid)] = style
+            session["compstyle"] = kept
+        st = None if style == compstyle.DEFAULT else style
         if len(starters) == 5 and maps:
-            plan = comp_plan(method, starters, subs, maps, local, meta, rules_text, web)
+            plan = comp_plan(method, starters, subs, maps, local, meta, rules_text, web, style=st)
         sel = request.args.get("map") or week_map_of(app, t)
         if plan and sel not in [m["map"] for m in plan]:
             sel = plan[0]["map"]
@@ -702,7 +709,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
                     ours = {"id": d["id"], "name": d["name"],
                             "agents": {s.get("agent") for s in d["data"].get("slots", []) if s.get("agent")}}
                     break
-            top4 = comp_top(method, starters, sel, local.get(sel), meta.get(sel.lower()), rules_text, web, n=4)
+            top4 = comp_top(method, starters, sel, local.get(sel), meta.get(sel.lower()), rules_text, web, n=4, style=st)
             for i, c in enumerate(top4[1:], start=1):
                 if c.get("ok") and mn and mn.get("ok"):
                     alts.append({"c": c, "x": explain(mn, c, sel), "i": i,
@@ -718,7 +725,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
             "team.html", t=t, premier_status=sr.status(f"premier:{tid}"), member_info=member_info, n_starters=len(starters), n_subs=len(subs),
             starters=[s.label for s in starters], plan=plan, maps=maps, sel=sel,
             detail=next((m for m in plan if m["map"] == sel), None) if plan else None,
-            meta_error=meta_error, queues=QUEUE_TABS, tab="comps", alts=alts, ours=ours, comp_method=method,
+            meta_error=meta_error, queues=QUEUE_TABS, tab="comps", alts=alts, ours=ours, comp_method=method, style=style, styles=compstyle.STYLES, style_about=compstyle.ABOUT,
             comp_label=COMP_METHODS[method], comp_methods=COMP_METHODS, is_owner=g.team_owner,
             web_status=sr.status(f"webcomps:{tid}") if method == "web" else None,
             web_data=web, web_search_on=bool(web_search_on()), follow_pools=pools_followed(t),

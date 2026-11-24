@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.61.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.62.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -505,6 +505,9 @@ map); click a map for the details:
   weaker*, *a fallback*) and when you'd pick it (an agent of the best comp doesn't work out, more smokes or more
   entry power, who needs practice first). *Use this comp* saves it as a draft marked *our comp* for the map
   (the old one goes back to *trying*); the Discord prep and the availability use it (`stats/compalts.py`).
+- **Style** (4.62): *Balanced*, *Aggressive*, *Defensive* or *Utility execute*. Agents that fit the style get up to 20
+  points on top of the player's own numbers, and the style's role mix (a second duelist / sentinel / controller) a
+  small bonus; a role mix from the map meta comes first. Every comp on the page follows it (`stats/compstyle.py`).
 - **If someone is missing**: which sub comes in on which agent, and who should switch.
 - **Map meta** (optional, per team): `prefer` / `avoid` agents and a fixed role mix per map, e.g.
   `Lotus: {roles: 1D 1I 2C 1S}`. A role mix you set is followed whenever the players' pools allow it.

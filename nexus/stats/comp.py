@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from . import roles
+from . import compstyle, roles
 from .aggregate import PRIOR_GAMES, smooth
 
 CANDIDATES = 6             # agents per player considered for a comp
@@ -142,7 +142,7 @@ def parse_meta(text: str) -> dict[str, dict]:
 
 
 def rate(pool: Pool, agent: str, map_name: str, local: dict | None = None, meta: dict | None = None,
-         rules=None, comfort_only: bool = False) -> dict:
+         rules=None, comfort_only: bool = False, style: str | None = None) -> dict:
     """Score and the numbers behind it. comfort_only (4.10): only how much the player plays the agent."""
     m = map_name.lower()
     n_a, n_am = pool.n.get(agent, 0), pool.nm.get((m, agent), 0)
@@ -172,6 +172,11 @@ def rate(pool: Pool, agent: str, map_name: str, local: dict | None = None, meta:
         pts, reason = rules.agent_bonus(agent)
         if pts:
             score += pts
+            why.append(reason)
+    if style and not comfort_only:            # 4.62: the comp style (compstyle.py)
+        pts, reason = compstyle.agent_bonus(agent, style)
+        score += pts
+        if reason:
             why.append(reason)
     if pool.pref:
         if agent in pool.pref["no"]:
@@ -218,8 +223,13 @@ def _role_score(agents: list[str], pattern: dict | None, rules=None) -> tuple[fl
     return pen, missing, []
 
 
+def _mix(agents: list[str], pattern, style, comfort_only: bool) -> float:
+    """4.62: the style's role mix bonus, unless the team set a role mix for the map (that one is followed)."""
+    return 0.0 if pattern or comfort_only or not style else compstyle.mix_bonus(agents, style, roles.role_of)
+
+
 def best_comp(players: list[Pool], map_name: str, local: dict | None = None, meta: dict | None = None,
-              rules=None, comfort_only: bool = False) -> dict:
+              rules=None, comfort_only: bool = False, style: str | None = None) -> dict:
     """Best distinct-agent assignment for these players on this map (rules: comprules.MapRules or None;
     comfort_only: rate by games played only)."""
     cands, no_data = [], []
@@ -228,7 +238,7 @@ def best_comp(players: list[Pool], map_name: str, local: dict | None = None, met
             no_data.append(p.label)
             cands.append([])
             continue
-        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only) for a in p.agents()), key=lambda x: -x["score"])
+        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only, style) for a in p.agents()), key=lambda x: -x["score"])
         cands.append(rated[:CANDIDATES])
     if no_data:
         return {"map": map_name, "ok": False, "no_data": no_data}
@@ -239,7 +249,7 @@ def best_comp(players: list[Pool], map_name: str, local: dict | None = None, met
         if len(set(agents)) < len(agents):
             continue
         rs, missing, notes = _role_score(agents, pattern, rules)
-        total = sum(c["score"] for c in combo) + rs
+        total = sum(c["score"] for c in combo) + rs + _mix(agents, pattern, style, comfort_only)
         if best is None or total > best[0]:
             best = (total, combo, missing, notes)
         if pattern and not missing and (exact is None or total > exact[0]):
@@ -259,7 +269,7 @@ def best_comp(players: list[Pool], map_name: str, local: dict | None = None, met
 
 
 def team_plan(starters: list[Pool], subs: list[Pool], maps: list[str], local: dict[str, dict],
-              meta: dict[str, dict], rules: dict | None = None, solve=None) -> list[dict]:
+              meta: dict[str, dict], rules: dict | None = None, solve=None, style: str | None = None) -> list[dict]:
     """Per map: the starters' comp, and for each starter the best fill-in from the subs.
     rules: the parsed map rules (comprules.load_rules) for the "Map rules + your stats" method, None = stats only.
     solve(lineup, map, local, meta) -> comp: another way to make a comp (4.10, see compmodes.py)."""
@@ -270,7 +280,7 @@ def team_plan(starters: list[Pool], subs: list[Pool], maps: list[str], local: di
         mr = for_map(rules, m) if rules is not None else None
         if solve is None:
             def one(lineup, _m=m, _lm=lm, _mm=mm, _mr=mr):
-                return best_comp(lineup, _m, _lm, _mm, _mr)
+                return best_comp(lineup, _m, _lm, _mm, _mr, style=style)
         else:
             def one(lineup, _m=m, _lm=lm, _mm=mm):
                 return solve(lineup, _m, _lm, _mm)
@@ -334,14 +344,14 @@ def pick_helper(pool: Pool, map_name: str, locked: list[str], local: dict | None
 
 
 def top_comps(players: list[Pool], map_name: str, local: dict | None = None, meta: dict | None = None,
-              n: int = 3, min_diff: int = 2, rules=None, comfort_only: bool = False) -> list[dict]:
+              n: int = 3, min_diff: int = 2, rules=None, comfort_only: bool = False, style: str | None = None) -> list[dict]:
     """The n best comps that differ from each other by at least `min_diff` agents."""
-    best = best_comp(players, map_name, local, meta, rules, comfort_only)
+    best = best_comp(players, map_name, local, meta, rules, comfort_only, style)
     if not best.get("ok"):
         return [best]
     cands = []
     for p in players:
-        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only) for a in p.agents()), key=lambda x: -x["score"])
+        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only, style) for a in p.agents()), key=lambda x: -x["score"])
         cands.append(rated[:CANDIDATES])
     pattern = (meta or {}).get("roles")
     scored = []
@@ -352,7 +362,7 @@ def top_comps(players: list[Pool], map_name: str, local: dict | None = None, met
         rs, missing, notes = _role_score(agents, pattern, rules)
         if pattern and missing:
             continue
-        scored.append((sum(c["score"] for c in combo) + rs, combo, missing, notes))
+        scored.append((sum(c["score"] for c in combo) + rs + _mix(agents, pattern, style, comfort_only), combo, missing, notes))
     scored.sort(key=lambda x: -x[0])
     from .aggregate import pattern as pat_str
     chosen = [best]

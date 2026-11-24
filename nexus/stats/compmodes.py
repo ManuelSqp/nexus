@@ -40,8 +40,9 @@ def _fallback(comp: dict) -> dict:
     return comp
 
 
-def plan(method: str, starters, subs, maps, local, meta, rules_text: str = "", web: dict | None = None) -> list[dict]:
-    """Per map: the starters' comp and the best fill-in for each starter (comp.team_plan)."""
+def plan(method: str, starters, subs, maps, local, meta, rules_text: str = "", web: dict | None = None,
+         style: str | None = None) -> list[dict]:
+    """Per map: the starters' comp and the best fill-in for each starter (comp.team_plan). style: compstyle.py (4.62)."""
     if method == "comfort":
         return team_plan(starters, subs, maps, local, meta,
                          solve=lambda lineup, m, lm, mm: best_comp(lineup, m, lm, mm, comfort_only=True))
@@ -49,22 +50,22 @@ def plan(method: str, starters, subs, maps, local, meta, rules_text: str = "", w
         rules = load_rules(rules_text)
 
         def solve(lineup, m, lm, mm):
-            found = comps_for(lineup, m, _web_entry(web, m), lm, mm)
-            return found[0] if found else _fallback(best_comp(lineup, m, lm, mm, for_map(rules, m)))
+            found = comps_for(lineup, m, _web_entry(web, m), lm, mm, style)
+            return found[0] if found else _fallback(best_comp(lineup, m, lm, mm, for_map(rules, m), style=style))
         return team_plan(starters, subs, maps, local, meta, solve=solve)
-    return team_plan(starters, subs, maps, local, meta, load_rules(rules_text) if method == "rules" else None)
+    return team_plan(starters, subs, maps, local, meta, load_rules(rules_text) if method == "rules" else None, style=style)
 
 
 def top(method: str, players, map_name: str, local=None, meta=None, rules_text: str = "", web: dict | None = None,
-        n: int = 3) -> list[dict]:
+        n: int = 3, style: str | None = None) -> list[dict]:
     """The n best comps for these players on this map (comp.top_comps). The comps page and drafts ask for 4 (4.61)."""
     if method == "comfort":
         return top_comps(players, map_name, local, meta, n=n, comfort_only=True)
     if method == "web":
-        found = comps_for(players, map_name, _web_entry(web, map_name), local, meta)
+        found = comps_for(players, map_name, _web_entry(web, map_name), local, meta, style)
         if found:
             return found[:n]
-        out = top_comps(players, map_name, local, meta, n=n, rules=for_map(load_rules(rules_text), map_name))
+        out = top_comps(players, map_name, local, meta, n=n, rules=for_map(load_rules(rules_text), map_name), style=style)
         return [_fallback(c) if c.get("ok") else c for c in out]
     rules = for_map(load_rules(rules_text), map_name) if method == "rules" else None
-    return top_comps(players, map_name, local, meta, n=n, rules=rules)
+    return top_comps(players, map_name, local, meta, n=n, rules=rules, style=style)
