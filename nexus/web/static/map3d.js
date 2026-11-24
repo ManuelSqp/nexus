@@ -324,6 +324,67 @@
     drawBuffers(G.glass);
     gl.depthMask(true); gl.disable(gl.BLEND); gl.useProgram(prog);
   }
+  // 4.70.1: how far the drawn map is along a ray: the wall you see (for the drills' shots; the see-through grid
+  // has 0.5 m cells, so walls and boxes are up to half a metre thicker there than drawn). One pixel, off screen:
+  // the map drawn from o looking along d, each surface writing its distance (cm, in three bytes). -> metres, Infinity
+  // when nothing is there, null when it can't tell (no map from the game's files, or no WebGL)
+  const PVS = `attribute vec3 q; uniform vec3 lo; uniform vec3 span; uniform mat4 vp; varying vec3 wp;
+    void main(){ wp = lo + q * span; gl_Position = vp * vec4(wp, 1.0); }`;
+  const PFS = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+    precision highp float;
+    #else
+    precision mediump float;
+    #endif
+    uniform vec3 o; varying vec3 wp;
+    void main(){ float cm = min(floor(distance(wp, o) * 100.0), 16777000.0);
+      gl_FragColor = vec4(floor(cm / 65536.0) / 255.0, mod(floor(cm / 256.0), 256.0) / 255.0, mod(cm, 256.0) / 255.0, 1.0); }`;
+  let pprog = null, ploc = {}, pfb = null;
+  function wallAlong(o, d) {
+    if (!G || !G.ready || !gl || !gprog) return null;
+    if (pprog === null) {
+      const sh = (t, src) => { const x = gl.createShader(t); gl.shaderSource(x, src); gl.compileShader(x); return x; };
+      pprog = gl.createProgram(); gl.attachShader(pprog, sh(gl.VERTEX_SHADER, PVS)); gl.attachShader(pprog, sh(gl.FRAGMENT_SHADER, PFS)); gl.linkProgram(pprog);
+      if (!gl.getProgramParameter(pprog, gl.LINK_STATUS)) { pprog = false; return null; }
+      for (const u of ['lo', 'span', 'vp', 'o']) ploc[u] = gl.getUniformLocation(pprog, u);
+      ploc.q = gl.getAttribLocation(pprog, 'q');
+      const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      const rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 1, 1);
+      pfb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, pfb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rb);
+      const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      if (!ok) { pprog = false; return null; }
+    }
+    if (!pprog) return null;
+    const L = Math.hypot(d[0], d[1], d[2]) || 1, f = [d[0] / L, d[1] / L, d[2] / L];
+    let r = [-f[2], 0, f[0]];                                 // right = f × up (any, when looking straight up)
+    const rl = Math.hypot(r[0], r[2]);
+    r = rl > 1e-6 ? [r[0] / rl, 0, r[2] / rl] : [1, 0, 0];
+    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    const V_ = [r[0], u[0], -f[0], 0, r[1], u[1], -f[1], 0, r[2], u[2], -f[2], 0,
+                -(r[0] * o[0] + r[1] * o[1] + r[2] * o[2]), -(u[0] * o[0] + u[1] * o[1] + u[2] * o[2]), f[0] * o[0] + f[1] * o[1] + f[2] * o[2], 1];
+    const was = {depth: gl.isEnabled(gl.DEPTH_TEST), blend: gl.isEnabled(gl.BLEND), cull: gl.isEnabled(gl.CULL_FACE)};
+    gl.bindFramebuffer(gl.FRAMEBUFFER, pfb); gl.viewport(0, 0, 1, 1);
+    gl.clearColor(1, 1, 1, 1); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST); gl.disable(gl.BLEND); gl.disable(gl.CULL_FACE);
+    gl.useProgram(pprog);
+    gl.uniformMatrix4fv(ploc.vp, false, mul(persp(0.05 * D2R, 1, 0.3, 600), V_));
+    gl.uniform3fv(ploc.lo, G.lo); gl.uniform3fv(ploc.span, G.span); gl.uniform3fv(ploc.o, o);
+    gl.bindBuffer(gl.ARRAY_BUFFER, G.pos); gl.enableVertexAttribArray(ploc.q); gl.vertexAttribPointer(ploc.q, 3, gl.UNSIGNED_SHORT, true, 6, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, G.idx);
+    gl.drawElements(gl.TRIANGLES, G.n, gl.UNSIGNED_INT, 0);
+    gl.disableVertexAttribArray(ploc.q);
+    const px = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, canvas.width, canvas.height); gl.clearColor(0.55, 0.62, 0.72, 1); gl.useProgram(prog);
+    for (const [k, cap] of [['depth', gl.DEPTH_TEST], ['blend', gl.BLEND], ['cull', gl.CULL_FACE]]) (was[k] ? gl.enable(cap) : gl.disable(cap));
+    if (px[0] === 255 && px[1] === 255 && px[2] === 255) return Infinity;
+    return (px[0] * 65536 + px[1] * 256 + px[2]) / 100;
+  }
   function roofAt(x, z) {                          // the height above which things are cut away (or Infinity)
     if (!G || !G.ready || opt.roofs) return Infinity;
     const R = G.roof.R, j = Math.floor((x - R.x0) / R.cell), i = Math.floor((z - R.z0) / R.cell);
@@ -951,7 +1012,7 @@
   window.nexusMap3D = {state: () => ({me, opt, loaded: !!M, cells: M ? M.cells.length : 0, mesh: mesh ? mesh.n : 0, touch: touch.on}), use, step: (dt, ks) => step(dt, new Set(ks)), draw, floorAt, touchKeys: () => [...touchKeys()],
     // 4.44: the replay viewer draws on top and moves the camera
     setLayer: l => { layer = l; if (M && l && l.ready) l.ready(); }, project, recolor,
-    visible, roofAt, zoneAt, drawnModel: k => drawn.has(k), eye: () => eyePos(),
+    visible, wallAlong, roofAt, zoneAt, drawnModel: k => drawn.has(k), eye: () => eyePos(),
     anims: url => setAnims(url), animsReady: () => !!A, clips: () => (A ? Object.keys(A.clips) : []),
     bones: k => { const it = inst.get(k); return it && it.bones ? it.bones : null; },     // 4.51: for the drills' hits
     blocked: (x, z, y) => (M ? blocked(x, z, y) : true),                               // 4.52: walking in the drills

@@ -435,9 +435,13 @@
         if (t !== null && (hit === null || t < hit[2])) hit = [f, part, t];
       }
     }
-    if (hit) {
-      const p = add(o, d, Math.max(0, hit[2] - 0.05));
-      if (!V().visible(o, p)) hit = null;                // a wall in the way
+    if (hit) {                                             // a wall in the way?
+      // 4.70.1: the wall you see (the drawn map, along the shot); the see-through grid only when that can't tell
+      // (the grid only ever errs toward "blocked", so the drawn map is asked only then: it costs a draw)
+      if (!V().visible(o, add(o, d, Math.max(0, hit[2] - 0.05)))) {
+        const wall = V().wallAlong ? V().wallAlong(o, d) : null;
+        if (wall === null || wall < hit[2] - 0.02) hit = null;
+      }
     }
     const part = hit ? hit[1] : 'miss';
     if (!S.first) { S.first = part; S.firsts[part]++; }
@@ -564,6 +568,7 @@
     }
   }
   const SPIKE_S = O.spike || 45;
+  const AREA_UTIL = new Set(['smoke', 'wall', 'damage', 'slow']);
   const TEAM_UTIL = {flash: {blind: 1.6}, stun: {r: 4.5, daze: 2.5}, trap: {daze: 2.5, used: false}, damage: {dps: 40}};
   function utilTarget() { return MODE === 'attack' ? SP.defs[0] : MODE === 'entry' ? SP.route[SP.route.length - 1] : null; }
   function utilTick(dt) {
@@ -907,7 +912,10 @@
   function objects() {
     // 4.56.1: smokes and walls are solid here, as in the game (the replay viewer keeps them see-through): an alpha
     // over 1 leaves only the soft rim see-through
-    const out = NM.utilObjects(utilList(), S.t, C.util_col).map(o => (o.block ? {...o, a: SOLID_A} : o));
+    // 4.70.1: your team's flashes, stuns, recon and traps aren't drawn as balls where they popped (that's often right
+    // where you stand); their smokes, walls and mollies are
+    const list = utilList().filter(u => !u.team || AREA_UTIL.has(u.type));
+    const out = NM.utilObjects(list, S.t, C.util_col).map(o => (o.block ? {...o, a: SOLID_A} : o));
     if (SPIKE && SP && SP.plant) {           // the spike (blinking faster as it runs out)
       const P = SP.plant, y = floor(P[0], P[2], P[1]) ?? P[1], left = S.spike ? S.spike.left : SP.left;
       const on = Math.sin(performance.now() / 1000 * Math.PI * (left < 10 ? 8 : 3)) > -0.2;
