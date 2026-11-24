@@ -1478,7 +1478,7 @@
     if (document.pointerLockElement) document.exitPointerLock();
     const sc = byId[st.id], s = score();
     const avg = st.times.length ? Math.round(st.times.reduce((a, b) => a + b, 0) / st.times.length) : null;
-    const body = {scenario: st.id, score: s, seconds: st.seconds};
+    const body = {scenario: st.id, score: s, seconds: st.seconds, sens: sens()};   // 4.69.1: for the perfect sens
     if (st.kind === 'track') body.on_target = Math.round(1000 * st.on / st.seconds) / 1000;
     else Object.assign(body, {hits: st.hits, shots: st.shots, ms: avg || 0});
     if (H().heads || H().oneshot) Object.assign(body, {body: st.body || 0, escaped: st.escaped || 0});

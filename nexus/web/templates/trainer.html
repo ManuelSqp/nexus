@@ -115,6 +115,7 @@
 @media (max-width:820px){.tr-sens{grid-template-columns:1fr}}
 .tr-sens h2{margin:0 0 6px;font-size:17px}
 .tr-sens p{margin:0 0 10px;font-size:13.5px;color:var(--muted);max-width:62ch}
+.tr-snorm{display:flex;flex-direction:column;gap:4px;margin:0 0 12px}.tr-snorm .switch{display:inline-flex;gap:8px;align-items:center;font-weight:600;cursor:pointer}
 .tr-rec{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:4px 0 6px}
 .tr-rec b{font:800 44px/1 var(--font-num);font-stretch:78%}
 .tr-rec span{color:var(--muted);font-size:13.5px}
@@ -244,8 +245,15 @@
     <p>A short mixed test (flicks, micro corrections, tracking) at different sensitivities, blind and in random order: first
       a wide spread around yours, then close around the best one. It measures how you hit, not only whether: flying past the
       target means too fast, stopping short means too slow.</p>
+    {# 4.69.1: normal scenarios count too, if you want #}
+    {% if can_save %}<form method="post" action="{{ url_for('trainer_sens_normal', pid=p.id) }}" class="tr-snorm">
+      <input type="hidden" name="on" value="{{ '0' if sens_normal else '1' }}">
+      <label class="switch"><input type="checkbox" {{ 'checked' if sens_normal }} onchange="this.form.submit()"> <span>Count my normal scenarios too</span></label>
+      <noscript><button class="btn sm">{{ 'Turn off' if sens_normal else 'Turn on' }}</button></noscript>
+      <span class="small muted">Scenarios you played at 2 or more different sens values (last 90 days) add points to the curve, at half the weight of a sens-test round.{% if sens_normal and rec and rec.normal %} Now: {{ rec.normal.runs }} runs, {{ rec.normal.points }} points.{% elif sens_normal %} Nothing yet: runs remember their sens from now on.{% endif %}</span>
+    </form>{% endif %}
     {% if rec %}
-    <div class="small muted">Your sens by {{ rec.sessions }} test{{ 's' if rec.sessions != 1 }} (last 90 days)</div>
+    <div class="small muted">Your sens by {{ rec.sessions }} test{{ 's' if rec.sessions != 1 }}{% if rec.normal and rec.normal.runs %} and {{ rec.normal.runs }} scenario runs{% endif %} (last 90 days)</div>
     <div class="tr-rec"><b>{{ '%.3f'|format(rec.sens) }}</b>
       <span>{{ '%.3f'|format(rec.low) }}–{{ '%.3f'|format(rec.high) }} works about as well{% if setup.dpi %} · {{ (360 / (0.07 * rec.sens) / setup.dpi * 2.54)|round(1) }} cm per 360°{% endif %}</span></div>
     {% if rec.long %}<div class="small muted" style="margin-bottom:6px">{{ rec.long }} of them 15 or 30 minutes (they count more)</div>{% endif %}
@@ -333,6 +341,7 @@
     <button type="button" class="btn primary" id="tr-ang-play">Play · 60 s</button>
   </div>
   <div class="small muted" id="tr-ang-spots" style="margin-top:8px"></div>
+  {% if angles_missing %}<p class="small muted" style="margin:8px 0 0">Not here yet: {% for m, why in angles_missing.items() %}<span translate="no">{{ m }}</span> ({{ why }}){{ ', ' if not loop.last }}{% endfor %}. The map data comes from valorant-api.com and is refreshed every week.</p>{% endif %}
 </section>
 {% endif %}
 

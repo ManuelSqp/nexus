@@ -334,6 +334,9 @@ def clean_run(d: dict, extra: dict | None = None) -> dict | None:
     if seconds is None or score is None:
         return None
     out = {"s": d["scenario"], "score": score, "sec": seconds, "t": time.time(), "d": date.today().isoformat()}
+    sens = _num(d.get("sens"), 0.01, 20, 4)             # 4.69.1: the sens it was played at (perfect sens, if asked)
+    if sens is not None:
+        out["sens"] = sens
     if sc["kind"] == "click":
         hits = _num(d.get("hits"), 0, 2000, 0)
         shots = _num(d.get("shots"), 0, 5000, 0)
@@ -595,16 +598,47 @@ def _fit(points: list[tuple]) -> tuple[float, float, float] | None:
     return m[0][3] / m[0][0], m[1][3] / m[1][1], m[2][3] / m[2][2]
 
 
-def recommend(sessions: list[dict], now: float | None = None) -> dict | None:
+NORMAL_WEIGHT = 0.5         # 4.69.1: a sens point from normal scenarios counts half a quick sens-test round
+NORMAL_SKIP = {"map_angles"}
+
+
+def normal_points(runs: list[dict], now: float | None = None) -> tuple[list[tuple[float, float, dict]], list[float], int]:
+    """4.69.1: points for the sens curve from normal scenario runs: per scenario played at 2 or more sens values (in
+    the last 90 days, not made harder or easier by a skill session), each run's score scaled to that scenario's best,
+    averaged per sens. -> (points (sens, 0..1, {"normal": n runs}), weights, runs used)"""
+    now = now or time.time()
+    by: dict[str, list[dict]] = {}
+    for r in runs or []:
+        if ("sens" in r and not r.get("k") and r.get("s") not in NORMAL_SKIP and r.get("score", 0) > 0
+                and now - r.get("t", 0) <= SENS_KEEP_DAYS * 86400):
+            by.setdefault(r["s"], []).append(r)
+    pts, wts, used = [], [], 0
+    for rs in by.values():
+        groups: dict[float, list[float]] = {}
+        for r in rs:
+            groups.setdefault(round(r["sens"], 3), []).append(r["score"])
+        if len(groups) < 2:
+            continue                                     # one sens only: says nothing about which is better
+        best = max(r["score"] for r in rs)
+        for sv, scores in sorted(groups.items()):
+            pts.append((sv, sum(scores) / len(scores) / best, {"normal": len(scores)}))
+            wts.append(NORMAL_WEIGHT * min(1.0, len(scores) / 3))
+            used += len(scores)
+    return pts, wts, used
+
+
+def recommend(sessions: list[dict], now: float | None = None, runs: list[dict] | None = None) -> dict | None:
     """What the sessions of the last 90 days say: {sens, low, high, edge, sessions, sure, curve, points, over_trend,
-    per_session}. "edge": the best was at the end of what was tested ("higher"/"lower")."""
+    per_session}. "edge": the best was at the end of what was tested ("higher"/"lower"). runs (4.69.1, when the
+    player turned it on): normal scenario runs count too (normal_points)."""
     now = now or time.time()
     recent = [s for s in sessions if now - s.get("t", 0) <= SENS_KEEP_DAYS * 86400]
-    if not recent:
+    npts, nwts, nused = normal_points(runs, now) if runs is not None else ([], [], 0)
+    if not recent and len({p[0] for p in npts}) < 3:
         return None
-    pts = [p for s in recent for p in _points(s)]
-    meta = [(s.get("d", ""), s.get("mode", "quick")) for s in recent for _ in s["tests"]]     # which test each point is from
-    wts = [MODE_WEIGHT.get(s.get("mode"), 1) for s in recent for _ in s["tests"]]
+    pts = [p for s in recent for p in _points(s)] + npts
+    meta = [(s.get("d", ""), s.get("mode", "quick")) for s in recent for _ in s["tests"]] + [("", "normal")] * len(npts)
+    wts = [MODE_WEIGHT.get(s.get("mode"), 1) for s in recent for _ in s["tests"]] + nwts
     xs = [math.log(s) for s, _, _ in pts]
     lo, hi = min(xs), max(xs)
     fit = _fit([(math.log(s), y, w) for (s, y, _), w in zip(pts, wts)])
@@ -631,7 +665,7 @@ def recommend(sessions: list[dict], now: float | None = None) -> dict | None:
             per.append(max(_points(s), key=lambda p: p[1])[0])
     spread = (max(per) - min(per)) / sens if len(per) > 1 else None
     weight = sum(MODE_WEIGHT.get(s.get("mode"), 1) for s in recent)        # a thorough test counts as two quick ones
-    sure = ("low" if weight == 1 else
+    sure = ("low" if weight <= 1 else
             "high" if weight >= 3 and len({s.get("d") for s in recent}) >= 2 and spread is not None and spread < 0.15
             else "medium")
     over = [(math.log(s), t["over"]) for s, _, t in pts if "over" in t]
@@ -648,7 +682,8 @@ def recommend(sessions: list[dict], now: float | None = None) -> dict | None:
             curve.append((round(math.exp(cx), 4), round(fit[0] * cx * cx + fit[1] * cx + fit[2], 4)))
     return {"sens": round(sens, 3), "low": round(low, 3), "high": round(high, 3), "edge": edge,
             "sessions": len(recent), "long": sum(1 for s in recent if MODE_WEIGHT.get(s.get("mode"), 1) > 1),
-            "tiring": round(_tiring(recent[-1]), 4), "sure": sure, "curve": curve, "over_trend": trend,
+            "tiring": round(_tiring(recent[-1]), 4) if recent else 0.0, "sure": sure, "curve": curve, "over_trend": trend,
+            "normal": {"runs": nused, "points": len(npts)} if runs is not None else None,
             "parts": _part_best(recent),
             "per_session": [round(p, 3) for p in per],
             "points": [{"sens": s, "y": round(y, 3), "over": t.get("over"), "under": t.get("under"), "d": d, "mode": mode}
