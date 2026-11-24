@@ -13,6 +13,6 @@ def test_escaped():
 
 def test_version():
     import nexus
-    assert nexus.__version__ == "4.59.1"
+    assert tuple(map(int, nexus.__version__.split("."))) >= (4, 59, 1)
     assert "## 4.59.1" in (ROOT / "CHANGELOG.md").read_text()
-    assert "**Version 4.59.1**" in (ROOT / "README.md").read_text()
+    assert f"**Version {nexus.__version__}**" in (ROOT / "README.md").read_text()

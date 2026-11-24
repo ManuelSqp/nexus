@@ -533,8 +533,12 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
 
     # ---- comp sheet (4.13): agent pools + ideal composition per map -----------------------------
     def sheet_can_edit(t, pid: int) -> bool:
-        """The team owner edits every pool, a player his own (linked by in-game name, see link_me)."""
-        return g.team_owner or any(m["pid"] == pid and m.get("user_id") == g.user.id for m in t.member_list)
+        """4.60: a player edits his own pool (linked by in-game name, see link_me). The team owner also edits the
+        pools of players nobody is linked to (they can't do it themselves); not those of players who can."""
+        m = next((m for m in t.member_list if m["pid"] == pid), None)
+        if m is None:
+            return False
+        return m.get("user_id") == g.user.id or (g.team_owner and not m.get("user_id"))
 
     @app.get("/teams/<int:tid>/sheet")
     def team_sheet(tid: int):
@@ -547,6 +551,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         for m in sorted(c["members"], key=lambda m: m["kind"] != "starter"):
             p = c["byid"][m["pid"]]
             players.append({"pid": p.id, "label": p.name, "kind": m["kind"], "can_edit": sheet_can_edit(t, p.id),
+                            "me": m.get("user_id") == g.user.id, "linked": bool(m.get("user_id")),
                             **compsheet.pool(c["rows_by"][p.id], saved["pools"].get(str(p.id)))})
         pools = {pl["label"]: pl for pl in players}
         maps = t.map_list or [m["map"] for m in by_map([r for rs in c["rows_by"].values() for r in rs])][:7]
@@ -609,6 +614,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         if not sheet_can_edit(t, pid):
             abort(403)
         data = compsheet.load(sr.team_dir(tid))
+        quiet = request.headers.get("X-Nexus-Save") == "1"
         if request.form.get("reset"):
             data["pools"].pop(str(pid), None)
             flash("Agent pool back to the stats.", "ok")
@@ -616,8 +622,12 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
             no = compsheet.clean_agents(request.form.get("no", "").split(","))
             order = [a for a in compsheet.clean_agents(request.form.get("order", "").split(",")) if a not in no]
             data["pools"][str(pid)] = {"order": order, "no": no}
-            flash("Agent pool saved.", "ok")
+            if not quiet:
+                flash("Agent pool saved.", "ok")
         compsheet.save(sr.team_dir(tid), data)
+        if quiet:                                     # 4.60: the drag & drop editor saves as you go
+            pl = compsheet.pool(filter_rows(sr.games(pid).rows(), t.queue), data["pools"].get(str(pid)))
+            return jsonify(ok=True, order=[a["agent"] for a in pl["agents"]], no=pl["no"], edited=pl["edited"])
         return redirect(url_for("team_sheet", tid=tid) + "#pool")
 
     @app.post("/teams/<int:tid>/sheet/ideal")

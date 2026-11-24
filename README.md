@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.59.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.60.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -403,10 +403,12 @@ the pair that trades each other most and the one that splits up most. Pairs with
 faded (`stats/duos.py`). The coach sees the pairs too.
 
 **Comp sheet** (*Strategy › Comp sheet*, 4.13) is the team's agent pool and ideal comps on one page. **Agent pool:**
-a column per player with his agents from best to worst (green to red), starting from the stats (most played, then
-win rate). Each player edits his own column (linked by the in-game name; the team owner can edit all): move agents
-up or down, add agents he wants to play, mark agents he won't play. Agents played later are added at the end;
-*Back to the stats* drops the changes. **Ideal composition:** per map the comp the web sources name most (the team
+your own pool first, as big tiles from best to worst (green to red), starting from the stats (most played, then
+win rate), with every other agent under *Can play* and a *Won't play* row. Drag agents between them and within your
+pool (or use the keyboard: ← →, Enter, Delete); it saves as you go (4.60). Each player edits only his own pool
+(linked by the in-game name); the team owner keeps the pools of players nobody is linked to (*Edit for them*). The
+switch *The team's pools* shows everyone else's, read-only, as a column each. Agents played later are added at the
+end; *Back to the stats* drops the changes. **Ideal composition:** per map the comp the web sources name most (the team
 owner clicks *Search the web*, needs web search under *Settings*), or 5 agents set by hand. Under every agent: who on
 the team has it in his pool and how high (`stats/compsheet.py`). **Who should learn what** (4.22): the agents your
 maps need (in a map's ideal comp, or picked by a third of the teams in your lobbies there) that nobody has in their

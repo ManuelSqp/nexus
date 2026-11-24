@@ -19,12 +19,12 @@ def test_owner_links_a_teammate(app):  # noqa: F811 (fixture)
     uid = store.user_by_name("mate").id
     store.add_team_access(tid, uid)
     sheet = mate.get(f"/teams/{tid}/sheet").data.decode()
-    assert "Not linked" in sheet and ">Edit</a>" not in sheet
+    assert "Not linked" in sheet and 'class="pe"' not in sheet          # 4.60: no editor until linked
     assert "Plays as" in c.get(f"/teams/{tid}/settings").data.decode()
     c.post(f"/teams/{tid}/access", data={"link": str(uid), "pid": str(pid)})
     assert store.team(tid).member_list[0]["user_id"] == uid
     sheet = mate.get(f"/teams/{tid}/sheet").data.decode()
-    assert "Not linked" not in sheet and ">Edit</a>" in sheet
+    assert "Not linked" not in sheet and 'class="pe"' in sheet and "Your agent pool" in sheet
     c.post(f"/teams/{tid}/access", data={"link": str(uid), "pid": ""})            # unlink
     assert "user_id" not in store.team(tid).member_list[0]
     assert c.post(f"/teams/{tid}/access", data={"link": "999", "pid": str(pid)}).status_code == 400   # not in the team
