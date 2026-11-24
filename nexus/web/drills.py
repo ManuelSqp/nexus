@@ -172,7 +172,8 @@ def register(app, store, sr, view_profile) -> None:
                 d["url"] = url_for("aim_play", pid=pid, mode=gm.group(1), map_name=d["map"], sid=d["id"].rsplit("-", 1)[1])
             elif not gm:
                 d["url"] = url_for("aim_drill", pid=pid, drill_id=d["id"])
-        return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot, week=week)
+        return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot, week=week,
+                               match_teams=match_teams(p))
 
     @app.get("/api/profiles/<int:pid>/aim/drills")
     def aim_drills_api(pid: int):
@@ -275,6 +276,8 @@ def register(app, store, sr, view_profile) -> None:
     def aim_warmup(pid: int):
         """4.67: the daily warm-up: what slipped this week, what your newest match points to, a tracking drill."""
         p, _e = view_profile(pid)
+        if request.args.get("map"):                               # 4.68: a warm-up for a match on one map
+            return match_warmup(p, request.args["map"], request.args.get("tid", type=int))
         runs = dr.read_runs(stats_dir(pid))
         week = dr.weekly(runs)
         mid, name, items, sp = newest_suggest(p)
@@ -295,6 +298,47 @@ def register(app, store, sr, view_profile) -> None:
             flash("Nothing to warm up with yet: Nexus needs your replays to make drills on the maps (Replays).", "error")
             return redirect(url_for("aim_maps", pid=pid))
         return redirect(item_url(pid, q, len(q)))
+
+    def match_teams(p) -> list[dict]:
+        """4.68: the player's teams with this Premier week's map (and the scouted team picked on their comps
+        page): [{tid, team, map, vs}] for the match warm-up."""
+        from flask import session
+        from .stats_views import week_map_of
+        by = map_matches()
+        pj = app.extensions["nexus"].get("premier")
+        out = []
+        for t in store.all_teams():
+            if not any(m.get("pid") == p.id for m in t.member_list):
+                continue
+            m = week_map_of(app, t)
+            name = next((x for x in by if m and x.lower() == m.lower()), None)
+            if not name:
+                continue
+            vs = (session.get("compvs") or {}).get(str(t.id))
+            vt = ((pj.scout_index(t.id).get("teams") or {}).get(vs) if pj and vs else None) or None
+            out.append({"tid": t.id, "team": t.name, "map": name, "vs": vt.get("name") if vt else None})
+        return out
+
+    def match_warmup(p, map_name: str, tid: int | None):
+        from flask import session
+        by = map_matches()
+        name = next((x for x in by if x.lower() == map_name.lower()), None)
+        if name is None:
+            flash(f"No drills on {map_name} yet: Nexus needs your replays on it (Replays).", "error")
+            return redirect(url_for("aim_maps", pid=p.id))
+        sp, _pending = map_spots(p, name, by[name], False)
+        their = weak = None
+        pj = app.extensions["nexus"].get("premier")
+        t = store.team(tid) if tid else None
+        if pj and t and any(m.get("pid") == p.id for m in t.member_list):
+            vs = (session.get("compvs") or {}).get(str(t.id))
+            if vs:
+                their, weak = dr.opponent_sites(pj.scouted(t.id, vs), name)
+        q = dr.match_warmup(sp, name, their, weak)
+        if not q:
+            flash(f"No drills on {name} yet: Nexus needs more of your replays on it.", "error")
+            return redirect(url_for("aim_maps", pid=p.id))
+        return redirect(item_url(p.id, q, len(q)))
 
     def newest_suggest(p) -> tuple[str, str, list, dict | None]:
         """The newest match whose drills are worked out: (match, map, suggestions, spots of the map)."""

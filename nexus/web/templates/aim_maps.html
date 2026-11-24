@@ -13,7 +13,10 @@
 {# 4.67: the daily warm-up #}
 <section class="card am-warm">
   <div><b>Daily warm-up</b> <span class="muted small">about 10 minutes: up to 6 drills in a row: what slipped this week, what your newest match points to, one tracking drill, and what you got better at.</span></div>
-  <a class="btn primary" href="{{ url_for('aim_warmup', pid=p.id) }}">Start the warm-up</a>
+  <div class="row" style="gap:8px;flex-wrap:wrap">
+    {% for mt in match_teams %}<a class="btn" href="{{ url_for('aim_warmup', pid=p.id, map=mt.map, tid=mt.tid) }}" data-tip="{{ mt.team }}: this Premier week's map{% if mt.vs %}, against {{ mt.vs }}{% endif %}">Match warm-up: {{ mt.map }}{% if mt.vs %} vs <span translate="no">{{ mt.vs }}</span>{% endif %}</a>{% endfor %}
+    <a class="btn primary" href="{{ url_for('aim_warmup', pid=p.id) }}">Start the warm-up</a>
+  </div>
 </section>
 
 {% if week and week.total %}

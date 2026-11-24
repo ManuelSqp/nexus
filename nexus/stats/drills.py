@@ -22,6 +22,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import time
 from pathlib import Path
 
@@ -774,6 +775,67 @@ def warmup(week: dict, suggested: list[dict], suggested_map: str, track: tuple[s
     for t in fallback or []:
         add(t)
     return out
+
+
+# ------------------------------------------------------------------------------------------------ 4.68: match-day warm-up
+def site_of(callout: str) -> str | None:
+    """The site letter a callout belongs to ("B Main", "Back B", "A Site" -> B, B, A), or None (Mid, Market)."""
+    m = re.search(r"\b([ABC])\b", callout or "")
+    return m.group(1) if m else None
+
+
+def opponent_sites(scouted: dict | None, map_name: str) -> tuple[str | None, str | None]:
+    """(the site they attack most, a site whose retakes they mostly lose) on a map, from scouting."""
+    v = next((x for m, x in ((scouted or {}).get("maps") or {}).items() if m.lower() == map_name.lower()), None) or {}
+    hits = (v.get("attack") or {}).get("sites_hit") or {}
+    total = sum(x.get("plants", 0) for x in hits.values())
+    their = max(hits, key=lambda k: hits[k].get("plants", 0)) if total >= 3 else None
+    weak = None
+    for site, x in ((v.get("defense") or {}).get("enemy_plants") or {}).items():
+        try:
+            won = float(str(x.get("retakes_won")).rstrip("%")) / 100
+        except (TypeError, ValueError):
+            continue
+        if x.get("plants", 0) >= 3 and won <= .35:
+            weak = site
+            break
+    return their, weak
+
+
+def match_warmup(sp: dict, map_name: str, their_site: str | None = None, weak_site: str | None = None) -> list[str]:
+    """A warm-up for a match on one map (about 10 minutes, up to WARM_MAX drills): with a scouted opponent, holding
+    the angles of the site they attack most and retaking it, then hitting the site they lose retakes on and the
+    post-plant there; without one, the map's most fought spots. One tracking drill. -> queue tokens"""
+    out: list[str] = []
+    by_count = lambda xs: sorted(xs, key=lambda a: -a.get("count", 0))        # noqa: E731
+
+    def add(mode, x):
+        t = token(mode, x["id"], map_name)
+        if x and t not in out and len(out) < WARM_MAX:
+            out.append(t)
+    angles, sites, retakes = by_count(sp.get("angles") or []), by_count(sp.get("sites") or []), by_count(sp.get("retakes") or [])
+    on = lambda x, s: s and s in (site_of(x.get("dz")), site_of(x.get("az")), x.get("site"))    # noqa: E731
+    track = lambda: angles and add("track", angles[0])                                     # noqa: E731
+    if their_site:                              # their attack: hold the angles of that site, then retake it
+        for a in [a for a in angles if on(a, their_site)][:2]:
+            add("hold", a)
+        track()
+        for r in [r for r in retakes if on(r, their_site)][:1]:
+            add("retake", r)
+    if weak_site:                               # your attack: the site whose retakes they lose
+        for x in [x for x in sites if on(x, weak_site)][:1]:
+            add("entry", x)
+        for r in [r for r in retakes if on(r, weak_site)][:1]:
+            add("postplant", r)
+    for a in angles[:2]:
+        add("hold", a)
+    track()
+    for x in sites[:1]:
+        add("entry", x)
+    for r in retakes[:1]:
+        add("retake", r)
+        add("postplant", r)
+    return out[:WARM_MAX]
 
 
 # ------------------------------------------------------------------------------------------------ 4.67: the team's week
