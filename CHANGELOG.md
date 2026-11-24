@@ -4,6 +4,19 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.66.0
+- **The coach knows your practice.** Ask the coach (and the team coach) now gets your drills from Aim on maps:
+  when you last drilled, sessions this week and last week, how many of the last 8 weeks you drilled, each kind
+  of drill this week against last week ("Retake: 3.40 s, 1.60 s faster"), and what got better or slipped. It ties
+  that to your games: praises what got faster, points to what slipped or what you never drill when your games
+  show the problem, and names the drill to play.
+- **Counter comps from scouting.** On the comps page, *Against* lists the teams you scouted (Premier › Division).
+  Pick one and every map gets the comp style that counters them there, from their own games: they hit fast or
+  stack one site (*Defensive*), they lose retakes or hold sites slowly (*Utility execute*), they have no
+  initiator (*Aggressive*), their entry player wins his duels, two duelists, which side they're better on. A box
+  shows why and their usual comp on the map. Picking a style yourself still wins. The scouted team's page shows
+  the counter per map, with a link to the comps against them.
+
 ## 4.65.0
 - **Drills: your week.** At the top of Practice › Aim on maps: how many drill sessions you played each of the last
   8 weeks (Monday to Sunday), this week's sessions, reps and days, and per kind of drill (hold, retake, tracking, …)

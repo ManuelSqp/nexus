@@ -720,9 +720,40 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         if request.args.get("style") in compstyle.STYLES and kept.get(str(tid)) != style:
             kept[str(tid)] = style
             session["compstyle"] = kept
+        # 4.66: against a scouted team: the counter style for the map (unless you pick a style yourself)
+        vs, vs_team, counter_of, scouted_teams = None, None, None, []
+        pj = app.extensions["nexus"].get("premier")
+        if pj is not None:
+            scouted_teams = sorted(((k, x) for k, x in (pj.scout_index(tid).get("teams") or {}).items() if x.get("matches")),
+                                   key=lambda kv: (kv[1].get("name") or "").lower())
+            vsk = dict(session.get("compvs") or {})
+            vs = request.args.get("vs", vsk.get(str(tid)))
+            if "vs" in request.args and vsk.get(str(tid)) != request.args["vs"]:
+                vsk[str(tid)] = request.args["vs"]
+                session["compvs"] = vsk
+            if vs and vs in dict(scouted_teams):
+                vs_team = {"id": vs, **dict(scouted_teams)[vs]}
+                from ..stats import counter as ctr
+                counter_of = lambda mp, _s=pj.scouted(tid, vs): ctr.counter(_s, mp)     # noqa: E731
+            else:
+                vs = None
+        sel_map = request.args.get("map") or week_map_of(app, t)
+        sel_map = sel_map if sel_map in maps else (maps[0] if maps else None)
+        counter = counter_of(sel_map) if counter_of and sel_map else None
+        per_map = bool(counter_of) and "style" not in request.args       # each map its own counter style
+        if counter and per_map:
+            style = counter["style"]
         st = None if style == compstyle.DEFAULT else style
         if len(starters) == 5 and maps:
-            plan = comp_plan(method, starters, subs, maps, local, meta, rules_text, web, style=st)
+            if per_map:
+                plan = []
+                for mp_ in maps:
+                    c_ = counter_of(mp_)
+                    s_ = c_["style"] if c_ else compstyle.clean(kept.get(str(tid)))
+                    plan += comp_plan(method, starters, subs, [mp_], local, meta, rules_text, web,
+                                      style=None if s_ == compstyle.DEFAULT else s_)
+            else:
+                plan = comp_plan(method, starters, subs, maps, local, meta, rules_text, web, style=st)
         sel = request.args.get("map") or week_map_of(app, t)
         if plan and sel not in [m["map"] for m in plan]:
             sel = plan[0]["map"]
@@ -752,6 +783,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
             starters=[s.label for s in starters], plan=plan, maps=maps, sel=sel,
             detail=next((m for m in plan if m["map"] == sel), None) if plan else None,
             meta_error=meta_error, queues=QUEUE_TABS, tab="comps", alts=alts, ours=ours, comp_method=method, style=style, styles=compstyle.STYLES, style_about=compstyle.ABOUT,
+                               vs=vs, vs_team=vs_team, counter=counter, scouted_teams=scouted_teams,
             comp_label=COMP_METHODS[method], comp_methods=COMP_METHODS, is_owner=g.team_owner,
             web_status=sr.status(f"webcomps:{tid}") if method == "web" else None,
             web_data=web, web_search_on=bool(web_search_on()), follow_pools=pools_followed(t),
