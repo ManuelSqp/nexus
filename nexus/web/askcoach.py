@@ -145,7 +145,9 @@ def register(app, store, sr, view_profile, filter_rows) -> None:
             try:
                 llm, _cfg = sr._llm(p, choice if choice is not None else sr.AUTO)   # Monday: the automatic-jobs model
                 rows = filter_rows(sr.games(p.id).rows(), "everything")
-                f = lt.facts(p.name, rows, dr.read_runs(sdir(p.id)), now)
+                from ..stats import drillgoals as dg
+                runs_ = dr.read_runs(sdir(p.id))
+                f = lt.facts(p.name, rows, runs_, now, dg.status(dg.read(sdir(p.id)), runs_, now))
                 out = lt.write(llm, p.name, p.language or "English", f)
                 with _lock:
                     lt.save(sdir(p.id), f["week"], out, getattr(llm, "model", ""))

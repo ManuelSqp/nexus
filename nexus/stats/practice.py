@@ -125,11 +125,35 @@ def build(week: str, start: date, cfg: dict, ctx: dict) -> dict:
         out["days"].append({"date": d.isoformat(), "label": f"{WEEKDAY[d.weekday()]} {d.day:02d}.{d.month:02d}.",
                             "time": cfg.get("time") or "19:00", "items": items})
     out["personal"] = ctx.get("personal") or {}
+    out["drills"] = drill_items(ctx.get("drills") or [])
     return out
 
 
+DRILL_SESSIONS = 3          # 4.70: sessions of his drill each player plays in the week
+
+
+def drill_items(picks: list[dict]) -> list[dict]:
+    """4.70: one personal drill per player for the week (practice.py's player_drills): ticks itself when he has
+    played it DRILL_SESSIONS times since the week began (sync_drills)."""
+    return [{"id": _id(), "kind": "drill", "pid": x["pid"], "who": [x["name"]], "title": f"{x['name']}: {x['label']}",
+             "detail": x.get("why", ""), "drill": x["drill"], "link": x.get("link", ""), "sessions": DRILL_SESSIONS,
+             "count": 0, "done": False, "minutes": 10} for x in picks]
+
+
+def drill_count(runs: dict, drill: str, since: float) -> int:
+    """Sessions of a drill since a time: "*" any drill, "*map:<map>" any drill on that map, else that drill's id."""
+    n = 0
+    for did, rs in (runs or {}).items():
+        for r in rs if isinstance(rs, list) else []:
+            if not isinstance(r, dict) or not isinstance(r.get("at"), (int, float)) or r["at"] < since:
+                continue
+            if drill == "*" or did == drill or (drill.startswith("*map:") and (r.get("map") or "").lower() == drill[5:].lower()):
+                n += 1
+    return n
+
+
 def progress(plan: dict) -> tuple[int, int]:
-    items = [it for d in plan.get("days", []) for it in d["items"]]
+    items = [it for d in plan.get("days", []) for it in d["items"]] + list(plan.get("drills") or [])
     return sum(1 for it in items if it.get("done")), len(items)
 
 

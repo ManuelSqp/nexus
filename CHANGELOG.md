@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.70.0
+- **Drill goals.** *Your goals* on Practice › Aim on maps: a drill, a target and a day ("Retake · Ascent · Retake
+  B: under 3.50 s by Sunday"). Ideas come from your week (back to where a slipped drill was, or a step further on
+  one that got better); change the target or the day before you add one. A goal is reached by the first session
+  whose median makes it, and stays reached. Each goal shows where you started, your best since, a progress bar and
+  *Play it*; at most 6 open goals. The coach (Ask the coach, the weekly letter) sees them, and the Sunday Discord
+  post lists the goals reached that week.
+- **Drills in the team's practice plan.** Team › Practice has *Drills this week*: one drill per starter (his open
+  goal, else the drill that slipped most, else the match warm-up on the week's map, else the daily warm-up), with
+  *Play it* for your own. It ticks itself after 3 sessions of it this week.
+
 ## 4.69.1
 - **Map prep: every map.** Map prep listed only the maps that have map angles; now every map is there. A map
   without map angles gets the warm-up, your weakest skill and its callouts quiz.

@@ -24,6 +24,7 @@ warm but direct, like a coach who watched their week.
   faster and a part of the game that went better; a problem in their games and the drill that trains it).
 - Quote the numbers a sentence rests on. Few games ("games_this_week" under 3) are a first sign, not a trend.
 - If they played no games or no drills this week, say so plainly in one sentence, without nagging.
+- "drill_practice.goals" are their drill goals: say which they reached, and how far the open ones are.
 - "this_week": 2-3 short, concrete things to do in the coming week. "drill": the one Nexus drill to play first
   (its name as in the facts: "Retake", "Hold an angle", "Entry", "Tracking", …) and why, in one sentence."""
 SCHEMA = {"type": "object", "properties": {
@@ -65,7 +66,8 @@ def _sum(rows: list[dict]) -> dict:
     return out
 
 
-def facts(name: str, rows: list[dict], drills: dict | None, now: float | None = None) -> dict:
+def facts(name: str, rows: list[dict], drills: dict | None, now: float | None = None,
+          goals: list[dict] | None = None) -> dict:
     """The week in numbers: this week's games against last week's, its maps and agents, and the drills."""
     now = time.time() if now is None else now
     this = _start(now)
@@ -77,7 +79,7 @@ def facts(name: str, rows: list[dict], drills: dict | None, now: float | None = 
         out["maps_this_week"] = [{"map": m["map"], "games": m["games"], "win_rate": f"{m['wr']:.0%}"} for m in by_map(cur)[:4]]
         out["agents_this_week"] = [{"agent": a["agent"], "games": a["games"], "win_rate": f"{a['wr']:.0%}",
                                     "acs": round(a["acs"])} for a in by_agent(cur)[:3]]
-    dp = dr.coach_facts(drills or {}, now)
+    dp = dr.coach_facts(drills or {}, now, goals)
     if dp:
         out["drill_practice"] = dp
     return out

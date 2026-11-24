@@ -748,7 +748,10 @@ class StatsRunner:
             out["check_ins"] = ci
         try:
             from ..stats import drills as dr                 # 4.66: what he drilled and how it went
-            dp = dr.coach_facts(dr.read_runs(self.games(pid).path.parent))
+            from ..stats import drillgoals as dg
+            sd_ = self.games(pid).path.parent
+            runs_ = dr.read_runs(sd_)
+            dp = dr.coach_facts(runs_, goals=dg.status(dg.read(sd_), runs_))
             if dp:
                 out["drill_practice"] = dp
         except Exception:

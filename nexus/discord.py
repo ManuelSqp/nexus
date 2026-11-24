@@ -168,6 +168,10 @@ def drills_embeds(team_name: str, week: str, tw: dict) -> list[dict]:
     top = tw.get("top")
     if top:
         lines.append(f"\n🏆 **Biggest step**: {top['name']}, {drill_name(top['drill'])}: {change_text(top['drill'])}")
+    from .stats.drillgoals import text as goal_text            # 4.70: goals reached this week
+    reached = [(p["name"], x) for p in tw.get("players") or [] for x in p.get("goals_reached") or []]
+    if reached:
+        lines.append("\n🎯 **Goals reached**: " + "; ".join(f"{n}, {goal_text(x)}" for n, x in reached))
     if tw.get("idle") and len(tw["idle"]) < len(tw.get("players") or []):
         lines.append(f"\nNo drills yet this week: {', '.join(tw['idle'])}. The warm-up takes 10 minutes.")
     f = tw.get("focus")
