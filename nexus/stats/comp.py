@@ -69,14 +69,22 @@ class Pool:
     games: int = 0
     pref: dict | None = None   # 4.14: {"rank": {agent: rank}, "size": n, "no": set, "added": set} (compsheet.prefs)
 
-    def agents(self) -> list[str]:
+    def agents(self, map_name: str | None = None) -> list[str]:
         """The agents a comp may give this player: the ones he played, plus the ones he added to his pool,
-        minus the ones he won't play (only with his pool followed)."""
+        minus the ones he won't play, and on map_name the ones he only plays on other maps (4.64; only with his
+        pool followed)."""
         if not self.pref:
             return list(self.n)
         out = [a for a in self.n if a not in self.pref["no"]]
         out += [a for a in self.pref["rank"] if a not in self.n and a not in self.pref["no"]]
+        if map_name:
+            out = [a for a in out if not self.off_map(a, map_name)] or out
         return out or list(self.n)
+
+    def off_map(self, agent: str, map_name: str) -> bool:
+        """4.64: he put this agent in his pool for some maps only, and this isn't one of them."""
+        only = (self.pref or {}).get("maps", {}).get(agent)
+        return bool(only) and map_name.lower() not in only
 
     def has_data(self) -> bool:
         return bool(self.n) or bool(self.pref and self.pref["rank"])
@@ -182,6 +190,9 @@ def rate(pool: Pool, agent: str, map_name: str, local: dict | None = None, meta:
         if agent in pool.pref["no"]:
             score += POOL_NO
             why.append(f"{pool.label} won't play it (agent pool)")
+        elif pool.off_map(agent, map_name):
+            score += POOL_NO
+            why.append(f"{pool.label} plays it on other maps only (agent pool)")
         elif agent in pool.pref["rank"]:
             rank, size = pool.pref["rank"][agent], pool.pref["size"]
             top = 1 - (rank - 1) / (size - 1) if size > 1 else 1.0
@@ -238,7 +249,7 @@ def best_comp(players: list[Pool], map_name: str, local: dict | None = None, met
             no_data.append(p.label)
             cands.append([])
             continue
-        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only, style) for a in p.agents()), key=lambda x: -x["score"])
+        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only, style) for a in p.agents(map_name)), key=lambda x: -x["score"])
         cands.append(rated[:CANDIDATES])
     if no_data:
         return {"map": map_name, "ok": False, "no_data": no_data}
@@ -351,7 +362,7 @@ def top_comps(players: list[Pool], map_name: str, local: dict | None = None, met
         return [best]
     cands = []
     for p in players:
-        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only, style) for a in p.agents()), key=lambda x: -x["score"])
+        rated = sorted((rate(p, a, map_name, local, meta, rules, comfort_only, style) for a in p.agents(map_name)), key=lambda x: -x["score"])
         cands.append(rated[:CANDIDATES])
     pattern = (meta or {}).get("roles")
     scored = []
