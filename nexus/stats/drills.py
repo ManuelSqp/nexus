@@ -24,6 +24,8 @@ import os
 import time
 from pathlib import Path
 
+from ..safepath import safe_join, valid_match_id
+
 VERSION = 5                   # 5 (4.59): who died in a fight (the drills a match suggests);
                               # 2 (4.52): the fights of every match too (the general drills' spots); 3 (4.54): the
                               # spike (post-plant fights: retakes, post-plants); 4 (4.56): the utility around a fight
@@ -485,10 +487,19 @@ def cache_dir(data_dir) -> Path:
     return Path(data_dir) / "drills"
 
 
+def cache_file(data_dir, mid: str, suffix: str = ".json") -> Path:
+    """4.61.1: data/drills/<match id>.json; a match id only (letters, digits, -), never a path."""
+    if not valid_match_id(mid):
+        raise ValueError("not a match id")
+    return safe_join(cache_dir(data_dir), f"{mid.lower()}{suffix}")
+
+
 def _read_cache(data_dir, mid: str, sig: str) -> dict | None:
     try:
-        d = json.loads((cache_dir(data_dir) / f"{mid.lower()}.json").read_text())
+        d = json.loads(cache_file(data_dir, mid).read_text())
     except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict):
         return None
     if d.get("v") != VERSION or d.get("sig") != sig:
         return None
@@ -508,12 +519,11 @@ def read_fights(data_dir, mid: str, sig: str) -> list | None:
 
 
 def write_cached(data_dir, mid: str, sig: str, players: dict, fights: list | None = None, map_name: str = "") -> None:
-    d = cache_dir(data_dir)
-    d.mkdir(parents=True, exist_ok=True)
-    tmp = d / f"{mid.lower()}.json.tmp"
+    cache_dir(data_dir).mkdir(parents=True, exist_ok=True)
+    tmp, final = cache_file(data_dir, mid, ".json.tmp"), cache_file(data_dir, mid)
     tmp.write_text(json.dumps({"v": VERSION, "sig": sig, "built": int(time.time()), "map": map_name,
                                "players": players, "fights": fights or []}))
-    os.replace(tmp, d / f"{mid.lower()}.json")
+    os.replace(tmp, final)
 
 
 def runs_file(stats_dir: Path) -> Path:

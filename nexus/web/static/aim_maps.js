@@ -318,13 +318,13 @@
   function spotCard() {
     const el = $('am-g-spot'), s = list().find(q => q.id === sel);
     if (!s) { el.innerHTML = ''; return; }
-    const reps = g.reps[tab] || C.reps[tab];
-    const what = tab === 'hold' ? `${T('Enemies come out of')} <span translate="no">${esc(s.az)}</span>.`
-      : tab === 'attack' ? `${Math.min(3, s.defs.length)} ${T('defenders on the places they held.')}`
-      : tab === 'track' ? `${T('About')} ${Math.round(s.dist)} m ${T('away.')}`
-      : tab === 'entry' ? `${s.hides.length} ${T('places defenders hid; one of them swings you.')}`
-      : SPIKE.has(tab) ? `${s.posts.length} ${T('places attackers played the spike from,')} ${s.routes.length} ${T(s.routes.length === 1 ? 'way back in.' : 'ways back in.')} ${T('The spike has')} ${Math.round(s.left)} s ${T('left when they set off.')}`
-      : `${s.hides.length} ${T('hiding places; the route attackers took most.')}`;
+    const reps = Math.round(+g.reps[tab]) || C.reps[tab];      // a number, whatever the saved settings hold
+    const what = tab === 'hold' ? `${esc(T('Enemies come out of'))} <span translate="no">${esc(s.az)}</span>.`
+      : tab === 'attack' ? `${esc(String(Math.min(3, s.defs.length)))} ${esc(T('defenders on the places they held.'))}`
+      : tab === 'track' ? `${esc(T('About'))} ${esc(String(Math.round(s.dist)))} m ${esc(T('away.'))}`
+      : tab === 'entry' ? `${esc(String(s.hides.length))} ${esc(T('places defenders hid; one of them swings you.'))}`
+      : SPIKE.has(tab) ? `${esc(String(s.posts.length))} ${esc(T('places attackers played the spike from,'))} ${esc(String(s.routes.length))} ${esc(T(s.routes.length === 1 ? 'way back in.' : 'ways back in.'))} ${esc(T('The spike has'))} ${esc(String(Math.round(s.left)))} s ${esc(T('left when they set off.'))}`
+      : `${esc(String(s.hides.length))} ${esc(T('hiding places; the route attackers took most.'))}`;
     const won = SITES.has(tab) ? '' : ` ${T('Defenders won')} ${Math.round(s.won_def / s.count * 100)} %.`;
     const foes = !FOES.has(tab) ? '' : `<fieldset class="am-opt"><legend>${esc(T(tab === 'postplant' ? 'Retakers' : tab === 'retake' ? 'Attackers' : 'Defenders'))}</legend>${(C.foes || [1, 2, 3]).map(n =>
       `<label class="am-chip"><input type="radio" name="am-foes" value="${esc(String(n))}" ${g.foes === n ? 'checked' : ''}> ${esc(String(n))}</label>`).join('')}</fieldset>`;
@@ -335,18 +335,18 @@
         <small class="muted">${esc(T('from'))} ${sets.length} ${esc(T(sets.length === 1 ? 'round' : 'rounds'))}: ${kinds.map(k => esc(T(UTIL_NAME[k]))).join(', ')}</small>`
       : `<small class="muted">${esc(T('None in your replays here yet.'))}</small>`}</fieldset>`;
     const styles = tab !== 'hold' ? '' : `<fieldset class="am-opt"><legend>${esc(T('How they peek'))}</legend>${C.peeks.map(k =>
-      `<label class="am-chip"><input type="checkbox" data-style="${k}" ${g.styles.includes(k) ? 'checked' : ''}> ${esc(T(STYLE[k]))}</label>`).join('')}</fieldset>`;
+      `<label class="am-chip"><input type="checkbox" data-style="${esc(k)}" ${g.styles.includes(k) ? 'checked' : ''}> ${esc(T(STYLE[k]))}</label>`).join('')}</fieldset>`;
     const best = (s.best || {})[tab];
     el.innerHTML = `<p class="muted small" translate="no">${esc(G.map)} · ${esc(s.dz)}</p>
       <h2 translate="no">${esc(title(s))}</h2>
-      <p>${esc(T('Fought over'))} ${s.count} ${esc(T(s.count === 1 ? 'time in the replays.' : 'times in the replays.'))}${esc(won)} ${what}</p>
+      <p>${esc(T('Fought over'))} ${esc(String(+s.count))} ${esc(T(s.count === 1 ? 'time in the replays.' : 'times in the replays.'))}${esc(won)} ${what}</p>
       ${styles}${foes}${util}${agentPick()}
       <fieldset class="am-opt"><legend>${esc(T(tab === 'track' ? 'How fast he strafes' : 'Difficulty'))}</legend>${C.diffs.map(k =>
         `<label class="am-chip"><input type="radio" name="am-diff" value="${esc(k)}" ${g.diff === k ? 'checked' : ''}> ${esc(T(DIFF[k]))}</label>`).join('')}</fieldset>
       <div class="am-row"><label>${esc(T('Gun'))} <select id="am-g-gun">${C.guns.map(n => `<option ${n === g.gun ? 'selected' : ''} translate="no">${esc(n)}</option>`).join('')}</select></label>
         <label>${esc(T(tab === 'hold' ? 'Peeks' : 'Reps'))} <select id="am-g-reps">${REPS[tab].map(n => `<option ${n === reps ? 'selected' : ''}>${esc(String(n))}</option>`).join('')}</select></label></div>
-      <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${reps} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
-        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>
+      <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${esc(String(reps))} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
+        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${esc(pctTab() ? Math.round(best) + ' %' : (+best).toFixed(2) + ' s')}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>
       ${(s.trend || {})[tab] ? `<p class="small">${trendText(s.trend[tab], pctTab())}</p>` : ''}`;
   }
   $('am-g-map').addEventListener('change', e => { g.map = own((G ? G.maps : []).map(m => m.name), e.target.value, g.map); saveG(); sel = null; G = null; plan(); loadSpots(); });

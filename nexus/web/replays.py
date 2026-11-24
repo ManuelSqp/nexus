@@ -18,6 +18,7 @@ from pathlib import Path
 from flask import abort, g, jsonify, render_template, request, url_for
 
 from .. import pipeline, replayfile, vrfkit_update
+from ..safepath import UnsafePath, safe_join, valid_match_id
 from .uploads import CHUNK_BYTES, UploadError
 
 log_ = logging.getLogger(__name__)
@@ -40,7 +41,10 @@ _miss_lock = threading.Lock()
 
 
 def match_file(store, mid: str) -> Path:
-    return Path(store.data_dir) / "cache" / "matches" / f"{mid.lower()}.json"
+    """data/cache/matches/<match id>.json. 4.61.1: a match id only (letters, digits, -), never a path."""
+    if not valid_match_id(mid):
+        raise UnsafePath("not a match id")
+    return safe_join(Path(store.data_dir) / "cache" / "matches", f"{mid.lower()}.json")
 
 
 def _misses_file(store) -> Path:

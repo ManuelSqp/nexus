@@ -4,6 +4,14 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.61.1
+- **Code scanning** (three high alerts on main):
+  - *Uncontrolled data used in path expression* (`web/replays.py`, `stats/drills.py`): the match cache and the
+    drills cache only take a match id (letters, digits, `-`) as the file name, and the path is checked to stay in
+    its folder (`safepath.safe_join`, like the other caches). Anything else isn't read or written.
+  - *DOM text reinterpreted as HTML* (`aim_maps.js`, the spot card): the number of reps comes from your saved
+    settings in the browser; it's now always a number, and every value on the card is put in escaped.
+
 ## 4.61.0
 - **Comps: the other options as cards, with the why.** Under the best comp of a map, 3 other options (was 2), each
   as five small cards like the big ones: the agents that change from the best comp stand out ("was Omen"), the
