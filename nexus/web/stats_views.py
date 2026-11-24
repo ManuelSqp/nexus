@@ -563,8 +563,11 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
                       for a in (idl or {}).get("agents", [])]
             ideals.append({"map": mp, "ideal": idl, "agents": agents, "searched": mp.lower() in web})
         advice = agent_advice(t, c, players, maps, ideals)
+        all_agents = sorted(roles.all_agents())
         return render_template("team_sheet.html", t=t, tab="sheet", players=players, ideals=ideals, advice=advice,
-                               hue=compsheet.hue, all_agents=sorted(roles.all_agents()), is_owner=g.team_owner,
+                               ideal_who={a: compsheet.who_plays(a, pools, top=5) for a in all_agents},
+                               agent_roles={a: roles.role_of(a) for a in all_agents},
+                               hue=compsheet.hue, all_agents=all_agents, is_owner=g.team_owner,
                                edit=request.args.get("edit", type=int), web_search_on=web_search_on(),
                                web_status=sr.status(f"webcomps:{tid}"), queues=QUEUE_TABS, follow_pools=saved["follow"],
                                premier_status=sr.status(f"premier:{tid}"))
@@ -644,10 +647,16 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
             flash(f"{mp}: back to the comp from the web.", "ok")
         else:
             agents = compsheet.clean_agents(request.form.getlist("agent"))
+            quiet = request.headers.get("X-Nexus-Save") == "1"          # 4.63: the drag & drop editor saves as you go
             if len(agents) != 5:
+                if quiet:
+                    return jsonify(ok=False, error="An ideal composition needs 5 different agents."), 400
                 flash("An ideal composition needs 5 different agents.", "error")
                 return redirect(url_for("team_sheet", tid=tid) + "#ideal")
             data["ideal"][mp.lower()] = agents
+            if quiet:
+                compsheet.save(sr.team_dir(tid), data)
+                return jsonify(ok=True, map=mp, agents=agents)
             flash(f"{mp}: ideal composition saved.", "ok")
         compsheet.save(sr.team_dir(tid), data)
         return redirect(url_for("team_sheet", tid=tid) + "#ideal")

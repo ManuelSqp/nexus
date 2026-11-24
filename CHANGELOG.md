@@ -4,6 +4,14 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.63.0
+- **Comp sheet: ideal compositions with drag & drop.** *Edit* (or *Set by hand*) on a map opens an editor right
+  under it, instead of five dropdowns: 5 slots, and every agent below as a tile with how many of your players have
+  it in their pool (hover for who; "nobody" in red), filtered by role if you like. Drag an agent into a slot, or click
+  it to fill the selected slot; drag slots onto each other to swap them, or out of the row to clear them (or ✕).
+  Keyboard: Enter picks, ← → move a slot, Delete clears. The role mix (e.g. 1D 2I 1C 1S) shows as you go, and it
+  saves by itself once all 5 slots are set. *Done* refreshes the map with who plays what.
+
 ## 4.62.0
 - **Comp styles.** The comps page has a *Style* switch: *Balanced* (as before), *Aggressive* (fast hits and early
   fights: entry duelists, flashes, stuns; a second duelist is fine), *Defensive* (holding sites and retakes: set-ups,
