@@ -17,6 +17,7 @@ zoom when aiming down sights). From the game's patch notes as of late 2026; the 
 their numbers rougher."""
 from __future__ import annotations
 
+import datetime
 import hashlib
 import json
 import math
@@ -567,6 +568,10 @@ def clean_run(body: dict) -> dict | None:
     off = body.get("off")
     off = round(float(off), 1) if isinstance(off, (int, float)) and 0 <= off <= 180 else None
     out = {"at": int(time.time()), "kind": kind, "reps": out_reps, "his": his, "first": first, "off": off}
+    for k, n in (("map", 24), ("where", 80)):     # 4.65: what the weekly view calls it
+        v = body.get(k)
+        if isinstance(v, str) and v.strip():
+            out[k] = " ".join(v.split())[:n]
     detail = body.get("detail")
     if isinstance(detail, dict):                 # a few numbers per kind (peek styles, counter-strafing, …)
         out["detail"] = {str(k)[:24]: round(float(v), 3) for k, v in list(detail.items())[:20]
@@ -598,6 +603,90 @@ def summary(runs: list[dict], kind: str = "death") -> dict:
     vals = [t for r in runs for t in r.get("reps", []) if isinstance(t, (int, float))]
     best = (max(vals) if kind in HIGHER else min(vals)) if vals else None
     return {"sessions": len(runs), "medians": meds, "best": best, "kind": kind}
+
+
+# ------------------------------------------------------------------------------------------------ 4.65: your week
+MODE_NAMES = {"death": "Your deaths", "hold": "Hold an angle", "attack": "Take an angle", "track": "Tracking",
+              "clear": "Clear a site", "entry": "Entry", "retake": "Retake", "postplant": "Post-plant"}
+WEEKS = 8
+
+
+def _week_start(ts: float) -> datetime.date:
+    d = datetime.date.fromtimestamp(ts)
+    return d - datetime.timedelta(days=d.weekday())         # Monday
+
+
+def _median(vals: list) -> float | None:
+    v = sorted(x for x in vals if isinstance(x, (int, float)))
+    return v[len(v) // 2] if v else None
+
+
+def _better(kind: str, old, new) -> float | None:
+    """How much better new is than old: seconds faster, or percentage points more (track, clear). + is better."""
+    if old is None or new is None:
+        return None
+    return round((new - old) if kind in HIGHER else (old - new), 3)
+
+
+def weekly(data: dict, now: float | None = None, weeks: int = WEEKS) -> dict:
+    """The drills you played, week by week (Monday to Sunday): sessions and reps per week for the last `weeks`
+    weeks, this week against last week per kind of drill (the median of your reps), and per drill this week
+    against the weeks before (the most improved and the ones that slipped).
+    -> {weeks: [{start, sessions, reps}], days, kinds: [{kind, name, unit, sessions, now, before, better}],
+        better: [drill], worse: [drill], total}"""
+    now = time.time() if now is None else now
+    this = _week_start(now)
+    starts = [this - datetime.timedelta(weeks=i) for i in range(weeks - 1, -1, -1)]
+    per_week = {w: {"start": w.isoformat(), "sessions": 0, "reps": 0} for w in starts}
+    days, kinds, drills = set(), {}, []
+    last = this - datetime.timedelta(weeks=1)
+    for did, runs in (data or {}).items():
+        if not isinstance(runs, list):
+            continue
+        cur, old, label, kind = [], [], {}, None
+        for r in runs:
+            if not isinstance(r, dict) or not isinstance(r.get("at"), (int, float)):
+                continue
+            kind = r.get("kind") if r.get("kind") in KINDS else "death"
+            w = _week_start(r["at"])
+            reps = [t for t in r.get("reps") or [] if isinstance(t, (int, float))]
+            if w in per_week:
+                per_week[w]["sessions"] += 1
+                per_week[w]["reps"] += len(r.get("reps") or [])
+            k = kinds.setdefault(kind, {"now": [], "last": [], "sessions": 0})
+            if w == this:
+                days.add(datetime.date.fromtimestamp(r["at"]))
+                k["now"] += reps
+                k["sessions"] += 1
+                cur += reps
+            else:
+                old += reps
+                if w == last:
+                    k["last"] += reps
+            label = {"map": r.get("map", label.get("map", "")), "where": r.get("where", label.get("where", ""))}
+        if kind is None:
+            continue
+        mn, mo = _median(cur), _median(old)
+        if mn is not None and mo is not None:
+            drills.append({"id": did, "kind": kind, "name": MODE_NAMES.get(kind, kind), "unit": KINDS[kind],
+                           "map": label.get("map", ""), "where": label.get("where", ""), "now": mn, "before": mo,
+                           "better": _better(kind, mo, mn), "sessions": sum(1 for r in runs if isinstance(r, dict)
+                                                                            and isinstance(r.get("at"), (int, float))
+                                                                            and _week_start(r["at"]) == this)})
+    out_kinds = []
+    for kind, k in kinds.items():
+        if not k["sessions"]:
+            continue
+        mn, ml = _median(k["now"]), _median(k["last"])
+        out_kinds.append({"kind": kind, "name": MODE_NAMES.get(kind, kind), "unit": KINDS[kind], "sessions": k["sessions"],
+                          "now": mn, "before": ml, "better": _better(kind, ml, mn)})
+    out_kinds.sort(key=lambda k: -k["sessions"])
+    rel = lambda d: d["better"] / max(abs(d["before"]), 1e-6)       # noqa: E731  (relative: s and % alike)
+    better = sorted((d for d in drills if d["better"] > 0), key=lambda d: -rel(d))[:3]
+    worse = sorted((d for d in drills if d["better"] < 0), key=rel)[:3]
+    weeks_out = [per_week[w] for w in starts]
+    return {"weeks": weeks_out, "days": len(days), "kinds": out_kinds, "better": better, "worse": worse,
+            "total": sum(w["sessions"] for w in weeks_out), "this": weeks_out[-1], "last": weeks_out[-2] if weeks > 1 else None}
 
 
 # ------------------------------------------------------------------------------------------------ keys

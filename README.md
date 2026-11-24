@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.64.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.65.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -749,6 +749,12 @@ stride with a trail; Updraft and Blast Pack leave a puff on the floor; anyone fa
 Dismiss) sprints with the game's sprint (`TP_Core_Sprint*_LB`, next to the other core animations: run
 `nexus build-game` once to add them). Which ability it was comes from the replay's casts; without them a jump nobody
 can run is still drawn as a teleport.
+
+**Your week (4.65)** at the top of Practice › Aim on maps: your drill sessions for the last 8 weeks (Monday to
+Sunday), this week against last week per kind of drill (the median of your reps: seconds faster, or percentage
+points for tracking and clearing), and the drills that got better or slipped this week against the weeks before,
+each a link to play it again (`drills.weekly`). In the general drills your team's utility from the same round plays
+too (4.65): their flashes and stuns hit the enemies, their recon shows them, their smokes block both sides.
 
 **Aim on maps (4.51).** With the maps built from the game's files, Practice › Aim on maps turns your deaths into aim
 drills: you stand where you died and your killer comes out the way he did (his path from the replay, his agent and
