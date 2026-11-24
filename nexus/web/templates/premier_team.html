@@ -107,6 +107,8 @@
       {% if x.defense.enemy_plants %}<br>Defense: {% for site, y in x.defense.enemy_plants.items() %}retakes on {{ site }} {{ y.retakes_won }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}
     </div>
     {% if mlines.get(m) %}<ul class="howto small" style="margin-top:6px">{% for l in mlines[m] %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+    {% set cx = counters.get(m) %}{% if cx and cx.style != 'balanced' %}<p class="small" style="margin:6px 0 0">Counter: <b>{{ style_names[cx.style] }}</b> <span class="muted">({{ cx.reasons[0] }})</span>
+      · <a href="{{ url_for('team', tid=t.id, map=m, vs=team_id) }}#compmaker">comps against them</a></p>{% endif %}
   </div>
   {% else %}<p class="muted">No maps yet.</p>{% endfor %}
 </section>

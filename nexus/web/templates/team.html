@@ -43,6 +43,8 @@
 .oc.same{opacity:.55}.oc.ch{border-color:var(--accent);background:var(--accent-soft,rgba(255,196,0,.08))}
 .oc .was{font-size:11px;color:var(--accent)}.oc.low .ai{outline:2px dashed var(--amber);outline-offset:1px}
 .opt .why{margin:10px 0 0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--muted)}.opt .why b{color:var(--text)}
+.counter{margin-top:10px;padding:10px 12px;border:1px solid var(--accent);border-radius:10px;background:var(--panel2)}
+.counter ul{margin:6px 0;padding-left:18px;font-size:13px;line-height:1.6}
 .opt .ofoot{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap}
 .role{font-size:11px;color:var(--muted);}
 </style>
@@ -99,6 +101,30 @@
     {% if comp_method == 'comfort' %}<span class="muted small">"Most comfortable" only counts games: styles don't change it.</span>
     {% else %}<span class="muted small">{{ style_about[style] }}. Kept for this team; drafts made from a comp use it too.</span>{% endif %}
   </div>
+  {% if scouted_teams %}
+  {# 4.66: against a scouted team: each map gets the style that counters them there #}
+  <form method="get" action="{{ url_for('team', tid=t.id) }}#compmaker" class="row" style="gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px">
+    <input type="hidden" name="map" value="{{ sel }}">
+    <label for="vs" style="margin:0"><b>Against</b></label>
+    <select id="vs" name="vs" style="width:auto" onchange="this.form.submit()">
+      <option value="">nobody in particular</option>
+      {% for k, x in scouted_teams %}<option value="{{ k }}" {{ 'selected' if vs == k }}>{{ x.name }}#{{ x.tag }} ({{ x.matches }} {{ 'match' if x.matches == 1 else 'matches' }})</option>{% endfor %}
+    </select>
+    <noscript><button class="btn sm">Show</button></noscript>
+    <span class="muted small">scouted teams (Premier › Division): every map gets the style that counters them there.</span>
+  </form>
+  {% if vs_team %}
+  <div class="counter">
+    {% if counter %}
+    <p style="margin:0"><b>Against <span translate="no">{{ vs_team.name }}#{{ vs_team.tag }}</span> on {{ sel }}: {{ styles[counter.style] }}</b>
+      <span class="muted small">from their {{ counter.games }} {{ 'game' if counter.games == 1 else 'games' }} there{% if 'style' in request.args %} · you picked {{ styles[style] }} yourself{% endif %}</span></p>
+    <ul>{% for r in counter.reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+    {% if counter.their_comp %}<p class="small muted" style="margin:0">Their usual comp here: <span translate="no">{{ counter.their_comp|join(', ') }}</span></p>{% endif %}
+    {% else %}<p class="muted small" style="margin:0"><span translate="no">{{ vs_team.name }}#{{ vs_team.tag }}</span> <span>didn't play {{ sel }} in their scouted matches: your own style is used.</span></p>{% endif %}
+    <a class="small" href="{{ url_for('team_scouted', tid=t.id, team_id=vs_team.id) }}">Their scouting page</a>
+  </div>
+  {% endif %}
+  {% endif %}
 </section>
 
 {% if comp_method == 'web' %}

@@ -689,6 +689,54 @@ def weekly(data: dict, now: float | None = None, weeks: int = WEEKS) -> dict:
             "total": sum(w["sessions"] for w in weeks_out), "this": weeks_out[-1], "last": weeks_out[-2] if weeks > 1 else None}
 
 
+def _fmt(x, unit: str) -> str:
+    return "–" if x is None else (f"{round(x)} %" if unit == "%" else f"{x:.2f} s")
+
+
+def _diff(b, unit: str) -> str:
+    if b is None:
+        return "no run last week"
+    if (unit == "%" and abs(b) < 0.5) or (unit != "%" and abs(b) < 0.005):
+        return "about the same"
+    if unit == "%":
+        return f"{'+' if b > 0 else ''}{round(b)} points ({'better' if b > 0 else 'worse'})"
+    return f"{abs(b):.2f} s {'faster' if b > 0 else 'slower'}"
+
+
+def coach_facts(data: dict, now: float | None = None) -> dict | None:
+    """4.66: the player's drill practice for the coach (Ask the coach, the team review): how much and how often he
+    drilled, this week against last week per kind, what got better and what slipped, what he drills most and
+    when he last did. None when he never played a drill."""
+    now = time.time() if now is None else now
+    w = weekly(data, now)
+    last_at, per_kind = 0, {}
+    for runs in (data or {}).values():
+        for r in runs if isinstance(runs, list) else []:
+            if isinstance(r, dict) and isinstance(r.get("at"), (int, float)):
+                last_at = max(last_at, r["at"])
+                k = r.get("kind") if r.get("kind") in KINDS else "death"
+                per_kind[k] = per_kind.get(k, 0) + 1
+    if not last_at:
+        return None
+    name = lambda d: " · ".join(x for x in (d["name"], d["map"], d["where"]) if x)      # noqa: E731
+    days = int((now - last_at) // 86400)
+    out = {
+        "what": "Practice › Aim on maps: drills on the real maps (hold or take an angle, entry, clear a site, retake, "
+                "post-plant, tracking, and their own deaths replayed). Times: seconds to kill (lower is better); "
+                "tracking and clearing: % (higher is better).",
+        "last_drill": "today" if days == 0 else ("yesterday" if days == 1 else f"{days} days ago"),
+        "this_week": {"sessions": w["this"]["sessions"], "reps": w["this"]["reps"], "days": w["days"]},
+        "last_week_sessions": w["last"]["sessions"] if w["last"] else 0,
+        "weeks_with_drills_of_last_8": sum(1 for x in w["weeks"] if x["sessions"]),
+        "sessions_per_kind_all_kept": {MODE_NAMES.get(k, k): n for k, n in sorted(per_kind.items(), key=lambda x: -x[1])},
+        "this_week_by_kind": [{"drill": k["name"], "sessions": k["sessions"], "median": _fmt(k["now"], k["unit"]),
+                               "vs_last_week": _diff(k["better"], k["unit"])} for k in w["kinds"]],
+        "got_better": [f"{name(d)}: {_fmt(d['before'], d['unit'])} -> {_fmt(d['now'], d['unit'])}" for d in w["better"]],
+        "slipped": [f"{name(d)}: {_fmt(d['before'], d['unit'])} -> {_fmt(d['now'], d['unit'])}" for d in w["worse"]],
+    }
+    return {k: v for k, v in out.items() if v not in (None, [], {})}
+
+
 # ------------------------------------------------------------------------------------------------ keys
 # The actions a player can put on his own keys (4.51; the aim drills, later the trainer). Values: e.code names of
 # the keyboard ("KeyR", "Space", "Backspace", …) or "Mouse0".."Mouse4", "WheelUp", "WheelDown".

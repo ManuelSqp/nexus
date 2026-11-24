@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.65.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.66.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -512,6 +512,9 @@ map); click a map for the details:
 - **Style** (4.62): *Balanced*, *Aggressive*, *Defensive* or *Utility execute*. Agents that fit the style get up to 20
   points on top of the player's own numbers, and the style's role mix (a second duelist / sentinel / controller) a
   small bonus; a role mix from the map meta comes first. Every comp on the page follows it (`stats/compstyle.py`).
+- **Against** (4.66): a team you scouted (Premier › Division). Every map gets the style that counters them there,
+  from their games (how fast they hit, which site, their retakes, their entry player, their comp, their sides), with
+  the reasons and their usual comp (`stats/counter.py`). The scouted team's page shows it per map.
 - **If someone is missing**: which sub comes in on which agent, and who should switch.
 - **Map meta** (optional, per team): `prefer` / `avoid` agents and a fixed role mix per map, e.g.
   `Lotus: {roles: 1D 1I 2C 1S}`. A role mix you set is followed whenever the players' pools allow it.
@@ -749,6 +752,9 @@ stride with a trail; Updraft and Blast Pack leave a puff on the floor; anyone fa
 Dismiss) sprints with the game's sprint (`TP_Core_Sprint*_LB`, next to the other core animations: run
 `nexus build-game` once to add them). Which ability it was comes from the replay's casts; without them a jump nobody
 can run is still drawn as a teleport.
+
+The coach (Ask the coach, the team coach) sees this practice too (4.66): what you drilled, this week against last,
+what got better and what slipped (`drills.coach_facts`).
 
 **Your week (4.65)** at the top of Practice › Aim on maps: your drill sessions for the last 8 weeks (Monday to
 Sunday), this week against last week per kind of drill (the median of your reps: seconds faster, or percentage

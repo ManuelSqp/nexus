@@ -747,6 +747,13 @@ class StatsRunner:
         if ci:
             out["check_ins"] = ci
         try:
+            from ..stats import drills as dr                 # 4.66: what he drilled and how it went
+            dp = dr.coach_facts(dr.read_runs(self.games(pid).path.parent))
+            if dp:
+                out["drill_practice"] = dp
+        except Exception:
+            pass
+        try:
             from ..stats import sessions
             w = sessions.facts(rows)
             if w:

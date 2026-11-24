@@ -30,6 +30,10 @@ knows this player: usually 3-8 sentences, a short list when there are steps.
   and added up ("together"). Answer from those; "last_games" are their newest games, one line each.
 - "goals" are the player's goals and whether they were met: build on what worked, change approach where a
   goal was missed. "check_ins" are the player's own answers after matches.
+- "drill_practice" (when there): what they drilled in Nexus (Aim on maps) and how it went, this week against
+  last week. Tie it to their games: praise what got faster, point to what slipped or what they never drill when
+  their games show that problem, and suggest the drill by its name ("Retake", "Hold an angle", …). If they
+  haven't drilled for a while, say so once, without nagging.
 - About the game (agents, abilities, maps, patches, pros, settings, aim trainers): use the web results when
   there are any. Without them, be careful with details that change with patches and say when you're not sure.
 - Practical and concrete: what to do in the next games, which drill, which scenario or playlist.
