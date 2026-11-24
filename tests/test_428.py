@@ -24,7 +24,8 @@ def test_positions_have_real_directions():
     # B Site looks east to B Main (straight ahead); A Main is north-east (left), Mid Window south-east (right)
     assert by["B Main"]["yaw"] == 0 and by["A Main"]["yaw"] < 0 < by["Mid Window"]["yaw"]
     assert all(ma.NEAR <= s["d"] <= ma.FAR and abs(s["yaw"]) <= ma.CONE for s in hold["spots"])
-    assert "A-hold" not in ps                                                  # fewer than 3 spots in front
+    # 4.69.1: fewer than 3 spots in front: looked for wider and further (at least 2)
+    assert "A-hold" in ps and len(ps["A-hold"]["spots"]) >= ma.WIDE_MIN
     assert ma.positions(None) == []
 
 
@@ -44,4 +45,4 @@ def test_trainer_page_has_the_card(app):  # noqa: F811 (fixture)
     page = c.get(f"/profiles/{pid}/trainer").data.decode()
     assert 'id="tr-angles"' in page and 'id="tr-ang-map"' in page
     boot = json.loads(re.search(r"window.NEXUS_TRAINER = (\{.*?\});\s*</script>", page, re.S).group(1))
-    assert [p["id"] for p in boot["angles"]["Ascent"]] == ["B-hold", "B-take"]
+    assert {"B-hold", "B-take"} <= {p["id"] for p in boot["angles"]["Ascent"]}

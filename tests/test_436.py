@@ -47,5 +47,5 @@ def test_trainer_page_prep(app):  # noqa: F811 (fixture)
     pid = add_profile(c)
     page = c.get(f"/profiles/{pid}/trainer?plan=prep&map=Ascent").data.decode()
     boot = json.loads(re.search(r"window.NEXUS_TRAINER = (\{.*?\});\s*</script>", page, re.S).group(1))
-    assert boot["start"] == "prep_Ascent" and boot["plans"]["prep_Ascent"]["items"][1]["angle"]["id"] == "B-hold"
+    assert boot["start"] == "prep_Ascent" and boot["plans"]["prep_Ascent"]["items"][1]["angle"]["id"] in ("A-hold", "B-hold")   # 4.69.1: A too
     assert 'id="tr-prep"' in page and boot["urls"]["callouts"].endswith("/callouts")

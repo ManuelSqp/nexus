@@ -7,7 +7,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from flask import abort, g, jsonify, render_template, request, url_for
+from flask import abort, g, jsonify, redirect, render_template, request, url_for
 
 from ..stats import aim as am
 from ..stats import aim_insights as ai
@@ -57,11 +57,13 @@ def register(app, store, sr, view_profile, filter_rows, known_maps: list[str] = 
     from ..maps import MapRegistry
     reg = MapRegistry(store.data_dir / "cache")
 
-    def angle_maps(pid: int) -> dict:
-        """Map angles: the maps with positions, the ones this player plays most first."""
+    def map_order(pid: int) -> list[str]:
         played = Counter(r.get("map") for r in filter_rows(sr.games(pid).rows(), "everything"))
-        order = sorted(set(known_maps) | {m for m in played if m}, key=lambda m: (-played.get(m, 0), m))
-        return ma.for_maps(reg, order)
+        return sorted(set(known_maps) | {m for m in played if m}, key=lambda m: (-played.get(m, 0), m))
+
+    def angle_maps(pid: int, missing: dict | None = None) -> dict:
+        """Map angles: the maps with positions, the ones this player plays most first."""
+        return ma.for_maps(reg, map_order(pid), missing)
 
     def path(pid: int) -> Path:
         return sr.games(pid).path.parent / "trainer.json"
@@ -112,10 +114,12 @@ def register(app, store, sr, view_profile, filter_rows, known_maps: list[str] = 
         setup = d.get("setup", {})
         start = request.args.get("plan")
         play = request.args.get("play")
-        rec = tr.recommend(d.get("sensfind", []))
+        rec = tr.recommend(d.get("sensfind", []), runs=runs if d.get("sens_normal") else None)   # 4.69.1
         pl = plans(pid, runs, setup)
-        amaps = angle_maps(pid)
-        prep_plans = {f"prep_{m}": tr.plan_prep(m, ps, runs) for m, ps in amaps.items()}
+        missing: dict = {}
+        amaps = angle_maps(pid, missing)
+        # 4.69.1: map prep for every map; the ones without map angles get the warm-up, the skill and the quiz
+        prep_plans = {f"prep_{m}": tr.plan_prep(m, amaps.get(m, []), runs) for m in map_order(pid)}
         prep_map = request.args.get("map", "")
         if start == "prep" and f"prep_{prep_map}" in prep_plans:
             start = f"prep_{prep_map}"
@@ -134,10 +138,12 @@ def register(app, store, sr, view_profile, filter_rows, known_maps: list[str] = 
                    "save": url_for("trainer_sandbox_save", pid=pid), "skills": [[k, v["name"]] for k, v in tr.SKILLS.items()],
                    "skill_names": {k: v["name"] for k, v in tr.SKILLS.items()}}
         return render_template("trainer.html", p=p, active_pid=pid, can_save=can_save(p, can_edit), angles=amaps,
+                               angles_missing=missing,
                                prep_plans=prep_plans, all_plans={**pl, **skill_plans, **prep_plans}, prep_map=prep_map if f"prep_{prep_map}" in prep_plans else next(iter(amaps), ""),
                                skills=tr.skill_ratings(runs, extra), skill_plans=skill_plans, minutes=tr.SESSION_MINUTES,
                                sandbox=sandbox,
-                               groups=tr.GROUPS, part_names=tr.PARTS, rec=rec, step=tr.sens_step(setup.get("sens"), rec["sens"]) if rec else None,
+                               groups=tr.GROUPS, part_names=tr.PARTS, rec=rec, sens_normal=bool(d.get("sens_normal")),
+                               sens_runs=sum(1 for r in runs if "sens" in r), step=tr.sens_step(setup.get("sens"), rec["sens"]) if rec else None,
                                chart=sens_chart(rec) if rec else None,
                                scenarios=tr.scenario_list(), summary=tr.summary(runs), plans=pl, levels=tr.LEVELS,
                                start=start if start in pl or start in skill_plans or start in prep_plans else "",
@@ -210,10 +216,22 @@ def register(app, store, sr, view_profile, filter_rows, known_maps: list[str] = 
             ss.append(session)
             del ss[:-tr.MAX_SESSIONS]
             _write(path(pid), d)
-        rec = tr.recommend(ss)
+        rec = tr.recommend(ss, runs=d.get("runs", []) if d.get("sens_normal") else None)
         this = tr.recommend([session])
         return jsonify(ok=True, this=this["sens"] if this else None, sens=rec["sens"], low=rec["low"], high=rec["high"],
                        edge=rec["edge"], sessions=rec["sessions"], sure=rec["sure"], parts=this["parts"] if this else {})
+
+    @app.post("/profiles/<int:pid>/trainer/sens-normal")
+    def trainer_sens_normal(pid: int):
+        """4.69.1: let normal scenarios (played at different sens values) count for the perfect sens, or not."""
+        p, can_edit = view_profile(pid)
+        if not can_save(p, can_edit):
+            abort(403)
+        with _lock:
+            d = _read(path(pid), {})
+            d["sens_normal"] = request.form.get("on") == "1"
+            _write(path(pid), d)
+        return redirect(url_for("trainer", pid=pid) + "#sens")
 
     @app.post("/profiles/<int:pid>/trainer/setup")
     def trainer_setup(pid: int):

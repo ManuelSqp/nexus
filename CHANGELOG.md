@@ -4,6 +4,18 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.69.1
+- **Map prep: every map.** Map prep listed only the maps that have map angles; now every map is there. A map
+  without map angles gets the warm-up, your weakest skill and its callouts quiz.
+- **Map angles: more maps.** A site is also found when the map data names it otherwise (a lower-case site letter,
+  a site callout not in the region "Site", "A Site" / "Site A" / "A Plant"), and on big or open maps the spots in
+  front of you are looked for wider and further before a map is left out. The maps still missing are named under
+  Map angles, with why ("no sites in its callouts", "too few callouts around its sites", …).
+- **Perfect sens: count my normal scenarios too** (a switch in the Sens finder, off by default). Runs now remember
+  the sens they were played at. With the switch on, every scenario you played at 2 or more different sens values
+  in the last 90 days adds points to the sens curve (your scores there scaled to your best), at half the weight of
+  a sens-test round. Runs made harder or easier by a skill session and map angles don't count.
+
 ## 4.69.0
 - **Your week from the coach.** On top of Ask the coach: once a week, a short letter about your games and your drills
   together ("your B retakes got faster, and you won 3 of 4 games on Ascent"): this week's games against last
