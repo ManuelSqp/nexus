@@ -31,6 +31,19 @@
 .pick .ai{display:block;margin:0 auto 6px}
 .pick .who{font-weight:700}.pick .ag{font-size:15px}.pick .num{font-size:12px;color:var(--muted)}
 .pick.low{border-style:dashed;border-color:var(--accent-soft)}
+/* 4.61: other options as small cards: changed agents stand out, the same ones step back */
+.opts{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+.opt{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.opt.ours{border-color:var(--accent)}
+.opt .oh{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:10px}.opt .oh b{font-size:15px}
+.ocards{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+@media(max-width:700px){.ocards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.oc{border:1px solid var(--line);border-radius:10px;padding:8px 4px;text-align:center;font-size:12px;line-height:1.35}
+.oc .ai{display:block;margin:0 auto 4px}.oc .ag{font-weight:700;font-size:13px}.oc .pl{color:var(--muted)}
+.oc.same{opacity:.55}.oc.ch{border-color:var(--accent);background:var(--accent-soft,rgba(255,196,0,.08))}
+.oc .was{font-size:11px;color:var(--accent)}.oc.low .ai{outline:2px dashed var(--amber);outline-offset:1px}
+.opt .why{margin:10px 0 0;padding-left:18px;font-size:13px;line-height:1.6;color:var(--muted)}.opt .why b{color:var(--text)}
+.opt .ofoot{display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:8px;flex-wrap:wrap}
 .role{font-size:11px;color:var(--muted);}
 </style>
 {% endblock %}
@@ -175,11 +188,44 @@
   {% if m.main.web and m.main.web.sources %}<p class="small" style="margin-top:-4px">Sources: {% for src in m.main.web.sources %}<a href="{{ src.url }}" target="_blank" rel="noopener noreferrer">{{ src.title }}</a>{{ ' · ' if not loop.last }}{% endfor %}</p>{% endif %}
   {% if m.main.missing_roles %}<p class="warnc">Missing {{ m.main.missing_roles|join(', ') }}: nobody in the lineup plays {{ 'one' if m.main.missing_roles|length == 1 else 'them' }} yet. Worth practicing for this map.</p>{% endif %}
 
+  {% if ours %}<p class="small" style="margin:6px 0 0"><span class="pill done">Our comp</span>
+    {% if ours.main %}<span>This is your comp on {{ sel }}</span>{% else %}<span>Your comp on {{ sel }} is the draft</span>{% endif %}
+    <a href="{{ url_for('team_drafts', tid=t.id, map=sel, d=ours.id) }}">{{ ours.name }}</a></p>{% endif %}
+
   {% if alts %}
+  {# 4.61: the other options as small cards: what changes from the best comp, why, and when you'd pick it #}
   <h2 style="margin-top:18px">Other options</h2>
-  {% for c in alts if c.ok %}<div class="row" style="gap:12px;margin-bottom:6px;font-size:13px"><b class="muted">{{ loop.index + 1 }}.</b>
-    {% for pk in c.picks %}<span class="agentcell">{{ ai(pk.agent, 22) }}{{ pk.agent }} <span class="muted">{{ pk.player }}</span></span>{% endfor %}<span class="muted">{{ c.pattern }}</span>
-    {% if c.web and c.web.sources %}<span class="small">{% for src in c.web.sources %}<a href="{{ src.url }}" target="_blank" rel="noopener noreferrer" title="{{ src.title }}">[{{ loop.index }}]</a> {% endfor %}</span>{% endif %}</div>{% endfor %}
+  <div class="opts">
+  {% for o in alts %}{% set c = o.c %}{% set x = o.x %}
+  <div class="opt {{ 'ours' if o.ours }}">
+    <div class="oh"><b>Option {{ loop.index + 1 }}</b>
+      <span class="muted small"><span>{{ c.pattern }}</span> · <span>{{ x.changes|length }} {{ 'change' if x.changes|length == 1 else 'changes' }}</span> ·
+        <span tabindex="0" data-tip="{{ x.drop }} points behind the best comp (the same score the comps are picked by)">{{ x.level }}</span></span>
+      {% if o.ours %}<span class="pill done">Our comp</span>{% endif %}</div>
+    <div class="ocards">
+      {% for pk in c.picks %}{% set ch = x.changes|selectattr('player', 'equalto', pk.player)|first %}
+      <div class="oc {{ 'ch' if ch else 'same' }} {{ 'low' if pk.low_sample }}">
+        {{ ai(pk.agent, 30) }}<div class="ag">{{ pk.agent }}</div><div class="pl" translate="no">{{ pk.player }}</div>
+        {% if ch and ch.was %}<div class="was">was {{ ch.was }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <ul class="why">
+      {% for chg in x.changes %}<li><b>{{ chg.agent }} for {{ chg.was or 'a new slot' }}</b>{% if chg.was_role and chg.role != chg.was_role %} <span class="muted">({{ chg.was_role }} → {{ chg.role }})</span>{% endif %}:
+        <span translate="no">{{ chg.player }}</span>{% for f in chg.facts %}{{ ', ' if loop.first else ' · ' }}<span>{{ f }}</span>{% endfor %}</li>{% endfor %}
+      {% for w in x.when %}<li class="when"><b>{{ 'When to pick it:' if loop.first else 'Also:' }}</b> <span>{{ w }}</span></li>{% endfor %}
+    </ul>
+    <div class="ofoot">
+      <span class="muted small">{% if c.web and c.web.sources %}<span>Sources:</span> {% for src in c.web.sources %}<a href="{{ src.url }}" target="_blank" rel="noopener noreferrer" data-tip="{{ src.title }}">[{{ loop.index }}]</a> {% endfor %}{% else %}{{ comp_label }}{% endif %}</span>
+      {% if not o.ours %}
+      <form method="post" action="{{ url_for('team_drafts', tid=t.id) }}" style="margin:0">
+        <input type="hidden" name="map" value="{{ sel }}"><input type="hidden" name="from" value="comp:{{ o.i }}"><input type="hidden" name="status" value="main">
+        <button class="btn sm ghost" data-tip="Saves it as a draft marked 'our comp' for {{ sel }}: the Discord prep and the availability use it. You can still change it in Drafts.">Use this comp</button>
+      </form>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+  </div>
   {% endif %}
   <h2 style="margin-top:18px">If someone is missing</h2>
   {% if m.fills %}

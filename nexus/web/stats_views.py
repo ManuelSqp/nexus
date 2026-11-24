@@ -693,9 +693,22 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         sel = request.args.get("map") or week_map_of(app, t)
         if plan and sel not in [m["map"] for m in plan]:
             sel = plan[0]["map"]
-        alts = []
+        alts, ours = [], None
         if plan and sel:
-            alts = comp_top(method, starters, sel, local.get(sel), meta.get(sel.lower()), rules_text, web)[1:]
+            from ..stats.compalts import explain, matches
+            mn = next((m["main"] for m in plan if m["map"] == sel), None)
+            for d in store.drafts(tid, sel):              # 4.61: the team's "our comp" draft for this map
+                if (d["data"] or {}).get("status") == "main":
+                    ours = {"id": d["id"], "name": d["name"],
+                            "agents": {s.get("agent") for s in d["data"].get("slots", []) if s.get("agent")}}
+                    break
+            top4 = comp_top(method, starters, sel, local.get(sel), meta.get(sel.lower()), rules_text, web, n=4)
+            for i, c in enumerate(top4[1:], start=1):
+                if c.get("ok") and mn and mn.get("ok"):
+                    alts.append({"c": c, "x": explain(mn, c, sel), "i": i,
+                                 "ours": bool(ours) and matches(c, ours["agents"])})
+            if ours and mn and mn.get("ok"):
+                ours["main"] = matches(mn, ours["agents"])
         users = {u.id: u for u in store.users()}
         member_info = [{"p": byid[m["pid"]], "kind": m["kind"], "games": len(rows_by[m["pid"]]),
                         "full": sum(r.get("source") == "full" for r in rows_by[m["pid"]]),
@@ -705,7 +718,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
             "team.html", t=t, premier_status=sr.status(f"premier:{tid}"), member_info=member_info, n_starters=len(starters), n_subs=len(subs),
             starters=[s.label for s in starters], plan=plan, maps=maps, sel=sel,
             detail=next((m for m in plan if m["map"] == sel), None) if plan else None,
-            meta_error=meta_error, queues=QUEUE_TABS, tab="comps", alts=alts, comp_method=method,
+            meta_error=meta_error, queues=QUEUE_TABS, tab="comps", alts=alts, ours=ours, comp_method=method,
             comp_label=COMP_METHODS[method], comp_methods=COMP_METHODS, is_owner=g.team_owner,
             web_status=sr.status(f"webcomps:{tid}") if method == "web" else None,
             web_data=web, web_search_on=bool(web_search_on()), follow_pools=pools_followed(t),

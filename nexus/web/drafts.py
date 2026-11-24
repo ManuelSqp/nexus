@@ -99,7 +99,7 @@ def register(app, store, get_team, helpers: dict, known_maps: list[str]) -> None
         from ..stats.compmodes import method_of, top as comp_top
         method = method_of(t)
         web = helpers["web_of"](t) if method == "web" and "web_of" in helpers else None
-        for c in comp_top(method, pools, map_name, local, meta, store.get("comp_rules_yaml"), web):
+        for c in comp_top(method, pools, map_name, local, meta, store.get("comp_rules_yaml"), web, n=4):   # = the comps page
             if c.get("ok"):
                 out.append({"pattern": c.get("pattern", ""),
                             "picks": [{"pid": pid_of.get(pk["player"]), "player": pk["player"], "agent": pk["agent"]}
@@ -139,6 +139,13 @@ def register(app, store, get_team, helpers: dict, known_maps: list[str]) -> None
                     for i, pk in enumerate(sug["picks"][:SLOTS]):
                         data["slots"][i].update(pid=pk["pid"], agent=pk["agent"])
                     name = name or f"Suggestion {int(src[5:]) + 1}: " + ", ".join(pk["agent"] for pk in sug["picks"])
+                    if f.get("status") == "main":            # 4.61: "Use this comp" on the comps page
+                        data["status"] = "main"
+                        for d in store.drafts(tid, m):       # one "our comp" per map: the old one goes back to trying
+                            if (d["data"] or {}).get("status") == "main":
+                                store.update_draft(d["id"], g.user.id, data={**d["data"], "status": "try"})
+                        flash(f"{m}: this is now your comp (a draft marked 'our comp'; the Discord prep and the "
+                              "availability use it).", "ok")
             elif src.startswith("copy:") and src[5:].isdigit():
                 old = store.draft(int(src[5:]))
                 if old and old["team_id"] == tid:

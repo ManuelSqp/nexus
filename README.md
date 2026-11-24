@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.60.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.61.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -499,6 +499,12 @@ map); click a map for the details:
 - a comp: one agent per starter, from their win rate and ACS with that agent on that map (pulled towards
   their overall numbers when there are few games), how much they play it, and how often it's played at your
   level. Every comp needs a Controller, an Initiator and a Sentinel. Dashed cards have little data behind them.
+- **Other options** (4.61): the 3 next-best comps (each at least 2 agents different), as small cards. The agents
+  that change from the best comp stand out ("was Omen"), with why each swap could make sense (the player's games
+  and win rate on it, his agent pool, the map rules), how far it's behind the best (*close to the best*, *a bit
+  weaker*, *a fallback*) and when you'd pick it (an agent of the best comp doesn't work out, more smokes or more
+  entry power, who needs practice first). *Use this comp* saves it as a draft marked *our comp* for the map
+  (the old one goes back to *trying*); the Discord prep and the availability use it (`stats/compalts.py`).
 - **If someone is missing**: which sub comes in on which agent, and who should switch.
 - **Map meta** (optional, per team): `prefer` / `avoid` agents and a fixed role mix per map, e.g.
   `Lotus: {roles: 1D 1I 2C 1S}`. A role mix you set is followed whenever the players' pools allow it.
