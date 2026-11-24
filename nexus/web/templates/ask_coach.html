@@ -28,6 +28,8 @@
 .starters button{font:inherit;font-size:13.5px;text-align:left;padding:8px 12px;border-radius:10px;border:1px solid var(--line2);background:var(--panel2);color:var(--text);cursor:pointer}
 .starters button:hover{border-color:var(--accent)}
 .askerr{color:var(--red);font-size:13.5px;margin:0 0 10px}
+.letter{max-width:860px;margin:0 0 18px}.lt-body{margin-top:10px;font-size:15px;line-height:1.65;max-width:72ch}.lt-body p{margin:0 0 .6em}
+.lt-list{margin:0;padding-left:18px;font-size:14px;line-height:1.7}
 .empty-ask{max-width:62ch;color:var(--muted);font-size:14.5px;margin:0 0 14px}
 </style>
 {% endblock %}
@@ -36,6 +38,29 @@
    'A conversation about ' ~ p.name ~ ': the coach knows the stats, habits and aim from ' ~ games ~ ' games' ~ (', and searches the web' if search_on else '')) %}
   {% if items %}<form method="post" action="{{ url_for('ask_coach_clear', pid=p.id) }}" data-q="Start a new conversation? This one is deleted." onsubmit="return confirm(this.dataset.q)"><button class="btn sm ghost">New conversation</button></form>{% endif %}
 {% endcall %}
+
+{# 4.69: the weekly letter from the coach #}
+<section class="card letter" id="letter">
+  <div class="row between" style="gap:10px;flex-wrap:wrap"><h2 style="margin:0">Your week from the coach</h2>
+    {% if letter.letter %}<span class="muted small">{{ 'this week' if letter.week == letter.this_week else 'week ' ~ letter.week[-2:]|int }} · <span translate="no">{{ letter.letter.at|epoch }}</span></span>{% endif %}</div>
+  {% if letter.pending %}<p class="thinking" style="margin:10px 0 0"><span class="dots"><i></i><i></i><i></i></span> <span>The coach is writing your letter…</span></p>
+    <script>setTimeout(() => location.reload(), 6000);</script>
+  {% elif letter.letter %}
+  <div class="lt-body">{{ letter.letter.letter|askfmt }}</div>
+  {% if letter.letter.this_week %}<p style="margin:10px 0 4px"><b>This week</b></p><ul class="lt-list">{% for x in letter.letter.this_week %}<li>{{ x }}</li>{% endfor %}</ul>{% endif %}
+  {% if letter.letter.drill %}<p class="small" style="margin:8px 0 0"><b>Drill first:</b> {{ letter.letter.drill }} · <a href="{{ url_for('aim_maps', pid=p.id) }}">Aim on maps</a></p>{% endif %}
+  {% else %}<p class="muted" style="margin:8px 0 0">Once a week, a short letter about your games and your drills together: what got better, what to work on, the drill to play first.</p>{% endif %}
+  {% if letter.error %}<p class="askerr" style="margin:8px 0 0">{{ letter.error }}</p>{% endif %}
+  {% if can_edit %}
+  <div class="row" style="gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px">
+    {% if not letter.pending %}<form method="post" action="{{ url_for('coach_letter', pid=p.id) }}"><button class="btn sm {{ 'ghost' if letter.week == letter.this_week else 'primary' }}">{{ 'Write it again' if letter.week == letter.this_week else "Write this week's letter" }}</button></form>{% endif %}
+    <form method="post" action="{{ url_for('coach_letter', pid=p.id) }}" class="row" style="gap:6px;align-items:center">
+      <input type="hidden" name="auto" value="{{ '0' if letter.auto else '1' }}">
+      <button class="btn sm ghost">{{ 'Stop the Monday letter' if letter.auto else 'Every Monday by itself' }}</button>
+      <span class="muted small">{{ 'On: every Monday morning, with a notification on your devices.' if letter.auto else 'Off: written when you click.' }}</span></form>
+  </div>
+  {% endif %}
+</section>
 
 <div class="chat" id="chat" aria-live="polite">
   {% for it in items %}
