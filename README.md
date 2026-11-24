@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.67.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.68.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -755,6 +755,11 @@ can run is still drawn as a teleport.
 
 The coach (Ask the coach, the team coach) sees this practice too (4.66): what you drilled, this week against last,
 what got better and what slipped (`drills.coach_facts`).
+
+**Match warm-up (4.68)**: the same, all on your team's Premier week map; against the scouted opponent picked on
+the comps page it drills the site they attack most and the site whose retakes they lose (`drills.match_warmup`).
+The strat book shows, against that opponent, which of your strats fit the counter style per map and what's
+missing (`stats/stratstyle.py`).
 
 **Daily warm-up (4.67)**: up to 6 drills in a row, about 10 minutes (what slipped this week, what your newest
 match points to, a tracking drill, what you got better at; `drills.warmup`). Team › Practice can post the team's

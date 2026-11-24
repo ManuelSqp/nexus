@@ -9,6 +9,13 @@
 .splay:hover{border-color:var(--accent);color:var(--accent)}.scard b{font-size:15px}
 .side{font-size:10.5px;font-weight:800;}.side.attack{color:var(--red)}.side.defense{color:var(--blue)}
 .mapblock{margin-bottom:18px}.mapblock h3{margin:0 0 8px}
+/* 4.68: the comp style a strat fits, and what a counter style asks for */
+.sstyle{display:flex;gap:6px;align-items:center;margin-top:6px}.sstyle select{width:auto;font-size:12px;padding:2px 6px;height:auto}
+.sstyle .guess{font-size:11px;color:var(--muted)}
+.cmaps{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-top:10px}
+.cmap{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.cmap h3{margin:0 0 4px;font-size:16px}.cmap ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.6}
+.cmap .miss{color:var(--amber)}
 </style>
 {% endblock %}
 {% block content %}
@@ -19,10 +26,39 @@
     <div style="flex:2;min-width:200px"><label>Name</label><input type="text" name="name" maxlength="80" placeholder="e.g. B split with mid lurk"></div>
     <div><label>Map</label><select name="map">{% for m in maps %}<option {{ 'selected' if m == sel }}>{{ m }}</option>{% endfor %}</select></div>
     <div><label>Side</label><select name="side"><option value="attack">Attack</option><option value="defense">Defense</option></select></div>
+    <div><label>Style</label><select name="style"><option value="">–</option>{% for k, label in styles.items() if k != 'balanced' %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></div>
     <button class="btn primary">Create &amp; draw</button>
   </form>
   <p class="hint">Everyone in the team can open and change strats. On the <a href="{{ url_for('team_plans', tid=t.id) }}">Game plans</a> tab, <i>Draw it</i> turns a plan into a strat with its steps as notes.</p>
 </section>
+{% if scouted_teams %}
+{# 4.68: against a scouted team: the strats that fit the counter style on each map, and what's missing #}
+<section class="card" id="counter">
+  <form method="get" class="row" style="gap:8px;align-items:center;flex-wrap:wrap">
+    <label for="vs" style="margin:0"><b>Against</b></label>
+    <select id="vs" name="vs" style="width:auto" onchange="this.form.submit()">
+      <option value="">nobody in particular</option>
+      {% for k, x in scouted_teams %}<option value="{{ k }}" {{ 'selected' if vs_team and vs_team.id == k }}>{{ x.name }}#{{ x.tag }}</option>{% endfor %}
+    </select><noscript><button class="btn sm">Show</button></noscript>
+    <span class="muted small">the same as on the comps page: per map the style that counters them, and your strats for it.</span>
+  </form>
+  {% if vs_team %}
+  {% if counter_maps %}<div class="cmaps">
+    {% for cm in counter_maps %}<div class="cmap">
+      <h3>{{ cm.map }}: {{ styles[cm.counter.style] }}</h3>
+      <span class="muted small">{{ cm.counter.reasons[0] }}</span>
+      <ul>{% for w in cm.wants %}
+        {% if w.missing %}<li class="miss"><span>No {{ styles[w.style]|lower }} {{ w.side }} strat yet.</span>
+          <form method="post" style="display:inline"><input type="hidden" name="map" value="{{ cm.map }}"><input type="hidden" name="side" value="{{ w.side }}"><input type="hidden" name="style" value="{{ w.style }}">
+            <input type="hidden" name="name" value="{{ vs_team.name }}: {{ styles[w.style] }} {{ w.side }}"><button class="btn sm ghost">Draw one</button></form></li>
+        {% else %}<li><span>{{ styles[w.style] }} {{ w.side }}:</span> {% for x in w.strats %}<a href="{{ url_for('strat_edit', tid=t.id, sid=x.id) }}">{{ x.name }}</a>{{ ', ' if not loop.last }}{% endfor %}</li>{% endif %}
+      {% endfor %}</ul>
+      <a class="small" href="{{ url_for('team', tid=t.id, map=cm.map, vs=vs_team.id) }}#compmaker">comps against them</a>
+    </div>{% endfor %}
+  </div>{% else %}<p class="muted small" style="margin:10px 0 0"><span translate="no">{{ vs_team.name }}#{{ vs_team.tag }}</span>: <span>nothing in their games asks for a counter style on your maps.</span></p>{% endif %}
+  {% endif %}
+</section>
+{% endif %}
 {% for m, ss in by_map|dictsort %}
 <div class="mapblock" id="map-{{ m }}">
   <h3>{{ m }} <span class="muted small">{{ ss|length }}</span></h3>
@@ -30,6 +66,11 @@
     <div class="scard-w"><a class="scard" href="{{ url_for('strat_edit', tid=t.id, sid=s.id) }}">
       <div class="side {{ s.side }}">{{ s.side|capitalize }}</div><b>{{ s.name }}</b>
       <div class="muted small">changed {{ s.updated_at|localtime }}{% if s.author %} by {{ s.author }}{% endif %}</div></a>
+      <form method="post" action="{{ url_for('strat_style', tid=t.id, sid=s.id) }}" class="sstyle">
+        <select name="style" aria-label="Style of {{ s.name }}" onchange="this.form.submit()">
+          <option value="">{{ ('looks ' ~ styles[s.style]|lower) if s.style and not s.style_set else 'no style' }}</option>
+          {% for k, label in styles.items() if k != 'balanced' %}<option value="{{ k }}" {{ 'selected' if s.style_set and s.style == k }}>{{ label }}</option>{% endfor %}
+        </select><noscript><button class="btn sm">Set</button></noscript></form>
       <a class="splay" href="{{ url_for('strat_edit', tid=t.id, sid=s.id, play=1) }}" title="Play the steps" aria-label="Play {{ s.name }}">▶</a></div>
   {% endfor %}</div>
 </div>

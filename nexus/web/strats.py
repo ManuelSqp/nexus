@@ -57,6 +57,10 @@ def clean_board(data: dict) -> dict:
     out["steps"] = steps
     if "notes" in out:
         out["notes"] = str(out["notes"] or "")[:5000]
+    if "style" in out:                                 # 4.68: the comp style it fits, set by hand
+        from ..stats.compstyle import STYLES
+        if out["style"] not in STYLES:
+            out.pop("style")
     return out
 MAX_PNG_BYTES = 8_000_000
 FROM_REPLAY_TYPES = ("agent", "ab", "smoke", "molly", "zone", "pen", "text", "arrow")
@@ -176,14 +180,58 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
                     lines += [f"If: {x}" for x in p.get("if_then", [])]
                     data["notes"] = "\n".join(x for x in lines if x)
                     data["steps"] = [{"name": "Setup", "items": []}, {"name": "Execute", "items": []}]
+            from ..stats.compstyle import STYLES
+            if f.get("style") in STYLES and f.get("style") != "balanced":    # 4.68
+                data["style"] = f["style"]
             sid = store.create_strat(tid, g.user.id, m, side, name, data)
             return redirect(url_for("strat_edit", tid=tid, sid=sid))
+        from ..stats import compstyle, stratstyle
         strats = store.strats(tid)
         by_map: dict[str, list] = {}
         for s in strats:
+            data = (store.strat(s["id"]) or {}).get("data")
+            data = data if isinstance(data, dict) else {}
+            s["style"], s["style_set"] = stratstyle.style_of({**s, "data": data})
             by_map.setdefault(s["map"], []).append(s)
+        counters = counter_box(t, strats)
         return render_template("team_strats.html", t=t, tab="strats", by_map=by_map, maps=maps_for(t),
-                               sel=request.args.get("map", ""), premier_status=sr.status(f"premier:{tid}"))
+                               sel=request.args.get("map", ""), premier_status=sr.status(f"premier:{tid}"),
+                               styles=compstyle.STYLES, **counters)
+
+    def counter_box(t, strats: list[dict]) -> dict:
+        """4.68: against the team picked on the comps page (Against): per map the counter style, the strats of
+        yours that fit it, and what's missing."""
+        from ..stats import counter as ctr, stratstyle
+        from flask import session
+        pj = app.extensions["nexus"].get("premier")
+        if pj is None:
+            return {"vs_team": None, "counter_maps": []}
+        teams = {k: x for k, x in (pj.scout_index(t.id).get("teams") or {}).items() if x.get("matches")}
+        vs = request.args.get("vs", (session.get("compvs") or {}).get(str(t.id)))
+        if not vs or vs not in teams:
+            return {"vs_team": None, "counter_maps": [], "scouted_teams": sorted(teams.items(), key=lambda kv: (kv[1].get("name") or "").lower())}
+        s = pj.scouted(t.id, vs)
+        out = []
+        for m in maps_for(t):
+            c = ctr.counter(s, m)
+            if c and c["style"] != "balanced":
+                out.append({"map": m, "counter": c, **stratstyle.for_counter(c["style"], m, strats)})
+        return {"vs_team": {"id": vs, **teams[vs]}, "counter_maps": out,
+                "scouted_teams": sorted(teams.items(), key=lambda kv: (kv[1].get("name") or "").lower())}
+
+    @app.post("/teams/<int:tid>/strats/<int:sid>/style")
+    def strat_style(tid: int, sid: int):
+        """4.68: the comp style a strat fits (or back to the guess)."""
+        from ..stats.compstyle import STYLES
+        _t, s = get_strat(tid, sid)
+        data = dict(s["data"]) if isinstance(s.get("data"), dict) else {}
+        st = request.form.get("style", "")
+        if st in STYLES and st != "balanced":
+            data["style"] = st
+        else:
+            data.pop("style", None)
+        store.update_strat(sid, g.user.id, data=data)
+        return redirect(url_for("team_strats", tid=tid) + f"#map-{s['map']}")
 
     @app.get("/teams/<int:tid>/strats/<int:sid>")
     def strat_edit(tid: int, sid: int):
@@ -209,7 +257,7 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
 
     @app.post("/api/teams/<int:tid>/strats/<int:sid>")
     def strat_save(tid: int, sid: int):
-        get_strat(tid, sid)
+        _t, old = get_strat(tid, sid)
         body = request.get_json(silent=True)                 # JSON only: a cross-site form can't send this
         if not isinstance(body, dict):
             return jsonify(error="expected JSON"), 400
@@ -225,6 +273,10 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             data = clean_board(data)
             if not data["steps"]:
                 return jsonify(error="data.steps must be a non-empty list"), 400
+            if "style" not in data:                       # 4.68: the editor doesn't send it: keep the style set
+                st = old["data"].get("style") if isinstance(old.get("data"), dict) else None
+                if st:
+                    data["style"] = st
             raw = json.dumps(data)
             if len(raw) > MAX_BOARD_BYTES:
                 return jsonify(error="board too big"), 413

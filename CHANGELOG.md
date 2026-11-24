@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.68.0
+- **Match-day warm-up.** Next to *Start the warm-up*, Aim on maps shows *Match warm-up: <map>* for each of your
+  teams with a Premier week map. Its drills are all on that map. If you picked the opponent under *Against* on
+  the comps page: holding the angles of the site they attack most, retaking it, then the entry and post-plant
+  on the site whose retakes they mostly lose, and a tracking drill. Without an opponent: the map's most fought
+  spots.
+- **Strats for the counter style.** The strat book has *Against* too (the same pick as on the comps page): per map
+  the counter style, your strats that fit it ("Defensive defense: B stack") and what's missing, with *Draw one*
+  to start it. Every strat has a style: set it on its card or when you create it; without one, Nexus guesses it
+  from the name and notes ("rush", "stack", "execute", …) or from how much utility it draws ("looks defensive").
+
 ## 4.67.1
 - **The drag & drop editors on a phone** (agent pool, ideal compositions). Checked at phone size with touch:
   - 4 agent tiles a row instead of 2, so you don't scroll through a long list.
