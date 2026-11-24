@@ -4,6 +4,14 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.69.0
+- **Your week from the coach.** On top of Ask the coach: once a week, a short letter about your games and your drills
+  together ("your B retakes got faster, and you won 3 of 4 games on Ascent"): this week's games against last
+  week's, the maps and agents you played, what you drilled and what got better or slipped. Under it 2-3 things for
+  the coming week and the drill to play first, with a link to Aim on maps. *Write this week's letter* writes it now;
+  *Every Monday by itself* writes it Monday mornings (the automatic-jobs model, Settings › Models) and sends a
+  notification to your devices. The last 8 letters are kept.
+
 ## 4.68.0
 - **Match-day warm-up.** Next to *Start the warm-up*, Aim on maps shows *Match warm-up: <map>* for each of your
   teams with a Premier week map. Its drills are all on that map. If you picked the opponent under *Against* on
