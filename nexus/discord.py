@@ -149,3 +149,30 @@ def focus_embeds(team_name: str, week: str, players: list[dict]) -> list[dict]:
     if out:
         out[-1]["footer"] = {"text": f"{team_name} · week {week} · Nexus"}
     return out
+
+
+def drills_embeds(team_name: str, week: str, tw: dict) -> list[dict]:
+    """4.67: the team's drill week (stats.drills.team_week) as one embed."""
+    from .stats.drills import change_text, drill_name
+    lines = []
+    for p in tw.get("players") or []:
+        if not p["sessions"]:
+            continue
+        line = f"**{p['name']}**: {p['sessions']} {'session' if p['sessions'] == 1 else 'sessions'}, {p['reps']} reps, " \
+               f"{p['days']} {'day' if p['days'] == 1 else 'days'}"
+        if p.get("best"):
+            line += f"\n  ↗ {drill_name(p['best'])}: {change_text(p['best'])}"
+        lines.append(line)
+    if not lines:
+        lines.append("Nobody drilled this week. Practice › Aim on maps has a 10-minute warm-up.")
+    top = tw.get("top")
+    if top:
+        lines.append(f"\n🏆 **Biggest step**: {top['name']}, {drill_name(top['drill'])}: {change_text(top['drill'])}")
+    if tw.get("idle") and len(tw["idle"]) < len(tw.get("players") or []):
+        lines.append(f"\nNo drills yet this week: {', '.join(tw['idle'])}. The warm-up takes 10 minutes.")
+    f = tw.get("focus")
+    if f:
+        lines.append(f"\n🗺️ **Map focus: {f['map']}**: {f['sessions']} of this week's sessions were on it."
+                     + (f" Nobody played these there yet: {', '.join(f['missing'])}." if f.get("missing") else ""))
+    return [{"title": _cut(f"{team_name}: drills this week", 256), "description": _cut("\n".join(lines), 4000),
+             "color": TEAL, "footer": {"text": f"{team_name} · week {week} · Nexus"}}]

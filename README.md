@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.66.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.67.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -755,6 +755,10 @@ can run is still drawn as a teleport.
 
 The coach (Ask the coach, the team coach) sees this practice too (4.66): what you drilled, this week against last,
 what got better and what slipped (`drills.coach_facts`).
+
+**Daily warm-up (4.67)**: up to 6 drills in a row, about 10 minutes (what slipped this week, what your newest
+match points to, a tracking drill, what you got better at; `drills.warmup`). Team › Practice can post the team's
+drill week to Discord every Sunday at 20:00 (`drills.team_week`).
 
 **Your week (4.65)** at the top of Practice › Aim on maps: your drill sessions for the last 8 weeks (Monday to
 Sunday), this week against last week per kind of drill (the median of your reps: seconds faster, or percentage

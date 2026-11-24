@@ -737,6 +737,84 @@ def coach_facts(data: dict, now: float | None = None) -> dict | None:
     return {k: v for k, v in out.items() if v not in (None, [], {})}
 
 
+# ------------------------------------------------------------------------------------------------ 4.67: warm-up
+WARM_REPS = {"hold": 10, "attack": 3, "track": 1, "clear": 2, "entry": 3, "retake": 3, "postplant": 5}
+WARM_MAX = 6                  # drills in a warm-up (about 10 minutes)
+
+
+def token(mode: str, sid: str, map_name: str) -> str:
+    """A general drill in a queue: g-<mode>-<spot>@<map>; a death drill is its own id."""
+    return f"g-{mode}-{sid}@{map_name}"
+
+
+def warmup(week: dict, suggested: list[dict], suggested_map: str, track: tuple[str, str] | None,
+           fallback: list[str] | None = None) -> list[str]:
+    """The daily warm-up, about 10 minutes: up to 2 drills that slipped this week, up to 2 the newest match points
+    to ("practice what cost you rounds"), one tracking drill, then drills you got better at, to keep them; each
+    once. -> queue tokens (token() / death drill ids)."""
+    out: list[str] = []
+
+    def add(t):
+        if t and t not in out and len(out) < WARM_MAX:
+            out.append(t)
+
+    def of(d):                                  # a weekly() drill -> its token
+        if d["id"].startswith("g-"):
+            mode, sid = d["id"][2:].rsplit("-", 1)
+            return token(mode, sid, d["map"]) if d.get("map") else None
+        return d["id"]
+    for d in (week or {}).get("worse", [])[:2]:
+        add(of(d))
+    for it in suggested[:2]:
+        add(token(it["mode"], it["id"], suggested_map))
+    if track:
+        add(token("track", track[0], track[1]))
+    for d in (week or {}).get("better", []):
+        add(of(d))
+    for t in fallback or []:
+        add(t)
+    return out
+
+
+# ------------------------------------------------------------------------------------------------ 4.67: the team's week
+def team_week(players: list[tuple[str, dict]], focus_map: str | None = None, now: float | None = None) -> dict:
+    """The team's drills this week for Discord: per player sessions, reps, days and his biggest improvement; the
+    team's biggest improvement; who didn't drill; on the focus map: sessions and the kinds nobody played there.
+    players: [(name, runs data)]. -> {players, top, idle, sessions, focus}"""
+    now = time.time() if now is None else now
+    this = _week_start(now)
+    out, top, focus_n, focus_kinds = [], None, 0, set()
+    for name, data in players:
+        w = weekly(data, now)
+        best = w["better"][0] if w["better"] else None
+        out.append({"name": name, "sessions": w["this"]["sessions"], "reps": w["this"]["reps"], "days": w["days"],
+                    "best": best})
+        if best and (top is None or best["better"] / max(abs(best["before"]), 1e-6)
+                     > top["drill"]["better"] / max(abs(top["drill"]["before"]), 1e-6)):
+            top = {"name": name, "drill": best}
+        for runs in (data or {}).values():
+            for r in runs if isinstance(runs, list) else []:
+                if (isinstance(r, dict) and isinstance(r.get("at"), (int, float)) and _week_start(r["at"]) == this
+                        and focus_map and (r.get("map") or "").lower() == focus_map.lower()):
+                    focus_n += 1
+                    focus_kinds.add(r.get("kind"))
+    out.sort(key=lambda p: (-p["sessions"], -p["reps"], p["name"].lower()))
+    focus = None
+    if focus_map:
+        missing = [MODE_NAMES[k] for k in ("retake", "postplant", "entry", "hold") if k not in focus_kinds]
+        focus = {"map": focus_map, "sessions": focus_n, "missing": missing}
+    return {"players": out, "top": top, "idle": [p["name"] for p in out if not p["sessions"]],
+            "sessions": sum(p["sessions"] for p in out), "focus": focus}
+
+
+def drill_name(d: dict) -> str:
+    return " · ".join(x for x in (d.get("name"), d.get("map"), d.get("where")) if x)
+
+
+def change_text(d: dict) -> str:
+    return f"{_fmt(d['before'], d['unit'])} → {_fmt(d['now'], d['unit'])} ({_diff(d['better'], d['unit'])})"
+
+
 # ------------------------------------------------------------------------------------------------ keys
 # The actions a player can put on his own keys (4.51; the aim drills, later the trainer). Values: e.code names of
 # the keyboard ("KeyR", "Space", "Backspace", …) or "Mouse0".."Mouse4", "WheelUp", "WheelDown".

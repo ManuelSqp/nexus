@@ -10,6 +10,12 @@
 
 {% macro val(x, unit) %}{% if x is none %}–{% elif unit == '%' %}{{ x|round|int }} %{% else %}{{ '%.2f'|format(x) }} s{% endif %}{% endmacro %}
 {% macro diff(b, unit) %}{% if b is none %}<span class="muted">–</span>{% elif (unit == '%' and b|abs < 0.5) or (unit != '%' and b|abs < 0.005) %}<span class="muted">same</span>{% elif unit == '%' %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '+' if b > 0 }}{{ b|round|int }} points</span>{% else %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '%.2f'|format(b|abs) }} s {{ 'faster' if b > 0 else 'slower' }}</span>{% endif %}{% endmacro %}
+{# 4.67: the daily warm-up #}
+<section class="card am-warm">
+  <div><b>Daily warm-up</b> <span class="muted small">about 10 minutes: up to 6 drills in a row: what slipped this week, what your newest match points to, one tracking drill, and what you got better at.</span></div>
+  <a class="btn primary" href="{{ url_for('aim_warmup', pid=p.id) }}">Start the warm-up</a>
+</section>
+
 {% if week and week.total %}
 {# 4.65: your week: the drills you played, week by week, and what got better #}
 <section class="card am-week" id="am-week">
