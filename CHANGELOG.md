@@ -4,6 +4,14 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.64.0
+- **Agent pool: a role filter.** *All / Duelist / Initiator / Controller / Sentinel* above *Can play* and *Won't
+  play*, so you find the agent you want to drag without scrolling through all of them.
+- **Agent pool: agents on some maps only** ("Viper only on Breeze and Icebox"). Every agent in your pool has an
+  *All maps* button: pick the maps you play it on. With *Follow our agent pools* on, the comps page (every mode,
+  drafts, Discord prep) only gives you that agent on those maps; the cards say "plays it on other maps only". The
+  team's pools show "2 maps" next to such an agent (hover for which).
+
 ## 4.63.0
 - **Comp sheet: ideal compositions with drag & drop.** *Edit* (or *Set by hand*) on a map opens an editor right
   under it, instead of five dropdowns: 5 slots, and every agent below as a tile with how many of your players have

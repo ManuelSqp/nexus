@@ -554,7 +554,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
                             "me": m.get("user_id") == g.user.id, "linked": bool(m.get("user_id")),
                             **compsheet.pool(c["rows_by"][p.id], saved["pools"].get(str(p.id)))})
         pools = {pl["label"]: pl for pl in players}
-        maps = t.map_list or [m["map"] for m in by_map([r for rs in c["rows_by"].values() for r in rs])][:7]
+        maps = sheet_maps(t, c)
         web = sr.read_webcomps(tid)
         ideals = []
         for mp in maps:
@@ -565,12 +565,19 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         advice = agent_advice(t, c, players, maps, ideals)
         all_agents = sorted(roles.all_agents())
         return render_template("team_sheet.html", t=t, tab="sheet", players=players, ideals=ideals, advice=advice,
-                               ideal_who={a: compsheet.who_plays(a, pools, top=5) for a in all_agents},
+                               ideal_who={a: compsheet.who_plays(a, pools, top=5) for a in all_agents}, sheet_maps=maps,
                                agent_roles={a: roles.role_of(a) for a in all_agents},
                                hue=compsheet.hue, all_agents=all_agents, is_owner=g.team_owner,
                                edit=request.args.get("edit", type=int), web_search_on=web_search_on(),
                                web_status=sr.status(f"webcomps:{tid}"), queues=QUEUE_TABS, follow_pools=saved["follow"],
                                premier_status=sr.status(f"premier:{tid}"))
+
+    def sheet_maps(t, c=None) -> list[str]:
+        """The maps of the comp sheet: the team's maps, else the 7 it played most."""
+        if t.map_list:
+            return list(t.map_list)
+        c = c or team_context(t)
+        return [m["map"] for m in by_map([r for rs in c["rows_by"].values() for r in rs])][:7]
 
     def agent_advice(t, c, players: list[dict], maps: list[str], ideals: list[dict]) -> dict | None:
         """4.22: which agent each player should add next (stats/agentpool.py)."""
@@ -602,7 +609,7 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         order = [a["agent"] for a in cur["agents"]]
         if agent not in order:
             order.append(agent)
-        data["pools"][str(pid)] = {"order": order, "no": [a for a in cur["no"] if a != agent]}
+        data["pools"][str(pid)] = {"order": order, "no": [a for a in cur["no"] if a != agent], "maps": cur["maps"]}
         compsheet.save(sr.team_dir(tid), data)
         p = store.profile(pid)
         flash(f"{agent} added to the pool of {p.name if p else 'the player'}.", "ok")
@@ -624,13 +631,23 @@ def register(app, store, sr: StatsRunner, get_profile) -> None:
         else:
             no = compsheet.clean_agents(request.form.get("no", "").split(","))
             order = [a for a in compsheet.clean_agents(request.form.get("order", "").split(",")) if a not in no]
-            data["pools"][str(pid)] = {"order": order, "no": no}
+            entry = {"order": order, "no": no}
+            if "maps" in request.form:                   # 4.64: agents he plays on some maps only
+                try:
+                    raw = json.loads(request.form.get("maps") or "{}")
+                except ValueError:
+                    raw = {}
+                entry["maps"] = compsheet.clean_maps(raw, order, sheet_maps(t))
+            elif (data["pools"].get(str(pid)) or {}).get("maps"):
+                entry["maps"] = compsheet.clean_maps(data["pools"][str(pid)]["maps"], order)
+            data["pools"][str(pid)] = entry
             if not quiet:
                 flash("Agent pool saved.", "ok")
         compsheet.save(sr.team_dir(tid), data)
         if quiet:                                     # 4.60: the drag & drop editor saves as you go
             pl = compsheet.pool(filter_rows(sr.games(pid).rows(), t.queue), data["pools"].get(str(pid)))
-            return jsonify(ok=True, order=[a["agent"] for a in pl["agents"]], no=pl["no"], edited=pl["edited"])
+            return jsonify(ok=True, order=[a["agent"] for a in pl["agents"]], no=pl["no"], edited=pl["edited"],
+                           maps=pl["maps"])
         return redirect(url_for("team_sheet", tid=tid) + "#pool")
 
     @app.post("/teams/<int:tid>/sheet/ideal")

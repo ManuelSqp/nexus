@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.63.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.64.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -405,7 +405,9 @@ faded (`stats/duos.py`). The coach sees the pairs too.
 **Comp sheet** (*Strategy › Comp sheet*, 4.13) is the team's agent pool and ideal comps on one page. **Agent pool:**
 your own pool first, as big tiles from best to worst (green to red), starting from the stats (most played, then
 win rate), with every other agent under *Can play* and a *Won't play* row. Drag agents between them and within your
-pool (or use the keyboard: ← →, Enter, Delete); it saves as you go (4.60). Each player edits only his own pool
+pool (or use the keyboard: ← →, Enter, Delete); it saves as you go (4.60). A role filter narrows *Can play* and
+*Won't play*; *All maps* under an agent in your pool picks the maps you play it on, and comps that follow the pools
+only give it to you there (4.64). Each player edits only his own pool
 (linked by the in-game name); the team owner keeps the pools of players nobody is linked to (*Edit for them*). The
 switch *The team's pools* shows everyone else's, read-only, as a column each. Agents played later are added at the
 end; *Back to the stats* drops the changes. **Ideal composition:** per map the comp the web sources name most (the team

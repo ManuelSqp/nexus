@@ -74,14 +74,41 @@ def pool(rows: list[dict], saved: dict | None = None) -> dict:
         s = stats.get(a)
         agents.append({"agent": a, "role": roles.role_of(a), "games": s["games"] if s else 0,
                        "wr": s["wr"] if s else None, "rank": i, "added": s is None})
-    return {"agents": agents, "no": no, "edited": bool(saved)}
+    only = clean_maps((saved or {}).get("maps"), order)
+    for a in agents:
+        a["maps"] = only.get(a["agent"])
+    return {"agents": agents, "no": no, "edited": bool(saved), "maps": only}
+
+
+def clean_maps(maps, agents, known: list[str] | None = None) -> dict[str, list[str]]:
+    """4.64: {agent: [maps]}: the maps a player plays an agent on (none listed = every map). Only agents in his
+    pool, map names as known (case of `known`), at most 12 maps; an empty list is dropped."""
+    if not isinstance(maps, dict):
+        return {}
+    byk = {m.lower(): m for m in known or []}
+    out = {}
+    for a in clean_agents(list(maps)):
+        if a not in agents:
+            continue
+        raw = maps.get(a) if a in maps else next((v for k, v in maps.items() if clean_agents([k]) == [a]), None)
+        ms = []
+        for m in raw if isinstance(raw, list) else []:
+            m = str(m).strip()
+            if known is not None:
+                m = byk.get(m.lower(), "")
+            if m and len(m) <= 24 and re.fullmatch(r"[A-Za-z' -]+", m) and m.lower() not in {x.lower() for x in ms}:
+                ms.append(m)
+        if ms:
+            out[a] = ms[:12]
+    return out
 
 
 def prefs(rows: list[dict], saved: dict | None) -> dict:
     """A player's pool as comp.Pool.pref: {"rank": {agent: rank}, "size": n, "no": set, "added": set}."""
     pl = pool(rows, saved)
     return {"rank": {a["agent"]: a["rank"] for a in pl["agents"]}, "size": len(pl["agents"]),
-            "no": set(pl["no"]), "added": {a["agent"] for a in pl["agents"] if a["added"]}}
+            "no": set(pl["no"]), "added": {a["agent"] for a in pl["agents"] if a["added"]},
+            "maps": {a: {m.lower() for m in ms} for a, ms in pl["maps"].items()}}
 
 
 def hue(rank: int, n: int) -> int:

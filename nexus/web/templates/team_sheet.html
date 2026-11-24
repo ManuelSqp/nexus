@@ -47,6 +47,14 @@
 .pe-t .nm{font-size:13px;font-weight:600;line-height:1.1}.pe-t small{font-size:11px;color:var(--muted);min-height:13px}
 .pe-t .rk{position:absolute;top:5px;left:7px;font-style:normal;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .pe-t img{pointer-events:none}
+/* 4.64: role filter, maps per agent */
+.pe-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.pe-t[hidden]{display:none}
+.pe-mp{border:1px solid var(--line);background:none;color:var(--muted);font-size:11px;border-radius:6px;padding:1px 6px;cursor:pointer;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pe-mp:hover{color:var(--text);border-color:var(--muted)}.pe-mp.only{color:var(--accent);border-color:var(--accent)}
+.pe-zone:not([data-zone="pool"]) .pe-mp,.pe-t.ghost .pe-mp{display:none}
+.pe-pop{position:absolute;z-index:40;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px;box-shadow:0 8px 24px rgba(0,0,0,.45);max-width:320px}
+.pe-pop-maps{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px;margin-top:6px}.pe-pop-maps label{display:flex;gap:6px;align-items:center;font-size:13px;margin:0}
+.plist .mo{font-size:10px;color:var(--accent);margin-left:4px;white-space:nowrap}
 .pe-t.drag{opacity:.35}.pe-t.ghost{position:fixed;z-index:50;pointer-events:none;width:112px;opacity:.95;box-shadow:0 8px 24px rgba(0,0,0,.45);cursor:grabbing}
 .pe-zone[data-zone="can"] .pe-t,.pe-no .pe-t{opacity:.8}.pe-no .pe-t .nm{text-decoration:line-through;text-decoration-color:rgba(255,70,85,.7)}
 .switch{display:inline-flex;gap:8px;align-items:center;cursor:pointer;font-weight:600}
@@ -109,7 +117,7 @@
     <input type="hidden" name="follow_pools" value="{{ '0' if follow_pools else '1' }}">
     <span class="pill {{ 'done' if follow_pools else '' }}">{{ 'Comps follow these pools' if follow_pools else "Comps don't use these pools" }}</span>
     <button class="btn sm {{ 'ghost' if follow_pools else 'primary' }}">{{ 'Stop following' if follow_pools else 'Follow our agent pools' }}</button>
-    <span class="muted small">When on, the comps page (every mode, drafts, Discord prep) leaves out agents a player won't play, prefers agents he ranked high and also picks agents he added.</span>
+    <span class="muted small">When on, the comps page (every mode, drafts, Discord prep) leaves out agents a player won't play, prefers agents he ranked high, also picks agents he added and keeps agents to the maps he picked for them.</span>
   </form>
   {% elif follow_pools %}<p class="small" style="margin:10px 0 0"><span class="pill done">Comps follow these pools</span></p>{% endif %}
   {% if not mine %}
@@ -122,12 +130,18 @@
   {% set inpool = ed.agents|map(attribute='agent')|list %}
   <div class="pe" data-pool="{{ url_for('team_sheet_pool', tid=t.id, pid=ed.pid) }}">
     <div class="pe-zone" data-zone="pool"><div class="pe-h"><b>{{ 'Your pool' if ed.me else 'Pool' }}</b> <span class="muted small">best first: drag to order</span><span class="pe-st muted small" aria-live="polite"></span></div>
-      <ol class="pe-tiles">{% for a in ed.agents %}<li class="pe-t" tabindex="0" data-agent="{{ a.agent }}"><i class="rk"></i>{{ ai(a.agent, 40) }}<span class="nm rc-{{ a.role }}" translate="no">{{ a.agent }}</span><small>{% if a.added %}new{% else %}{{ a.games }} {{ 'game' if a.games == 1 else 'games' }}{% endif %}</small></li>{% endfor %}</ol></div>
+      <ol class="pe-tiles">{% for a in ed.agents %}<li class="pe-t" tabindex="0" data-agent="{{ a.agent }}" data-role="{{ a.role }}"><i class="rk"></i>{{ ai(a.agent, 40) }}<span class="nm rc-{{ a.role }}" translate="no">{{ a.agent }}</span><small>{% if a.added %}new{% else %}{{ a.games }} {{ 'game' if a.games == 1 else 'games' }}{% endif %}</small><button type="button" class="pe-mp" data-maps="{{ (a.maps or [])|join(",") }}" aria-label="Maps">{{ (a.maps)|join(", ") if a.maps else "All maps" }}</button></li>{% endfor %}</ol></div>
+    <div class="pe-bar"><div class="subtabs pe-filter" role="group" aria-label="Role" style="margin:0">
+      <a href="#" class="on" data-role="">All</a>{% for r in ['Duelist', 'Initiator', 'Controller', 'Sentinel'] %}<a href="#" data-role="{{ r }}">{{ r }}</a>{% endfor %}</div>
+      <span class="muted small">filters Can play and Won't play</span></div>
     <div class="pe-zone" data-zone="can"><div class="pe-h"><b>Can play</b> <span class="muted small">drag into the pool</span></div>
-      <ul class="pe-tiles">{% for a in all_agents if a not in inpool and a not in ed.no %}<li class="pe-t" tabindex="0" data-agent="{{ a }}"><i class="rk"></i>{{ ai(a, 40) }}<span class="nm" translate="no">{{ a }}</span><small></small></li>{% endfor %}</ul></div>
+      <ul class="pe-tiles">{% for a in all_agents if a not in inpool and a not in ed.no %}<li class="pe-t" tabindex="0" data-agent="{{ a }}" data-role="{{ agent_roles[a] }}"><i class="rk"></i>{{ ai(a, 40) }}<span class="nm" translate="no">{{ a }}</span><small></small><button type="button" class="pe-mp" data-maps="{{ (none or [])|join(",") }}" aria-label="Maps">{{ (none)|join(", ") if none else "All maps" }}</button></li>{% endfor %}</ul></div>
     <div class="pe-zone pe-no" data-zone="no"><div class="pe-h"><b>Won't play</b> <span class="muted small">drag here</span></div>
-      <ul class="pe-tiles">{% for a in ed.no %}<li class="pe-t" tabindex="0" data-agent="{{ a }}"><i class="rk"></i>{{ ai(a, 40) }}<span class="nm" translate="no">{{ a }}</span><small></small></li>{% endfor %}</ul></div>
-    <p class="muted small pe-help">Keyboard: ← → move an agent in the pool, Enter puts it into the pool or takes it out, Delete marks it won't play.</p>
+      <ul class="pe-tiles">{% for a in ed.no %}<li class="pe-t" tabindex="0" data-agent="{{ a }}" data-role="{{ agent_roles[a] }}"><i class="rk"></i>{{ ai(a, 40) }}<span class="nm" translate="no">{{ a }}</span><small></small><button type="button" class="pe-mp" data-maps="{{ (none or [])|join(",") }}" aria-label="Maps">{{ (none)|join(", ") if none else "All maps" }}</button></li>{% endfor %}</ul></div>
+    <p class="muted small pe-help">Keyboard: ← → move an agent in the pool, Enter puts it into the pool or takes it out, Delete marks it won't play. "All maps" under an agent in the pool: pick the maps you play it on.</p>
+    <div class="pe-pop" hidden role="dialog" aria-label="Maps for this agent"><b class="pe-pop-a" translate="no"></b> <span class="muted small">only on these maps:</span>
+      <div class="pe-pop-maps">{% for m in sheet_maps %}<label><input type="checkbox" value="{{ m }}"> <span translate="no">{{ m }}</span></label>{% endfor %}</div>
+      <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="btn sm ghost pe-pop-all">Every map</button><button type="button" class="btn sm primary pe-pop-ok">Done</button></div></div>
     <div class="row" style="gap:8px;flex-wrap:wrap">
       {% if ed.edited %}<form method="post" action="{{ url_for('team_sheet_pool', tid=t.id, pid=ed.pid) }}"><input type="hidden" name="reset" value="1"><button class="btn sm ghost" data-confirm="Back to the order from the stats?">Back to the stats</button></form>{% endif %}
       {% if target %}<a class="btn sm ghost" href="{{ url_for('team_sheet', tid=t.id) }}#pool">Done</a>{% endif %}
@@ -147,7 +161,7 @@
       <header><b data-tip="{{ pl.label }}" translate="no">{{ pl.label }}</b><span class="muted small">{% if pl.kind != 'starter' %}sub · {% endif %}{{ 'edited' if pl.edited else 'from stats' }}</span></header>
       <ul class="plist">
         {% for a in pl.agents %}
-        <li class="{{ 'added' if a.added }} {{ 'more' if loop.index > 8 }}" style="background:hsla({{ hue(a.rank, n) }},62%,42%,.30)"><span class="rk">{{ a.rank }}</span>{{ ai(a.agent, 22) }}<span class="nm rc-{{ a.role }}">{{ a.agent }}</span>
+        <li class="{{ 'added' if a.added }} {{ 'more' if loop.index > 8 }}" style="background:hsla({{ hue(a.rank, n) }},62%,42%,.30)"><span class="rk">{{ a.rank }}</span>{{ ai(a.agent, 22) }}<span class="nm rc-{{ a.role }}">{{ a.agent }}</span>{% if a.maps %}<span class="mo" tabindex="0" data-tip="Only on {{ a.maps|join(', ') }}">{{ a.maps|length }} {{ 'map' if a.maps|length == 1 else 'maps' }}</span>{% endif %}
           <span class="g" tabindex="0" data-tip="{% if a.added %}Added by hand, no games yet{% else %}{{ a.games }} games, {{ (a.wr * 100)|round|int }} % won{% endif %}">{% if a.added %}new{% else %}{{ a.games }}{% endif %}</span></li>
         {% else %}<li style="display:block" class="muted small">No agents yet.</li>{% endfor %}
       </ul>
@@ -388,6 +402,9 @@
         const fd = new FormData();
         fd.set('order', [...list(zoneOf('pool')).children].map(t => t.dataset.agent).join(','));
         fd.set('no', [...list(zoneOf('no')).children].map(t => t.dataset.agent).join(','));
+        const maps = {};                                     // 4.64: agents played on some maps only
+        [...list(zoneOf('pool')).children].forEach(t => { const m = t.querySelector('.pe-mp').dataset.maps; if (m) maps[t.dataset.agent] = m.split(','); });
+        fd.set('maps', JSON.stringify(maps));
         try {
           const r = await fetch(pe.dataset.pool, {method: 'POST', body: fd, credentials: 'same-origin', headers: {'X-Nexus-Save': '1'}});
           st.textContent = r.ok ? 'saved' : 'not saved (' + r.status + ')';
@@ -395,6 +412,7 @@
       }, 500);
     };
     const changed = () => { paint(); save(); };
+    pe.addEventListener('pe-changed', save);              // 4.64: maps picked for an agent
     // pointer dragging: a copy follows the pointer, the tile moves to where it would land as you go
     let drag = null;
     const zoneAt = (x, y) => zones.find(z => { const r = z.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; });
@@ -405,6 +423,7 @@
     }) || null;
     pe.addEventListener('dragstart', e => e.preventDefault());        // ours, not the browser's
     pe.addEventListener('pointerdown', e => {
+      if (e.target.closest('.pe-mp, .pe-pop')) return;
       const t = e.target.closest('.pe-t');
       if (!t || e.button > 0) return;
       drag = {el: t, x0: e.clientX, y0: e.clientY, ghost: null, id: e.pointerId};
@@ -439,6 +458,7 @@
     window.addEventListener('pointerup', drop); window.addEventListener('pointercancel', drop);
     // the keyboard: ← → in the pool, Enter in / out of it, Delete: won't play
     pe.addEventListener('keydown', e => {
+      if (e.target.closest('.pe-mp, .pe-pop')) return;
       const t = e.target.closest('.pe-t'); if (!t) return;
       const z = t.closest('.pe-zone').dataset.zone, pool = list(zoneOf('pool'));
       if (z === 'pool' && (e.key === 'ArrowLeft' || e.key === 'ArrowUp') && t.previousElementSibling) pool.insertBefore(t, t.previousElementSibling);
@@ -451,6 +471,41 @@
     paint();
   }
   // the team's pools: shown or not (remembered)
+  if (pe) {
+    // 4.64: the role filter (can play, won't play) and the maps an agent is played on
+    pe.querySelectorAll('.pe-filter a').forEach(f => f.addEventListener('click', e => {
+      e.preventDefault();
+      pe.querySelectorAll('.pe-filter a').forEach(x => x.classList.toggle('on', x === f));
+      pe.querySelectorAll('.pe-zone:not([data-zone="pool"]) .pe-t').forEach(t => { t.hidden = !!f.dataset.role && t.dataset.role !== f.dataset.role; });
+    }));
+    const pop = pe.querySelector('.pe-pop'), boxes = [...pop.querySelectorAll('input')];
+    let btn = null;
+    const label = b => { const m = b.dataset.maps ? b.dataset.maps.split(',') : []; b.textContent = m.length ? m.join(', ') : 'All maps'; b.classList.toggle('only', !!m.length); b.dataset.tip = m.length ? 'Only on ' + m.join(', ') : 'Every map'; };
+    pe.querySelectorAll('.pe-mp').forEach(label);
+    const close = () => { pop.hidden = true; if (btn) btn.focus(); btn = null; };
+    const apply = () => {
+      const on = boxes.filter(x => x.checked).map(x => x.value);
+      btn.dataset.maps = on.length === boxes.length ? '' : on.join(',');
+      label(btn); pe.dispatchEvent(new CustomEvent('pe-changed'));
+    };
+    pe.addEventListener('click', e => {
+      const b = e.target.closest('.pe-mp'); if (!b) return;
+      e.stopPropagation();
+      if (btn === b && !pop.hidden) return close();
+      btn = b; const m = b.dataset.maps ? b.dataset.maps.split(',') : [];
+      boxes.forEach(x => { x.checked = !m.length || m.includes(x.value); });
+      pop.querySelector('.pe-pop-a').textContent = b.closest('.pe-t').dataset.agent;
+      const r = b.getBoundingClientRect(), pr = pe.getBoundingClientRect();
+      pe.style.position = 'relative';
+      pop.style.left = Math.max(0, Math.min(r.left - pr.left, pr.width - 320)) + 'px'; pop.style.top = (r.bottom - pr.top + 6) + 'px';
+      pop.hidden = false; (boxes[0] || pop).focus();
+    });
+    boxes.forEach(x => x.addEventListener('change', () => { if (!boxes.some(y => y.checked)) x.checked = true; apply(); }));
+    pop.querySelector('.pe-pop-all').addEventListener('click', () => { boxes.forEach(x => { x.checked = true; }); apply(); close(); });
+    pop.querySelector('.pe-pop-ok').addEventListener('click', close);
+    document.addEventListener('click', e => { if (!pop.hidden && !e.target.closest('.pe-pop')) close(); });
+    pop.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  }
   const sw = document.getElementById('show-team'), tp = document.getElementById('team-pools');
   if (sw && tp) {
     try { const v = localStorage.getItem('nexus.sheet.team'); if (v !== null && pe) sw.checked = v === '1'; } catch (e) {}
