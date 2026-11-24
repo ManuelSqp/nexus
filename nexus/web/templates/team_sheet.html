@@ -69,8 +69,24 @@
 .icard{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
 .icard h3{margin:0;font-size:16px;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .ibtns{display:flex;gap:6px;flex-wrap:wrap;align-items:flex-start}
-.ibtns details[open]{flex-basis:100%}
-.iedit{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:6px}
+/* 4.63: the ideal composition editor: 5 slots, every agent below, drag & drop */
+.ie{margin-top:10px;background:var(--panel2);border:1px solid var(--accent);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.ie-h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.ie-h b{font-size:16px}.ie-st{margin-left:auto}
+.ie-slots{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.ie-slot{min-height:92px;border:2px dashed var(--line);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  position:relative;cursor:pointer;user-select:none;touch-action:none;text-align:center;font-size:13px;font-weight:600}
+.ie-slot.full{border-style:solid;cursor:grab}.ie-slot.sel{border-color:var(--accent)}.ie-slot.over{background:rgba(255,255,255,.06);border-color:var(--accent)}
+.ie-slot .x{position:absolute;top:3px;right:5px;border:0;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px}
+.ie-slot .x:hover{color:var(--red)}.ie-slot .empty{color:var(--muted);font-weight:400;font-size:12px}
+.ie-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.ie-pal{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:6px}
+.ie-t{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px 6px;border-radius:9px;border:1px solid var(--line);
+  background:rgba(255,255,255,.03);cursor:grab;user-select:none;touch-action:none;text-align:center}
+.ie-t .nm{font-size:12px;font-weight:600;line-height:1.1}.ie-t small{font-size:11px;color:var(--muted)}.ie-t small.none{color:var(--red)}
+.ie-t:hover{border-color:var(--muted)}.ie-t.used{opacity:.35}.ie-t[hidden]{display:none}
+.ie-t:focus-visible,.ie-slot:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ie img{pointer-events:none}.ie-ghost{position:fixed;z-index:50;pointer-events:none;width:96px;opacity:.95;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+@media(max-width:700px){.ie-slots{grid-template-columns:repeat(3,minmax(0,1fr))}}
 .iedit select{width:100%;padding:4px 6px;font-size:12.5px}
 @media (max-width:1000px){.irow{grid-template-columns:repeat(3,minmax(0,1fr))}.irow .imap{grid-column:1/-1;border-right:0;border-bottom:1px solid var(--line)}
   .iag{border-bottom:1px solid var(--line)}}
@@ -161,13 +177,7 @@
     {% if web_search_on %}<form method="post" action="{{ url_for('team_webcomps', tid=t.id) }}"><input type="hidden" name="map" value="{{ it.map }}"><input type="hidden" name="back" value="sheet">
       <button class="btn sm ghost" {{ 'disabled' if web_status and web_status.status in ('queued', 'running') }}>{{ 'Search again' if it.searched else 'Search the web' }}</button></form>{% endif %}
     {% if idl and idl.source == 'typed' %}<form method="post" action="{{ url_for('team_sheet_ideal', tid=t.id) }}"><input type="hidden" name="map" value="{{ it.map }}"><input type="hidden" name="reset" value="1"><button class="btn sm ghost">Use the web comp</button></form>{% endif %}
-    <details><summary class="btn sm ghost" style="list-style:none">Set by hand</summary>
-      <form method="post" action="{{ url_for('team_sheet_ideal', tid=t.id) }}" style="margin-top:8px">
-        <input type="hidden" name="map" value="{{ it.map }}">
-        <div class="iedit">{% for i in range(5) %}{% set cur = it.agents[i].agent if it.agents|length > i else '' %}
-          <select name="agent" aria-label="Agent {{ i + 1 }}"><option value="">–</option>{% for a in all_agents %}<option value="{{ a }}" {{ 'selected' if a == cur }}>{{ a }}</option>{% endfor %}</select>{% endfor %}</div>
-        <button class="btn sm primary" style="margin-top:8px">Save</button>
-      </form></details>
+    <button type="button" class="btn sm ghost" data-ie="{{ it.map }}" data-agents="{{ it.agents|map(attribute='agent')|join(',') }}">{{ 'Edit' if idl else 'Set by hand' }}</button>
   </div>
   {% endif %}
 {% endmacro %}
@@ -207,6 +217,20 @@
     {% endfor %}
   </div>
   {% endif %}
+  {% if is_owner %}
+  {# 4.63: one drag & drop editor, opened under the map you edit: 5 slots, every agent below #}
+  <div id="ie" class="ie" hidden data-url="{{ url_for('team_sheet_ideal', tid=t.id) }}">
+    <div class="ie-h"><b>Ideal composition for <span class="ie-map" translate="no"></span></b><span class="ie-roles muted small"></span>
+      <span class="ie-st muted small" aria-live="polite"></span><button type="button" class="btn sm primary ie-done">Done</button></div>
+    <ol class="ie-slots">{% for i in range(5) %}<li class="ie-slot" tabindex="0" data-i="{{ i }}"></li>{% endfor %}</ol>
+    <div class="ie-bar"><div class="subtabs ie-filter" role="group" aria-label="Role" style="margin:0">
+      <a href="#" class="on" data-role="">All</a>{% for r in ['Duelist', 'Initiator', 'Controller', 'Sentinel'] %}<a href="#" data-role="{{ r }}">{{ r }}</a>{% endfor %}</div>
+      <span class="muted small">Drag an agent into a slot, or click it to fill the selected one. Drag slots to swap them, out of the row to clear.</span></div>
+    <ul class="ie-pal">{% for a in all_agents %}{% set w = ideal_who[a] %}
+      <li class="ie-t" tabindex="0" data-agent="{{ a }}" data-role="{{ agent_roles[a] }}"{% if w %} data-tip="{{ w|map(attribute='label')|join(', ') }}"{% endif %}>{{ ai(a, 36) }}<span class="nm rc-{{ agent_roles[a] }}" translate="no">{{ a }}</span>
+        <small class="{{ 'none' if not w }}">{% if w %}{{ w|length }} {{ 'player' if w|length == 1 else 'players' }}{% else %}nobody{% endif %}</small></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
 </section>
 
 {% if advice and (advice.missing or advice.thin) %}
@@ -227,6 +251,120 @@
 {% endif %}
 {% endif %}
 <script>
+  // 4.63: the ideal composition editor: drag agents into 5 slots (mouse, touch or keyboard); saves once all 5 are set
+  const ie = document.getElementById('ie');
+  if (ie) {
+    const slots = [...ie.querySelectorAll('.ie-slot')], tiles = [...ie.querySelectorAll('.ie-t')];
+    const tileOf = a => tiles.find(t => t.dataset.agent === a), st = ie.querySelector('.ie-st');
+    let map = '', cur = [], saved = '', sel = 0, timer = 0, changed = false;
+    const abbr = {Duelist: 'D', Initiator: 'I', Controller: 'C', Sentinel: 'S'};
+    const render = () => {
+      slots.forEach((s, i) => {
+        const a = cur[i], t = a && tileOf(a);
+        s.classList.toggle('full', !!t); s.classList.toggle('sel', i === sel); s.textContent = '';
+        if (t) {
+          s.dataset.agent = a;
+          s.append(t.querySelector('img') ? t.querySelector('img').cloneNode() : document.createTextNode(''));
+          const nm = t.querySelector('.nm').cloneNode(true); s.append(nm);
+          const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '✕';
+          x.setAttribute('aria-label', 'Clear'); x.addEventListener('click', e => { e.stopPropagation(); set(i, ''); }); s.append(x);
+        } else {
+          delete s.dataset.agent;
+          const e = document.createElement('span'); e.className = 'empty'; e.textContent = 'Agent ' + (i + 1); s.append(e);
+        }
+      });
+      tiles.forEach(t => t.classList.toggle('used', cur.includes(t.dataset.agent)));
+      const n = {}; cur.filter(Boolean).forEach(a => { const r = tileOf(a).dataset.role; n[r] = (n[r] || 0) + 1; });
+      ie.querySelector('.ie-roles').textContent = Object.keys(abbr).filter(r => n[r]).map(r => n[r] + abbr[r]).join(' ');
+    };
+    const save = () => {
+      clearTimeout(timer);
+      const full = cur.filter(Boolean);
+      if (full.length < 5) { st.textContent = full.length + ' / 5: saves once all 5 are set'; return; }
+      if (cur.join(',') === saved) { st.textContent = ''; return; }
+      st.textContent = '…';
+      timer = setTimeout(async () => {
+        const fd = new FormData(); fd.set('map', map); cur.forEach(a => fd.append('agent', a));
+        try {
+          const r = await fetch(ie.dataset.url, {method: 'POST', body: fd, credentials: 'same-origin', headers: {'X-Nexus-Save': '1'}});
+          if (r.ok) { saved = cur.join(','); changed = true; st.textContent = 'saved'; } else st.textContent = 'not saved (' + r.status + ')';
+        } catch (e) { st.textContent = 'not saved: ' + e.message; }
+      }, 400);
+    };
+    function set(i, a) {                          // put agent a into slot i (from another slot: the two swap)
+      const j = a ? cur.indexOf(a) : -1;
+      if (j >= 0 && j !== i) cur[j] = cur[i] || '';
+      cur[i] = a;
+      if (a) { const nx = cur.findIndex((x, k) => !x && k !== i); sel = nx >= 0 ? nx : i; } else sel = i;
+      render(); save();
+    }
+    const open = (btn) => {
+      map = btn.dataset.ie; cur = (btn.dataset.agents || '').split(',').filter(a => tileOf(a)).slice(0, 5);
+      while (cur.length < 5) cur.push('');
+      saved = cur.join(','); sel = Math.max(0, cur.indexOf('')); st.textContent = '';
+      ie.querySelector('.ie-map').textContent = map;
+      const row = btn.closest('.irow') || btn.closest('.icards');
+      row.after(ie); ie.hidden = false; render();
+      ie.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+    };
+    document.querySelectorAll('[data-ie]').forEach(b => b.addEventListener('click', () => open(b)));
+    ie.querySelector('.ie-done').addEventListener('click', () => { if (changed) location.reload(); else ie.hidden = true; });
+    ie.querySelectorAll('.ie-filter a').forEach(f => f.addEventListener('click', e => {
+      e.preventDefault();
+      ie.querySelectorAll('.ie-filter a').forEach(x => x.classList.toggle('on', x === f));
+      tiles.forEach(t => { t.hidden = !!f.dataset.role && t.dataset.role !== f.dataset.role; });
+    }));
+    // clicks and keys
+    tiles.forEach(t => t.addEventListener('click', () => { if (!drag || !drag.moved) set(sel, t.dataset.agent); }));
+    slots.forEach((s, i) => s.addEventListener('click', () => { sel = i; render(); }));
+    ie.addEventListener('keydown', e => {
+      const t = e.target.closest('.ie-t'), s = e.target.closest('.ie-slot');
+      if (t && (e.key === 'Enter' || e.key === ' ')) set(sel, t.dataset.agent);
+      else if (s && (e.key === 'Delete' || e.key === 'Backspace')) set(+s.dataset.i, '');
+      else if (s && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        const i = +s.dataset.i, j = i + (e.key === 'ArrowLeft' ? -1 : 1);
+        if (j < 0 || j > 4) return;
+        [cur[i], cur[j]] = [cur[j], cur[i]]; sel = j; render(); save(); slots[j].focus();
+      } else return;
+      e.preventDefault();
+    });
+    // pointer dragging: from the agents into a slot, between slots (swap), out of the slots (clear)
+    let drag = null;
+    const slotAt = (x, y) => slots.find(s => { const r = s.getBoundingClientRect(); return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom; });
+    ie.addEventListener('dragstart', e => e.preventDefault());
+    ie.addEventListener('pointerdown', e => {
+      if (e.button > 0 || e.target.closest('.x')) return;
+      const t = e.target.closest('.ie-t'), s = e.target.closest('.ie-slot.full');
+      if (!t && !s) return;
+      drag = {agent: t ? t.dataset.agent : s.dataset.agent, from: s ? +s.dataset.i : -1, src: t || s, x0: e.clientX, y0: e.clientY, id: e.pointerId, moved: false, ghost: null};
+    });
+    window.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+        drag.moved = true;
+        drag.ghost = (drag.from >= 0 ? tileOf(drag.agent) : drag.src).cloneNode(true);
+        drag.ghost.className = 'ie-t ie-ghost'; drag.ghost.removeAttribute('tabindex'); ie.append(drag.ghost);
+      }
+      e.preventDefault();
+      drag.ghost.style.left = (e.clientX - 48) + 'px'; drag.ghost.style.top = (e.clientY - 34) + 'px';
+      const s = slotAt(e.clientX, e.clientY);
+      slots.forEach(x => x.classList.toggle('over', x === s));
+    });
+    const drop = e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      const d = drag;
+      if (d.ghost) d.ghost.remove();
+      slots.forEach(x => x.classList.remove('over'));
+      if (d.moved) {
+        const s = slotAt(e.clientX, e.clientY);
+        if (s) set(+s.dataset.i, d.agent);
+        else if (d.from >= 0) set(d.from, '');                      // dragged out of the slots: cleared
+        setTimeout(() => { drag = null; }, 0);                       // the click that follows isn't a pick
+      } else drag = null;
+    };
+    window.addEventListener('pointerup', drop); window.addEventListener('pointercancel', drop);
+  }
 (function () {
   // 4.60: the pool editor: drag agents (mouse, touch or the keyboard) between the pool, can play and won't play;
   // it saves as you go (the pool's order and the won't-play list)

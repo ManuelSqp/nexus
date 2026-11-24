@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.62.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.63.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -409,7 +409,9 @@ pool (or use the keyboard: ← →, Enter, Delete); it saves as you go (4.60). E
 (linked by the in-game name); the team owner keeps the pools of players nobody is linked to (*Edit for them*). The
 switch *The team's pools* shows everyone else's, read-only, as a column each. Agents played later are added at the
 end; *Back to the stats* drops the changes. **Ideal composition:** per map the comp the web sources name most (the team
-owner clicks *Search the web*, needs web search under *Settings*), or 5 agents set by hand. Under every agent: who on
+owner clicks *Search the web*, needs web search under *Settings*), or 5 agents set by hand: *Edit* opens a drag & drop
+editor under the map (5 slots, every agent below with how many players have it in their pool, a role filter; drag or
+click agents in, drag slots to swap or out to clear; it saves once all 5 are set, 4.63). Under every agent: who on
 the team has it in his pool and how high (`stats/compsheet.py`). **Who should learn what** (4.22): the agents your
 maps need (in a map's ideal comp, or picked by a third of the teams in your lobbies there) that nobody has in their
 pool, and per player the one or two of them that fit best: how much he plays that role and how his ACS on it
