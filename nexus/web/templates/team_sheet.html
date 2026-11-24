@@ -57,6 +57,14 @@
 .plist .mo{font-size:10px;color:var(--accent);margin-left:4px;white-space:nowrap}
 .pe-t.drag{opacity:.35}.pe-t.ghost{position:fixed;z-index:50;pointer-events:none;width:112px;opacity:.95;box-shadow:0 8px 24px rgba(0,0,0,.45);cursor:grabbing}
 .pe-zone[data-zone="can"] .pe-t,.pe-no .pe-t{opacity:.8}.pe-no .pe-t .nm{text-decoration:line-through;text-decoration-color:rgba(255,70,85,.7)}
+@media(max-width:600px){                 /* 4.67.1: phones: 4 tiles a row, not 2 */
+  .pe-tiles{grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:6px}
+  .pe-t{padding:6px 2px 5px}.pe-t img{width:30px;height:30px}.pe-t .nm{font-size:11px}
+  .pe-t.ghost{width:76px}.pe-zone{padding:8px}
+  .ie-pal{grid-template-columns:repeat(auto-fill,minmax(70px,1fr))}.ie-t img{width:28px;height:28px}.ie-t .nm{font-size:11px}
+  .ie-slot{min-height:76px}
+}
+#ie{scroll-margin-top:80px}
 .switch{display:inline-flex;gap:8px;align-items:center;cursor:pointer;font-weight:600}
 /* ideal composition: a full-width row per map with a comp, small cards for the rest (4.14.1) */
 .irows{display:flex;flex-direction:column;gap:10px}
@@ -138,7 +146,7 @@
       <ul class="pe-tiles">{% for a in all_agents if a not in inpool and a not in ed.no %}<li class="pe-t" tabindex="0" data-agent="{{ a }}" data-role="{{ agent_roles[a] }}"><i class="rk"></i>{{ ai(a, 40) }}<span class="nm" translate="no">{{ a }}</span><small></small><button type="button" class="pe-mp" data-maps="{{ (none or [])|join(",") }}" aria-label="Maps">{{ (none)|join(", ") if none else "All maps" }}</button></li>{% endfor %}</ul></div>
     <div class="pe-zone pe-no" data-zone="no"><div class="pe-h"><b>Won't play</b> <span class="muted small">drag here</span></div>
       <ul class="pe-tiles">{% for a in ed.no %}<li class="pe-t" tabindex="0" data-agent="{{ a }}" data-role="{{ agent_roles[a] }}"><i class="rk"></i>{{ ai(a, 40) }}<span class="nm" translate="no">{{ a }}</span><small></small><button type="button" class="pe-mp" data-maps="{{ (none or [])|join(",") }}" aria-label="Maps">{{ (none)|join(", ") if none else "All maps" }}</button></li>{% endfor %}</ul></div>
-    <p class="muted small pe-help">Keyboard: ← → move an agent in the pool, Enter puts it into the pool or takes it out, Delete marks it won't play. "All maps" under an agent in the pool: pick the maps you play it on.</p>
+    <p class="muted small pe-help">Tap an agent in Can play or Won't play to put it at the end of your pool; on a phone, hold an agent a moment to drag it. Keyboard: ← → move an agent in the pool, Enter puts it into the pool or takes it out, Delete marks it won't play. "All maps" under an agent in the pool: pick the maps you play it on.</p>
     <div class="pe-pop" hidden role="dialog" aria-label="Maps for this agent"><b class="pe-pop-a" translate="no"></b> <span class="muted small">only on these maps:</span>
       <div class="pe-pop-maps">{% for m in sheet_maps %}<label><input type="checkbox" value="{{ m }}"> <span translate="no">{{ m }}</span></label>{% endfor %}</div>
       <div class="row" style="gap:6px;margin-top:8px"><button type="button" class="btn sm ghost pe-pop-all">Every map</button><button type="button" class="btn sm primary pe-pop-ok">Done</button></div></div>
@@ -265,6 +273,20 @@
 {% endif %}
 {% endif %}
 <script>
+  // 4.67.1: dragging near the top or bottom of the screen scrolls the page (phones can't scroll while you drag)
+  let edgeY = null, edgeRun = false;
+  function edgeScroll(y) {
+    edgeY = y;
+    if (y === null || edgeRun) return;
+    edgeRun = true;
+    const step = () => {
+      if (edgeY === null) { edgeRun = false; return; }
+      const m = 70, v = edgeY < m ? -(m - edgeY) / 4 : edgeY > innerHeight - m ? (edgeY - innerHeight + m) / 4 : 0;
+      if (v) window.scrollBy(0, v);
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
   // 4.63: the ideal composition editor: drag agents into 5 slots (mouse, touch or keyboard); saves once all 5 are set
   const ie = document.getElementById('ie');
   if (ie) {
@@ -350,12 +372,16 @@
       if (e.button > 0 || e.target.closest('.x')) return;
       const t = e.target.closest('.ie-t'), s = e.target.closest('.ie-slot.full');
       if (!t && !s) return;
-      drag = {agent: t ? t.dataset.agent : s.dataset.agent, from: s ? +s.dataset.i : -1, src: t || s, x0: e.clientX, y0: e.clientY, id: e.pointerId, moved: false, ghost: null};
+      drag = {agent: t ? t.dataset.agent : s.dataset.agent, from: s ? +s.dataset.i : -1, src: t || s, x0: e.clientX, y0: e.clientY, id: e.pointerId, moved: false, ghost: null,
+              touch: e.pointerType === 'touch', t0: performance.now(), pan: false, ly: e.clientY};
     });
     window.addEventListener('pointermove', e => {
       if (!drag || e.pointerId !== drag.id) return;
+      if (drag.pan) { window.scrollBy(0, drag.ly - e.clientY); drag.ly = e.clientY; return; }   // a swipe: scroll
+      if (drag.moved) edgeScroll(e.clientY);
       if (!drag.moved) {
         if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+        if (drag.touch && performance.now() - drag.t0 < 300) { drag.pan = true; drag.moved = true; return; }   // touch: hold to drag
         drag.moved = true;
         drag.ghost = (drag.from >= 0 ? tileOf(drag.agent) : drag.src).cloneNode(true);
         drag.ghost.className = 'ie-t ie-ghost'; drag.ghost.removeAttribute('tabindex'); ie.append(drag.ghost);
@@ -367,6 +393,8 @@
     });
     const drop = e => {
       if (!drag || e.pointerId !== drag.id) return;
+      edgeScroll(null);
+      if (drag.pan) { setTimeout(() => { drag = null; }, 0); return; }      // the click that follows isn't a pick
       const d = drag;
       if (d.ghost) d.ghost.remove();
       slots.forEach(x => x.classList.remove('over'));
@@ -426,12 +454,16 @@
       if (e.target.closest('.pe-mp, .pe-pop')) return;
       const t = e.target.closest('.pe-t');
       if (!t || e.button > 0) return;
-      drag = {el: t, x0: e.clientX, y0: e.clientY, ghost: null, id: e.pointerId};
+      drag = {el: t, x0: e.clientX, y0: e.clientY, ghost: null, id: e.pointerId,
+              touch: e.pointerType === 'touch', t0: performance.now(), pan: false, ly: e.clientY};
     });
     window.addEventListener('pointermove', e => {
       if (!drag || e.pointerId !== drag.id) return;
+      if (drag.pan) { window.scrollBy(0, drag.ly - e.clientY); drag.ly = e.clientY; return; }   // a swipe: scroll
+      if (drag.ghost) edgeScroll(e.clientY);
       if (!drag.ghost) {
         if (Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) < 6) return;
+        if (drag.touch && performance.now() - drag.t0 < 300) { drag.pan = true; return; }   // touch: hold to drag
         drag.ghost = drag.el.cloneNode(true); drag.ghost.classList.add('ghost'); drag.ghost.removeAttribute('tabindex');
         document.body.appendChild(drag.ghost); drag.el.classList.add('drag');
       }
@@ -449,7 +481,12 @@
     });
     const drop = e => {
       if (!drag || (e && e.pointerId !== drag.id)) return;
+      edgeScroll(null);
+      if (drag.pan) { drag = null; return; }
       const moved = !!drag.ghost;
+      if (!moved && drag.el.closest('.pe-zone').dataset.zone !== 'pool') {   // 4.67.1: a tap: into the pool
+        list(zoneOf('pool')).appendChild(drag.el); drag = null; changed(); return;
+      }
       if (drag.ghost) drag.ghost.remove();
       drag.el.classList.remove('drag'); zones.forEach(x => x.classList.remove('over'));
       drag = null;
