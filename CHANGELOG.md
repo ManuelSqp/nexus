@@ -4,6 +4,16 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.67.1
+- **The drag & drop editors on a phone** (agent pool, ideal compositions). Checked at phone size with touch:
+  - 4 agent tiles a row instead of 2, so you don't scroll through a long list.
+  - A swipe over the tiles scrolls the page again; hold an agent a moment (0.3 s) to drag it. With a mouse it's
+    as before.
+  - Dragging near the top or bottom of the screen scrolls the page, so you can drag an agent from the end of the
+    list up into your pool.
+  - Tap an agent in *Can play* or *Won't play* to put it at the end of your pool.
+  - Opening the ideal composition editor no longer hides its first line under the top bar.
+
 ## 4.67.0
 - **Daily warm-up.** *Start the warm-up* on Practice › Aim on maps plays up to 6 drills in a row, about 10
   minutes: the drills that slipped this week, the ones your newest match points to ("practice what cost you
