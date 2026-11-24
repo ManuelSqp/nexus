@@ -57,7 +57,7 @@ def plan(method: str, starters, subs, maps, local, meta, rules_text: str = "", w
 
 def top(method: str, players, map_name: str, local=None, meta=None, rules_text: str = "", web: dict | None = None,
         n: int = 3) -> list[dict]:
-    """The n best comps for these players on this map (comp.top_comps)."""
+    """The n best comps for these players on this map (comp.top_comps). The comps page and drafts ask for 4 (4.61)."""
     if method == "comfort":
         return top_comps(players, map_name, local, meta, n=n, comfort_only=True)
     if method == "web":

@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.61.0
+- **Comps: the other options as cards, with the why.** Under the best comp of a map, 3 other options (was 2), each
+  as five small cards like the big ones: the agents that change from the best comp stand out ("was Omen"), the
+  same ones step back. Under them, why each swap could make sense (the player's games and win rate on it on the map
+  and overall, his agent pool rank, the map rules), how far the option is behind the best (*close to the best*,
+  *a bit weaker*, *a fallback*) and when you'd pick it: an agent of the best comp doesn't work out, you want more
+  smokes / more entry power, who needs practice first, the web source's note.
+- **Use this comp**: saves the option as a draft marked *our comp* for the map (an older *our comp* goes back to
+  *trying*), so the Discord prep and the match-day availability use it. The comps page shows which comp is yours.
+- Drafts: *Start from a suggested comp* lists the same 4 comps as the comps page.
+
 ## 4.60.0
 - **Comp sheet: a new agent pool editor.** You see your own pool first, big: every agent is a tile (icon, name,
   games), your pool in order (best first, green to red), then *Can play* with every other agent (no more adding them
