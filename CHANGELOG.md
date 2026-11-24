@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.65.0
+- **Drills: your week.** At the top of Practice › Aim on maps: how many drill sessions you played each of the last
+  8 weeks (Monday to Sunday), this week's sessions, reps and days, and per kind of drill (hold, retake, tracking, …)
+  this week against last week: the median of your reps, "0.06 s faster" or "+5 points". Under it the drills that
+  got better and the ones that slipped this week against the weeks before, each a link to play it again. Runs now
+  keep the map and the spot's name so the list can say "Retake · Ascent · Retake B" (older runs show the kind).
+- **Drills: your team's utility.** In the general drills with utility on (hold, attack, entry, retake, post-plant)
+  your own team's utility from the same round of your replays plays too, not only the enemies': their flashes and
+  stuns hit the enemies, their recon shows them, their smokes and walls block both sides, their mollies burn the
+  enemies (and you, if you stand in them). The start screen says how many rounds bring your team's utility.
+
 ## 4.64.0
 - **Agent pool: a role filter.** *All / Duelist / Initiator / Controller / Sentinel* above *Can play* and *Won't
   play*, so you find the agent you want to drag without scrolling through all of them.

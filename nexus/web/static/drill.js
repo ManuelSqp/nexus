@@ -78,7 +78,7 @@
              flash: 0, until: 0, msg: '', lastT: 0, paused: false, saved: false, held: new Set(), dead: false,
              me: {x: 0, y: 0, z: 0, vx: 0, vz: 0, crouch: false, still: 0}, styles: {}, shots: [], track: null,
              hides: [], deaths: 0, kills: 0, spike: null, defusing: false, lefts: [],
-             U: [], hp: HP_ME, revealed: 0, slowed: false, burnt: 0, utilReps: 0,
+             U: [], hp: HP_ME, revealed: 0, slowed: false, burnt: 0, utilReps: 0, teamUtil: 0,
              kit: {}, anchor: {}, tp: null, fast: 0, fastMult: 1, casts: 0, toast: '', toastT: 0};
 
   // ------------------------------------------------------------------------------------------ where you stand
@@ -529,11 +529,13 @@
     panel();
   }
   // ------------------------------------------------------------------------------------------ their utility (4.56)
-  // One round's worth of what the enemy side threw around these fights (spot.util: [[type, agent, side, seconds from
+  // One round's worth of what both sides threw around these fights (spot.util: [[type, agent, side, seconds from
   // the fight (after a plant: from the plant), how long, x, y, z], …] a set); now and then a round without.
+  // 4.65: your team's utility from the same round too: their flashes and stuns hit the enemies, their smokes block
+  // sight both ways, their recon reveals the enemies, their mollies burn the enemies (and you, if you stand in them).
   function chooseUtil() {
     if (!UTIL || !SP) return null;
-    const sets = (SP.util || []).map(s => s.filter(u => u[2] === ENEMY_SIDE)).filter(s => s.length);
+    const sets = (SP.util || []).filter(s => s.length);
     if (!sets.length || Math.random() < 0.15) return null;
     S.utilReps++;
     return pick(sets);
@@ -549,6 +551,10 @@
     for (const u of set) {
       const y = u[6] !== null ? (floor(u[5], u[7], u[6]) ?? u[6]) : (floor(u[5], u[7], ref[1]) ?? ref[1]);
       const it = {type: u[0], agent: u[1], rel: u[3], dur: u[4], x: u[5], y, z: u[7], t0: Infinity, t1: null, arm: false};
+      if (u[2] !== ENEMY_SIDE) {            // 4.65: a teammate's: works on them like yours (TEAM_UTIL: blind, daze)
+        Object.assign(it, {mine: true, team: true}, TEAM_UTIL[u[0]] || {});
+        S.teamUtil++;
+      }
       if (SPIKE || MODE === 'hold') {       // at its real time: from the plant (the spike's time), or from the peek
         it.t0 = SPIKE ? u[3] - (SPIKE_S - SP.left) : (S.foes.length ? S.foes[0].appear : 1) + 0.35 + u[3];
         it.t1 = u[4] === null ? null : it.t0 + u[4];
@@ -558,6 +564,7 @@
     }
   }
   const SPIKE_S = O.spike || 45;
+  const TEAM_UTIL = {flash: {blind: 1.6}, stun: {r: 4.5, daze: 2.5}, trap: {daze: 2.5, used: false}, damage: {dps: 40}};
   function utilTarget() { return MODE === 'attack' ? SP.defs[0] : MODE === 'entry' ? SP.route[SP.route.length - 1] : null; }
   function utilTick(dt) {
     if (!S.U.length) return;
@@ -600,7 +607,9 @@
   function theirs() {
     if (!UTIL || !SP) return '';
     const n = (SP.util || []).filter(s => s.some(u => u[2] === ENEMY_SIDE)).length;
-    return n ? `<p class="muted small">${esc(T('They use their utility, as in'))} ${n} ${esc(T(n === 1 ? 'round of your replays' : 'rounds of your replays'))}: ${esc(T('smokes and walls block sight, look away from flashes, mollies burn (you have 150), recon and traps reveal you.'))}</p>` : '';
+    const own = (SP.util || []).filter(s => s.some(u => u[2] !== ENEMY_SIDE)).length;   // 4.65: your team's
+    return (n ? `<p class="muted small">${esc(T('They use their utility, as in'))} ${n} ${esc(T(n === 1 ? 'round of your replays' : 'rounds of your replays'))}: ${esc(T('smokes and walls block sight, look away from flashes, mollies burn (you have 150), recon and traps reveal you.'))}</p>` : '')
+      + (own ? `<p class="muted small">${esc(T('Your team uses theirs too, from the same rounds'))} (${own}): ${esc(T('their flashes and stuns hit the enemies, their recon shows them, their smokes block both sides.'))}</p>` : '');
   }
   const wallAt = (x, z) => S.U.some(u => u.type === 'wall' && NM.live(u, S.t) && Math.hypot(u.x - x, u.z - z) < 1.0);
 
@@ -1138,7 +1147,9 @@
     try {
       const r = await fetch(C.runs_api, {method: 'POST', credentials: 'same-origin', headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({kind: MODE, reps: S.reps, his: MODE === 'death' ? D.his ?? null : MODE === 'hold' || MODE === 'postplant' ? react : null,
-                              first: S.firsts, off: avg(S.offs), detail: details()})});
+                              first: S.firsts, off: avg(S.offs), detail: details(),
+                              // 4.65: what the weekly view calls it
+                              map: C.map || D.map || '', where: MODE === 'death' ? [D.where, D.killer_agent].filter(Boolean).join(' vs ') : (C.title || '')})});
       const d = await r.json();
       if (r.ok && d.history) C.history = d.history;
       const el = $('dr-saved'); if (el) el.textContent = r.ok ? T('Saved.') : (d.error || '');
@@ -1260,14 +1271,14 @@
   V().setOpt('labels', false); V().setOpt('radar', true);    // like the game: the minimap in the corner (not saved)
   panel();
   load();
-  window.nexusDrill = {state: () => ({phase: S.phase, t: S.t, reps: S.reps.slice(), seen: S.foes.length ? S.foes[0].seen : null,
+  window.nexusDrill = {state: () => ({phase: S.phase, t: S.t, teamUtil: S.teamUtil, reps: S.reps.slice(), seen: S.foes.length ? S.foes[0].seen : null,
                                       kill: S.foes.some(f => f.dead), ammo: S.ammo, yaw: S.yaw, pitch: S.pitch,
                                       hp: S.foes.length ? S.foes[0].hp : null, firsts: {...S.firsts}, paused: S.paused,
                                       foes: S.foes.length, me: {...S.me}, speed: speed(), mode: MODE, dead: S.dead,
                                       hides: S.hides.map(h => ({open: h.open, off: h.off})),
                                       spike: S.spike ? {...S.spike} : null, defusing: S.defusing,
                                       myhp: S.hp, revealed: S.t < S.revealed, slowed: S.slowed, util: S.U.length}),
-                       utilNow: () => S.U.map(u => ({type: u.type, agent: u.agent, t0: u.t0, t1: u.t1, x: u.x, z: u.z, arm: u.arm, live: NM.live(u, S.t)})),
+                       utilNow: () => S.U.map(u => ({type: u.type, agent: u.agent, t0: u.t0, t1: u.t1, x: u.x, z: u.z, arm: u.arm, live: NM.live(u, S.t), team: !!u.team})),
                        hitboxes: (i = 0) => (S.foes[i] ? hitboxes(S.foes[i]) : []),
                        aimAt: p => { const v = sub(p, eye()), L = Math.hypot(...v); S.yaw = Math.atan2(v[0], -v[2]); S.pitch = Math.asin(v[1] / L); },
                        shoot: () => { shoot(); }, start: () => { restart(); }, eye, keys: () => keys, act, models,

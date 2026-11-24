@@ -164,7 +164,14 @@ def register(app, store, sr, view_profile) -> None:
                 "foes": list(FOES), "util_modes": list(UTIL_MODES),
                 "suggest_api": url_for("aim_suggest_api", pid=pid), "match": request.args.get("match", "")[:80],
                 "agents": {k: {s: v["name"] for s, v in kits.kit(k).items()} for k in sorted(kits.KITS)}}
-        return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot)
+        week = dr.weekly(dr.read_runs(stats_dir(pid)))          # 4.65: your week
+        for d in week["better"] + week["worse"]:
+            gm = GENERAL_ID.match(d["id"])
+            if gm and d["map"]:
+                d["url"] = url_for("aim_play", pid=pid, mode=gm.group(1), map_name=d["map"], sid=d["id"].rsplit("-", 1)[1])
+            elif not gm:
+                d["url"] = url_for("aim_drill", pid=pid, drill_id=d["id"])
+        return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot, week=week)
 
     @app.get("/api/profiles/<int:pid>/aim/drills")
     def aim_drills_api(pid: int):

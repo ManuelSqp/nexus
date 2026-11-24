@@ -8,6 +8,38 @@
 
 <section class="card am-suggest" id="am-suggest" hidden></section>
 
+{% macro val(x, unit) %}{% if x is none %}–{% elif unit == '%' %}{{ x|round|int }} %{% else %}{{ '%.2f'|format(x) }} s{% endif %}{% endmacro %}
+{% macro diff(b, unit) %}{% if b is none %}<span class="muted">–</span>{% elif (unit == '%' and b|abs < 0.5) or (unit != '%' and b|abs < 0.005) %}<span class="muted">same</span>{% elif unit == '%' %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '+' if b > 0 }}{{ b|round|int }} points</span>{% else %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '%.2f'|format(b|abs) }} s {{ 'faster' if b > 0 else 'slower' }}</span>{% endif %}{% endmacro %}
+{% if week and week.total %}
+{# 4.65: your week: the drills you played, week by week, and what got better #}
+<section class="card am-week" id="am-week">
+  <div class="aw-head"><h2 style="margin:0">Your week</h2>
+    <span class="muted small">{{ week.this.sessions }} {{ 'session' if week.this.sessions == 1 else 'sessions' }} · {{ week.this.reps }} reps · {{ week.days }} {{ 'day' if week.days == 1 else 'days' }}
+      {% if week.last %}<span>(last week: {{ week.last.sessions }} {{ 'session' if week.last.sessions == 1 else 'sessions' }})</span>{% endif %}</span></div>
+  {% set top = week.weeks|map(attribute='sessions')|max %}
+  <div class="aw-grid">
+    <div class="aw-bars" role="img" aria-label="Sessions per week, the last {{ week.weeks|length }} weeks">
+      {% for w in week.weeks %}<div class="aw-bar {{ 'now' if loop.last }}" data-tip="Week of {{ w.start[8:10] }}.{{ w.start[5:7] }}.: {{ w.sessions }} sessions, {{ w.reps }} reps">
+        <i style="height:{{ (4 + 56 * w.sessions / top)|round|int if top else 4 }}px"></i><small>{{ 'this' if loop.last else w.start[8:10] ~ '.' ~ w.start[5:7] ~ '.' }}</small></div>{% endfor %}
+    </div>
+    <div class="aw-kinds">
+      {% if week.kinds %}<table class="aw-t"><thead><tr><th>This week</th><th>sessions</th><th>median</th><th>vs last week</th></tr></thead><tbody>
+      {% for k in week.kinds %}<tr><td>{{ k.name }}</td><td>{{ k.sessions }}</td><td>{{ val(k.now, k.unit) }}</td><td>{{ diff(k.better, k.unit) }}</td></tr>{% endfor %}
+      </tbody></table>{% else %}<p class="muted small">No drills yet this week{% if week.last and week.last.sessions %}; last week you played {{ week.last.sessions }}{% endif %}.</p>{% endif %}
+    </div>
+  </div>
+  {% if week.better or week.worse %}
+  <div class="aw-lists">
+    {% for title, items in (('Got better', week.better), ('Slipped', week.worse)) if items %}
+    <div><b>{{ title }}</b> <span class="muted small">this week against before</span>
+      <ul>{% for d in items %}<li>{% if d.url %}<a href="{{ d.url }}">{% endif %}<span>{{ d.name }}</span>{% if d.map %} · <span translate="no">{{ d.map }}</span>{% endif %}{% if d.where %} · <span>{{ d.where }}</span>{% endif %}{% if d.url %}</a>{% endif %}
+        <span class="muted small">{{ val(d.before, d.unit) }} → {{ val(d.now, d.unit) }}</span> {{ diff(d.better, d.unit) }}</li>{% endfor %}</ul></div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
 <div class="am-tabs" role="tablist" aria-label="Kind of drill">
   <button type="button" role="tab" aria-selected="true" class="on" data-tab="deaths">Your deaths <span id="am-n"></span></button>
   <button type="button" role="tab" aria-selected="false" data-tab="hold">Hold an angle</button>
