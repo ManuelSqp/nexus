@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 import time
 
-from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from ..stats import roles
 from ..stats.aggregate import filter_rows, local_meta
@@ -88,7 +88,12 @@ def register(app, store, get_team, helpers: dict, known_maps: list[str]) -> None
             out[str(p["pid"])] = per
         return out
 
-    def suggestions(t, players: list[dict], rows_by: dict, map_name: str, local, meta) -> list[dict]:
+    def style_of(t) -> str:
+        """4.62: the comp style picked on the comps page (kept per team for this login)."""
+        from ..stats.compstyle import clean
+        return clean((session.get("compstyle") or {}).get(str(t.id)))
+
+    def suggestions(t, players: list[dict], rows_by: dict, map_name: str, local, meta, style=None) -> list[dict]:
         starters = [p for p in players if p["kind"] == "starter"]
         if len(starters) != SLOTS:
             return []
@@ -99,14 +104,14 @@ def register(app, store, get_team, helpers: dict, known_maps: list[str]) -> None
         from ..stats.compmodes import method_of, top as comp_top
         method = method_of(t)
         web = helpers["web_of"](t) if method == "web" and "web_of" in helpers else None
-        for c in comp_top(method, pools, map_name, local, meta, store.get("comp_rules_yaml"), web, n=4):   # = the comps page
+        for c in comp_top(method, pools, map_name, local, meta, store.get("comp_rules_yaml"), web, n=4, style=style):   # = the comps page
             if c.get("ok"):
                 out.append({"pattern": c.get("pattern", ""),
                             "picks": [{"pid": pid_of.get(pk["player"]), "player": pk["player"], "agent": pk["agent"]}
                                       for pk in c["picks"]]})
         return out
 
-    def context(t, map_name: str) -> dict:
+    def context(t, map_name: str, style=None) -> dict:
         players, rows_by = roster(t)
         try:
             meta = parse_meta(t.meta).get(map_name.lower())
@@ -114,7 +119,7 @@ def register(app, store, get_team, helpers: dict, known_maps: list[str]) -> None
             meta = None
         local = local_meta(filter_rows(owner_rows(t.owner_id), t.queue)).get(map_name)
         return {"players": players, "stats": player_stats(players, rows_by, map_name, local, meta),
-                "suggestions": suggestions(t, players, rows_by, map_name, local, meta)}
+                "suggestions": suggestions(t, players, rows_by, map_name, local, meta, style or style_of(t))}
 
     # ------------------------------------------------------------------ pages
     @app.route("/teams/<int:tid>/drafts", methods=["GET", "POST"])
@@ -130,7 +135,8 @@ def register(app, store, get_team, helpers: dict, known_maps: list[str]) -> None
             src = f.get("from", "")
             players, _ = roster(t)
             if src.startswith("comp:"):                       # one of the suggested comps
-                ctx = context(t, m)
+                from ..stats.compstyle import STYLES
+                ctx = context(t, m, f.get("style") if f.get("style") in STYLES else None)
                 try:
                     sug = ctx["suggestions"][int(src[5:])]
                 except (ValueError, IndexError):

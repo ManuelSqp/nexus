@@ -90,10 +90,10 @@ def _added(p: Pool, agent: str) -> bool:
 
 
 def assign(players: list[Pool], agents: list[str], map_name: str, local: dict | None = None,
-           meta: dict | None = None) -> dict:
+           meta: dict | None = None, style: str | None = None) -> dict:
     """The best way to hand these 5 agents to these 5 players. -> a comp like comp.best_comp's."""
     from .aggregate import pattern as pat_str
-    rated = [{a: rate(p, a, map_name, local, meta) for a in agents} for p in players]
+    rated = [{a: rate(p, a, map_name, local, meta, style=style) for a in agents} for p in players]
     best = None
     for perm in itertools.permutations(agents):
         total = 0.0
@@ -116,13 +116,13 @@ def assign(players: list[Pool], agents: list[str], map_name: str, local: dict | 
 
 
 def comps_for(players: list[Pool], map_name: str, data: dict | None, local: dict | None = None,
-              meta: dict | None = None) -> list[dict]:
+              meta: dict | None = None, style: str | None = None) -> list[dict]:
     """Every comp found for this map, given to these players, best fit first. [] if none were found yet."""
     if not data or not data.get("comps") or any(not p.has_data() for p in players):
         return []
     out = []
     for i, c in enumerate(data["comps"]):
-        comp = assign(players, c["agents"], map_name, local, meta)
+        comp = assign(players, c["agents"], map_name, local, meta, style)
         comp["web"] = {"note": c.get("note", ""), "sources": c.get("sources", []), "rank": i + 1,
                        "at": data.get("at"), "model": data.get("model", "")}
         comp["notes"] = [f"from the web: {c['note']}" if c.get("note") else "from the web"]
