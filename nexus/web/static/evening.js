@@ -152,7 +152,9 @@
     const st = STRATS.find(x => x.id === +pick);
     const link = $('#stratlink');
     link.hidden = !st;
-    if (st) link.href = local(B.strat_url).replace(/\/0(?=\/|$|\?)/, '/' + encodeURIComponent(st.id));
+    // the strat's page, next to this one (/teams/<tid>/strats/<id>): only a whole number goes into the link
+    const sid = st ? parseInt(String(st.id), 10) : NaN;
+    if (Number.isInteger(sid) && sid > 0) link.setAttribute('href', '../strats/' + sid); else link.hidden = true;
     const out = $('#stratu');
     if (!st) { out.innerHTML = mine.length ? '<p class="muted small" style="margin:6px 0 0">Pick the strat you ran: its utility against what was used.</p>' : `<p class="muted small" style="margin:6px 0 0">No ${esc(r.side)} strats on this map in your strat book.</p>`; return; }
     if (!st.util.length) { out.innerHTML = '<p class="muted small" style="margin:6px 0 0">This strat has no abilities drawn.</p>'; return; }

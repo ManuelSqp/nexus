@@ -234,8 +234,7 @@ def register(app, store, sr, get_team) -> None:
                                                 "replay_js": url_for("replay_js"),
                                                 "summary": url_for("team_evening_summary", tid=tid, sid=sid), "marks": ev_stats.MARKS,
                                                 "agent_icon": url_for("agent_icon", name="__A__"),
-                                                "comp": ev.get("comp"), "strat_list": strat_list(tid, ev.get("map") or ""),
-                                                "strat_url": url_for("strat_edit", tid=tid, sid=0)}).replace("</", "<\\/"),
+                                                "comp": ev.get("comp"), "strat_list": strat_list(tid, ev.get("map") or "")}).replace("</", "<\\/"),
                                discord=bool(_channel(t.discord_info, "review")))
 
     @app.get("/teams/<int:tid>/review-evening/<sid>/summary")

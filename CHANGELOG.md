@@ -4,6 +4,10 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.74.1
+- The *open it* link next to *Strat this round* (review evening) no longer takes its address from the page: it's the
+  strat's page next to the evening, with the strat's number checked (a CodeQL alert from 4.74.0).
+
 ## 4.74.0
 - **Scrim review.** The review evening (*Practice › Review evening*) now checks a match against your plan:
   - **Your comp against the plan**: the agents you played against the draft marked *our comp* for that map, with who
