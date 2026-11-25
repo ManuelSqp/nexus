@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.74.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.75.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -161,6 +161,12 @@ marked *our comp* for the map (who wasn't played, who instead), where each kill 
 callout), each player's utility in the round (C, Q, E, X, when Riot's data has the casts), and *Strat this round*:
 pick the strat you ran and see its drawn abilities against what each agent used. A scrim in *Practice › Scrims*
 whose match is in your games (same day and map) links to it: *Review it round by round*.
+
+**Strat win rates (4.75):** every round you tag with a strat in a review evening counts for it. The strat book's
+cards show how often you ran each strat, the rounds won (a bar), and whether the utility went in as drawn, with the
+rounds won both ways; each map names its best strat per side (5 rounds or more). A strat's page lists its rounds
+(won/lost, opponent, round; a click opens the evening at that round), and the evening's strat pick shows each
+strat's record.
 *Practice › Aim* keeps aim routines (Aimlabs share links, KovaaK's codes, steps for the Range), picks the ones that fit
 your matches and sets your warm-up, which shows on the match screen, in the practice plan and as a push before the match.
 KovaaK's is switched off on the web pages since 4.26 (the code and stored scores stay; `WEB = True` in

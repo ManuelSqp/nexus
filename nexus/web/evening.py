@@ -155,12 +155,16 @@ def register(app, store, sr, get_team) -> None:
     def strat_list(tid: int, map_name: str) -> list[dict]:
         """4.74: the team's strats on the map with the utility each one draws (for the round's strat pick)."""
         out = []
+        rates_of = app.extensions["nexus"].get("strat_rates")
+        rates = rates_of(tid) if rates_of else {}           # 4.75: how each one did so far
         for row in store.strats(tid):
             if row["map"] != map_name:
                 continue
             full = store.strat(row["id"]) or {}
+            r = rates.get(row["id"])
             out.append({"id": row["id"], "name": row["name"], "side": row["side"],
-                        "util": ev_stats.strat_util(full.get("data") or {})})
+                        "util": ev_stats.strat_util(full.get("data") or {}),
+                        "rate": {"ran": r["ran"], "pct": r["pct"]} if r else None})
         return out
 
     # ------------------------------------------------------------------ pages

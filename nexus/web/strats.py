@@ -149,6 +149,18 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             abort(404)
         return t, s
 
+    def team_rates(tid: int, strats: list[dict] | None = None) -> dict[int, dict]:
+        """4.75: how each strat did in the rounds tagged with it in review evenings (stats/stratrates.py)."""
+        from ..stats import evening as ev_stats
+        from ..stats import stratrates
+        evs = app.extensions["nexus"].get("evenings")
+        if evs is None:
+            return {}
+        strats = strats if strats is not None else store.strats(tid)
+        utils = {s["id"]: ev_stats.strat_util((store.strat(s["id"]) or {}).get("data") or {}) for s in strats}
+        return stratrates.rates(evs(tid), utils)
+    app.extensions["nexus"]["strat_rates"] = team_rates
+
     def maps_for(t) -> list[str]:
         return sorted(set(t.map_list) | set(known_maps))
 
@@ -194,9 +206,16 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             s["style"], s["style_set"] = stratstyle.style_of({**s, "data": data})
             by_map.setdefault(s["map"], []).append(s)
         counters = counter_box(t, strats)
+        from ..stats import stratrates
+        rates = team_rates(tid, strats)                      # 4.75
+        for s in strats:
+            r = rates.get(s["id"])
+            s["rate"], s["rate_util"] = stratrates.text(r), stratrates.util_text(r)
+            s["pct"], s["few"] = (r["pct"], r["few"]) if r else (None, True)
+        best = {m: stratrates.best(ss, rates) for m, ss in by_map.items()}
         return render_template("team_strats.html", t=t, tab="strats", by_map=by_map, maps=maps_for(t),
                                sel=request.args.get("map", ""), premier_status=sr.status(f"premier:{tid}"),
-                               styles=compstyle.STYLES, **counters)
+                               styles=compstyle.STYLES, **counters, best=best)
 
     def counter_box(t, strats: list[dict]) -> dict:
         """4.68: against the team picked on the comps page (Against): per map the counter style, the strats of
@@ -252,8 +271,11 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
                 "lineups_url": url_for("team_lineups", tid=tid, map=s["map"]),
                 "agent_icon": url_for("agent_icon", name="__A__"), "ability_icon": url_for("ability_icon", agent="__A__", slot="__S__")}
         can_delete = g.team_owner or s["author_id"] == g.user.id
+        from ..stats import stratrates
+        rate = team_rates(tid).get(sid)                      # 4.75: how it did in your reviewed rounds
         return render_template("strat_edit.html", t=t, s=s, tab="strats", can_delete=can_delete,
-                               boot=json.dumps(boot).replace("</", "<\\/"), premier_status=None)
+                               boot=json.dumps(boot).replace("</", "<\\/"), premier_status=None,
+                               rate=rate, rate_text=stratrates.text(rate), rate_util=stratrates.util_text(rate))
 
     @app.post("/api/teams/<int:tid>/strats/<int:sid>")
     def strat_save(tid: int, sid: int):
