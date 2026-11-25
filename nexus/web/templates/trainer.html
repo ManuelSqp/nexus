@@ -57,6 +57,12 @@
 .tr-setup label.tr-fs{display:flex;align-items:center;gap:8px;color:var(--text);font-size:13px;padding-bottom:9px}
 .tr-setup .tr-num{font-size:13px;color:var(--muted);padding-bottom:9px}
 .tr-setup .tr-num b{color:var(--text);font-family:var(--font-num)}
+.tr-game{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;margin:-6px 0 18px;padding:9px 14px;border:1px solid var(--line);border-radius:var(--radius);background:var(--panel);font-size:13px}
+.tr-game b{font-family:var(--font-num)}
+.tr-game .tr-gfrom{font-weight:600}
+.tr-game form{margin:0;display:inline-flex;align-items:center;gap:8px}
+.tr-game .tr-gdiff{color:var(--warn,#e0a030)}
+.tr-game .tr-gfollow{margin-left:auto}
 .tr-plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-bottom:22px}
 .tr-plan{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;display:flex;flex-direction:column;gap:8px}
 .tr-plan h2{margin:0;font-size:17px}
@@ -173,6 +179,27 @@
   <label class="tr-fs"><input type="checkbox" id="tr-fs" checked> Fullscreen while playing</label>
   <span class="tr-raw" id="tr-raw">Raw mouse input: checked when you start</span>
 </div>
+{% if game %}
+<div class="tr-game" id="tr-game">
+  <span class="tr-gfrom">From VALORANT</span>
+  {% if game.sens %}<span>Sens <b>{{ game.sens }}</b></span>{% endif %}
+  {% if game.crosshair %}<span>Crosshair <b>{{ game.crosshair_name }}</b></span>{% endif %}
+  <span>Keys <b>{{ game.custom_keys ~ ' changed' if game.custom_keys else "VALORANT's defaults" }}</b></span>
+  <span class="muted small">read {{ game.at|epoch }}{{ ' from the Riot Client' if game.source == 'client' else " from VALORANT's files" }}</span>
+  {% if game_diff and can_save %}
+  <span class="tr-gdiff">Different here: {{ game_diff|join(' · ') }}</span>
+  <form method="post" action="{{ url_for('trainer_game', pid=p.id) }}"><button class="btn sm" name="do" value="take">Use the game's</button></form>
+  {% endif %}
+  {% if can_save %}
+  <form method="post" action="{{ url_for('trainer_game', pid=p.id) }}" class="tr-gfollow">
+    <label class="switch"><input type="checkbox" name="on" value="1" {{ 'checked' if follow_game }} onchange="this.form.submit()"><span class="tr" aria-hidden="true"></span><span>Keep in step with the game</span></label>
+  </form>
+  {% endif %}
+  {% if game.skipped %}<span class="muted small" style="flex-basis:100%">Not taken over: {{ game.skipped|join(', ') }}</span>{% endif %}
+</div>
+{% elif can_save %}
+<p class="small muted" style="margin:-8px 0 16px">Your sens, crosshair and keys can come straight from VALORANT: the <a href="{{ url_for('this_pc') }}">Nexus app</a> reads them on your PC.</p>
+{% endif %}
 
 <div class="tr-plans">
   {% for k, pl in plans.items() %}

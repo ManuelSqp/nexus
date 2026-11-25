@@ -4,6 +4,19 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.71.0
+- **Trainer settings from the game.** The Nexus app now reads your VALORANT settings on your PC and sends the ones
+  the trainer uses: your sensitivity, your crosshair (the profile you use, colour, outlines, dot, inner and outer
+  lines) and your keys (shoot, aim, reload, moving, walk, crouch, the spike and your C, Q, E abilities, both key
+  slots, mouse buttons and the wheel). They come from the Riot Client while it runs (the ones Riot keeps online, so
+  always the current ones), else from VALORANT's files of the account you used last. Sent when they change, nothing
+  else of your account. Switch: *This PC › VALORANT settings*.
+- **Practice › Aim trainer** shows them (*From VALORANT: sens, crosshair, keys, when read*). *Keep in step with the
+  game* is on by default: a change in the game is taken over into the trainer and the drills (Aim on maps). Changed
+  something in the trainer by hand? It stays until the game's settings change again, and the bar shows what's
+  different, with *Use the game's*. Not taken over: keys with Shift/Ctrl/Alt and keys set for one agent only.
+  The trainer's own keys (restart, next, watch, full screen) move to a free key if the game uses theirs.
+
 ## 4.70.2
 - **Glass boxes are solid.** In maps built from the game's files, every face with a glass material was see-through:
   enemies in the drills saw you and shot you through glass crates (Abyss's B site boxes), and you could see them.
