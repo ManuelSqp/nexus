@@ -4,6 +4,14 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.70.2
+- **Glass boxes are solid.** In maps built from the game's files, every face with a glass material was see-through:
+  enemies in the drills saw you and shot you through glass crates (Abyss's B site boxes), and you could see them.
+  A piece of glass shaped like a box (every side at least 40 cm and at most 4 m) is now solid like any box: drawn
+  opaque, and it blocks sight, shots and the way. Thin glass (windows, panes, doors, railings, glass floors) stays
+  see-through. Needs the maps built again: `nexus build-game` (the map format is now version 9; the log says
+  "N glass boxes made solid").
+
 ## 4.70.1
 - **Drills: hits that didn't count.** Whether a wall is between you and the enemy you shoot was decided on a coarse
   see-through grid (0.5 m cells, every cell that touches a wall or a box counted as solid), so walls and boxes

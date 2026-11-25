@@ -37,7 +37,7 @@ import numpy as np
 from .. import gamefiles as gf
 from .map3d import CELL, LEVEL_GAP, Frame, area_kind
 
-VERSION = 8                      # 8 (4.53.2): no spike site frames, no spawn barriers; 7 (4.53.1): clutter by name words, no effects; 6 (4.53): floors from the geometry too, nothing from replays; 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
+VERSION = 9                      # 9 (4.70.2): glass boxes are solid; 8 (4.53.2): no spike site frames, no spawn barriers; 7 (4.53.1): clutter by name words, no effects; 6 (4.53): floors from the geometry too, nothing from replays; 5 (4.50.2): doors that are open in the game see-through; 4 (4.49): glass per face; 3 (4.48.2): gentler simplifying (no shards); 2 (4.48.1): objects one by one, lids
 TARGET_TRIS = 450_000            # after simplifying (a soft target: see per_object)
 MIN_KEEP = 0.35                  # a simplified object keeps at least this share of its triangles
 SIMPLIFY_MIN = 300               # objects with fewer triangles aren't simplified
@@ -170,6 +170,20 @@ class Source:
         return out
 
 
+GLASS_BOX_MIN, GLASS_BOX_MAX = 40.0, 400.0           # cm: every side at least / at most this: a box, not a pane
+
+
+def glass_box(gm, W) -> bool:
+    """4.70.2: is this glass a box (a crate you can't see through in the game) rather than a pane, a door, a
+    railing or a floor? Every side of its extent in the world is between GLASS_BOX_MIN and GLASS_BOX_MAX."""
+    if gm is None or not len(gm.tris):
+        return False
+    used = np.unique(gm.tris)
+    pts = gm.points[used]
+    ext = (pts.max(0) - pts.min(0)) * np.linalg.norm(np.asarray(W)[:3, :3], axis=0)
+    return bool((ext >= GLASS_BOX_MIN).all() and (ext <= GLASS_BOX_MAX).all())
+
+
 def zone_name(actor: str) -> str:
     """The callout in an actor's name, the way the maps name them: CalloutRegion_A_Link, BP_CalloutRegion_ASite,
     AMain_CalloutRegion, BP_Callout_Defender_Spawn, InfinityCallout_AtkSpawn. '' for a numbered one
@@ -240,6 +254,7 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
 
     # ---- the geometry, in world cm: which objects, and how many triangles they'd be
     solid, glass, opened = [], [], []                     # (mesh, its file, world matrix)
+    n_boxes = 0
     doors = Doorways(nav_w)
     for p in src.placed:
         if p.invisible or not render_layer(p.layer) or TECH.search(p.ref):
@@ -263,13 +278,19 @@ def build(files: gf.GameFiles, mi, code: str, log=None) -> tuple[dict, bytes, di
             if sm is not None:
                 solid.append((sm, id(sm), W))
             if gm is not None:
-                glass.append((gm, id(gm), W))
+                if glass_box(gm, W):                        # 4.70.2: a glass crate: solid, as you can't see through it in the game
+                    solid.append((gm, id(gm), W))
+                    n_boxes += 1
+                else:
+                    glass.append((gm, id(gm), W))
     if not solid:
         say(f"{code}: no meshes found (is the Environment folder exported?)")
         return None
     n_obj = len(solid) + len(glass) + len(opened)
     if opened:
         say(f"{code}: {len(opened)} doors open in the game (drawn see-through)")
+    if n_boxes:
+        say(f"{code}: {n_boxes} glass boxes made solid")
     fr = Frame(mi)
     navm = _to_frame(nav_w.reshape(-1, 3), mi, fr).reshape(-1, 3, 3)
 
