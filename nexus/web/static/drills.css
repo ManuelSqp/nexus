@@ -134,3 +134,15 @@
 
 /* 4.67: the daily warm-up */
 .am-warm{display:flex;gap:14px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+
+/* 4.70: drill goals */
+.ag-list{list-style:none;margin:10px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
+.ag-list li{border:1px solid var(--line);border-radius:10px;padding:8px 12px}
+.ag-list li.done{border-color:var(--win)}.ag-list li.late{border-color:var(--amber)}
+.ag-top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.ag-bar{height:6px;border-radius:3px;background:var(--line);margin:6px 0 4px;overflow:hidden}
+.ag-bar i{display:block;height:100%;background:var(--accent)}.ag-list li.done .ag-bar i{background:var(--win)}
+.ag-ideas{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.ag-idea{border:1px dashed var(--line);border-radius:10px;padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.ag-idea>div{flex-basis:100%}.ag-idea label{display:inline-flex;gap:6px;align-items:center;margin:0}
+.ag-idea input{height:32px;padding:2px 8px}

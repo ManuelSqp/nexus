@@ -704,7 +704,7 @@ def _diff(b, unit: str) -> str:
     return f"{abs(b):.2f} s {'faster' if b > 0 else 'slower'}"
 
 
-def coach_facts(data: dict, now: float | None = None) -> dict | None:
+def coach_facts(data: dict, now: float | None = None, goals: list[dict] | None = None) -> dict | None:
     """4.66: the player's drill practice for the coach (Ask the coach, the team review): how much and how often he
     drilled, this week against last week per kind, what got better and what slipped, what he drills most and
     when he last did. None when he never played a drill."""
@@ -735,6 +735,10 @@ def coach_facts(data: dict, now: float | None = None) -> dict | None:
         "got_better": [f"{name(d)}: {_fmt(d['before'], d['unit'])} -> {_fmt(d['now'], d['unit'])}" for d in w["better"]],
         "slipped": [f"{name(d)}: {_fmt(d['before'], d['unit'])} -> {_fmt(d['now'], d['unit'])}" for d in w["worse"]],
     }
+    if goals:                                   # 4.70: his drill goals (drillgoals.status)
+        from .drillgoals import text
+        out["goals"] = [{"goal": text(x), "reached": x["reached"] or "not yet", "best_since_set": _fmt(x["best"], x["unit"]),
+                         "days_left": x["left"]} for x in goals]
     return {k: v for k, v in out.items() if v not in (None, [], {})}
 
 
@@ -846,11 +850,14 @@ def team_week(players: list[tuple[str, dict]], focus_map: str | None = None, now
     now = time.time() if now is None else now
     this = _week_start(now)
     out, top, focus_n, focus_kinds = [], None, 0, set()
-    for name, data in players:
+    for pl in players:
+        name, data = pl[0], pl[1]
+        goals = pl[2] if len(pl) > 2 else []                 # 4.70: (name, runs, drillgoals.status)
         w = weekly(data, now)
         best = w["better"][0] if w["better"] else None
         out.append({"name": name, "sessions": w["this"]["sessions"], "reps": w["this"]["reps"], "days": w["days"],
-                    "best": best})
+                    "best": best, "goals_reached": [x for x in goals if x.get("reached") and x["reached"] >= this.isoformat()],
+                    "goals_open": [x for x in goals if not x.get("reached")]})
         if best and (top is None or best["better"] / max(abs(best["before"]), 1e-6)
                      > top["drill"]["better"] / max(abs(top["drill"]["before"]), 1e-6)):
             top = {"name": name, "drill": best}

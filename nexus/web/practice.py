@@ -71,7 +71,55 @@ def register(app, store, sr, get_team) -> None:
         brief = t.sync_info.get("brief") or {}
         return {"map": m, "strats": strats, "lineups": lineups, "habits": pr.team_habits(members), "personal": personal,
                 "review": review, "match_days": brief.get("days") or DEFAULT_DAYS, "focus": focus, "evening": evening_items(t),
-                "warmup": (ext.get("aim") or {}).get("team_routine", lambda _t: None)(t)}
+                "warmup": (ext.get("aim") or {}).get("team_routine", lambda _t: None)(t), "drills": player_drills(t, m)}
+
+    def player_drills(t, m: str | None) -> list[dict]:
+        """4.70: each starter's drill for the week: his open goal, else the drill that slipped most, else the match
+        warm-up on the week's map, else the daily warm-up."""
+        from urllib.parse import quote
+        from ..stats import drillgoals as dg, drills as dr
+        out = []
+        for mm in t.member_list:
+            if mm.get("kind") != "starter":
+                continue
+            p = store.profile(mm["pid"])
+            if not p:
+                continue
+            sd_ = sr.games(p.id).path.parent
+            runs_ = dr.read_runs(sd_)
+            open_ = [x for x in dg.status(dg.read(sd_), runs_) if not x["reached"]]
+            week = dr.weekly(runs_)
+            base = f"/profiles/{p.id}/aim"
+            if open_:
+                x = open_[0]
+                out.append({"pid": p.id, "name": p.name, "drill": x["drill"], "label": x["label"],
+                            "why": f"his goal: {dg.text(x)}", "link": base + "/maps#am-goals"})
+            elif week["worse"]:
+                d = week["worse"][0]
+                out.append({"pid": p.id, "name": p.name, "drill": d["id"], "label": dr.drill_name(d),
+                            "why": f"slipped: {dr.change_text(d)}", "link": base + "/maps#am-week"})
+            elif m:
+                out.append({"pid": p.id, "name": p.name, "drill": f"*map:{m}", "label": f"Match warm-up on {m}",
+                            "why": "the week's map", "link": f"{base}/warmup?map={quote(m)}&tid={t.id}"})
+            else:
+                out.append({"pid": p.id, "name": p.name, "drill": "*", "label": "Daily warm-up",
+                            "why": "10 minutes of his drills", "link": f"{base}/warmup"})
+        return out
+
+    def sync_drills(t, plan: dict) -> bool:
+        """4.70: the drill items tick themselves: sessions played since the plan's week began. -> changed"""
+        from ..stats import drills as dr
+        changed = "drills" not in plan
+        if changed:                                  # a plan from before 4.70: add them now
+            plan["drills"] = pr.drill_items(player_drills(t, plan.get("map")))
+        since = datetime.fromisoformat(plan["start"]).timestamp()
+        for it in plan["drills"]:
+            n = pr.drill_count(dr.read_runs(sr.games(it["pid"]).path.parent), it["drill"], since)
+            done = n >= it["sessions"]
+            if n != it.get("count") or done != it.get("done"):
+                it["count"], it["done"] = n, done
+                changed = True
+        return changed
 
     def evening_items(t) -> list[dict]:
         """Items from the newest review evening sent to the plan in the last 8 days (kept when the plan is made again)."""
@@ -130,11 +178,14 @@ def register(app, store, sr, get_team) -> None:
         t = get_team(tid)
         week = week_id()
         plan = read(tid, week) or make(t, week)
+        if sync_drills(t, plan):                                     # 4.70: the drills tick themselves
+            write(t.id, plan)
         done, total = pr.progress(plan)
         pids = {store.profile(m["pid"]).name: m["pid"] for m in t.member_list if store.profile(m["pid"])}
         return render_template("team_practice.html", t=t, tab="practice", premier_status=None, plan=plan, cfg=cfg_of(t),
                                weekday=pr.WEEKDAY, done=done, total=total, links=links(t, plan), pids=pids, today_iso=date.today().isoformat(),
-                               discord=bool(t.discord_info.get("focus_url") or t.discord_info.get("prep_url")))
+                               discord=bool(t.discord_info.get("focus_url") or t.discord_info.get("prep_url")),
+                               my_pids={p.id for p in store.profiles(g.user.id)})
 
     @app.post("/api/teams/<int:tid>/practice")
     def team_practice_api(tid: int):
@@ -226,7 +277,10 @@ def register(app, store, sr, get_team) -> None:
         for mm in t.member_list:
             p = store.profile(mm["pid"])
             if p:
-                players.append((p.name, dr.read_runs(sr.games(p.id).path.parent)))
+                from ..stats import drillgoals as dg
+                sd_ = sr.games(p.id).path.parent
+                runs_ = dr.read_runs(sd_)
+                players.append((p.name, runs_, dg.status(dg.read(sd_), runs_)))
         focus = week_map_of(app, t) or (list(t.map_list)[0] if t.map_list else None)
         return dr.team_week(players, focus)
 

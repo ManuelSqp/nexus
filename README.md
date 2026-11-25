@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.69.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.70.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -755,6 +755,10 @@ can run is still drawn as a teleport.
 
 The coach (Ask the coach, the team coach) sees this practice too (4.66): what you drilled, this week against last,
 what got better and what slipped (`drills.coach_facts`).
+
+**Drill goals (4.70)**: a drill, a target and a day, suggested from your week; reached by the first session whose
+median makes it (`stats/drillgoals.py`). Team › Practice gives every starter one drill for the week (his goal,
+else what slipped, else a warm-up) that ticks itself after 3 sessions.
 
 **Your week from the coach (4.69)**, on top of Ask the coach: a short weekly letter that ties your games and your
 drills together, with 2-3 things for the coming week and the drill to play first; on demand or every Monday

@@ -165,14 +165,17 @@ def register(app, store, sr, view_profile) -> None:
                 "foes": list(FOES), "util_modes": list(UTIL_MODES),
                 "suggest_api": url_for("aim_suggest_api", pid=pid), "match": request.args.get("match", "")[:80],
                 "agents": {k: {s: v["name"] for s, v in kits.kit(k).items()} for k in sorted(kits.KITS)}}
-        week = dr.weekly(dr.read_runs(stats_dir(pid)))          # 4.65: your week
+        runs_all = dr.read_runs(stats_dir(pid))
+        week = dr.weekly(runs_all)                                # 4.65: your week
+        from ..stats import drillgoals as dg                      # 4.70: your drill goals
+        goals = dg.sync(stats_dir(pid), runs_all)
+        goal_ideas = dg.suggest(week, goals) if can_edit else []
+        for x in goals:
+            x["drill_url"] = drill_link(pid, x["drill"], x.get("map"))
         for d in week["better"] + week["worse"]:
-            gm = GENERAL_ID.match(d["id"])
-            if gm and d["map"]:
-                d["url"] = url_for("aim_play", pid=pid, mode=gm.group(1), map_name=d["map"], sid=d["id"].rsplit("-", 1)[1])
-            elif not gm:
-                d["url"] = url_for("aim_drill", pid=pid, drill_id=d["id"])
+            d["url"] = drill_link(pid, d["id"], d["map"])
         return render_template("aim_maps.html", p=p, active_pid=pid, can_edit=can_edit, boot=boot, week=week,
+                               goals=goals, goal_ideas=goal_ideas, goal_fmt=dg.fmt,
                                match_teams=match_teams(p))
 
     @app.get("/api/profiles/<int:pid>/aim/drills")
@@ -271,6 +274,33 @@ def register(app, store, sr, view_profile) -> None:
             mode, sid, name = m.groups()
             return url_for("aim_play", pid=pid, mode=mode, map_name=name, sid=sid, reps=dr.WARM_REPS[mode], **q)
         return url_for("aim_drill", pid=pid, drill_id=items[0], **q)
+
+    def drill_link(pid: int, did: str, map_name: str | None) -> str:
+        """The page of a drill by its id (a general drill needs its map)."""
+        gm = GENERAL_ID.match(did)
+        if gm:
+            return url_for("aim_play", pid=pid, mode=gm.group(1), map_name=map_name, sid=did.rsplit("-", 1)[1]) if map_name else ""
+        return url_for("aim_drill", pid=pid, drill_id=did)
+
+    @app.post("/profiles/<int:pid>/aim/goals")
+    def aim_goals(pid: int):
+        """4.70: add a drill goal (from a suggestion, the target and day changeable) or remove one."""
+        from ..stats import drillgoals as dg
+        p, can_edit = view_profile(pid)
+        if not can_edit:
+            abort(403)
+        f = request.form
+        if f.get("remove"):
+            dg.remove(stats_dir(pid), f["remove"])
+            flash("Goal removed.", "ok")
+        else:
+            try:
+                g_ = dg.add(stats_dir(pid), f.get("drill", ""), f.get("kind", ""), f.get("target"), f.get("by"),
+                            f.get("map", ""), f.get("where", ""), f.get("source", "you"))
+                flash(f"New goal: {dg.text({**g_, 'label': f.get('label') or ''})}.", "ok")
+            except ValueError as e:
+                flash(f"Not saved: {e}.", "error")
+        return redirect(url_for("aim_maps", pid=pid) + "#am-goals")
 
     @app.get("/profiles/<int:pid>/aim/warmup")
     def aim_warmup(pid: int):
