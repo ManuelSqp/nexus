@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.72.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.73.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -803,6 +803,10 @@ attackers played it, the defenders' ways back in. Since 4.72 the attackers play 
 in a crossfire on the spike (the widest angle there is between the places they played it from), one of them shifts
 to another place after a few seconds, and a defuse is heard: whoever can't see you peeks the spike, so a tapped
 defuse baits them out.
+
+**Sessions as a chart (4.73).** A drill's card (and its result screen) draws your sessions: the median of each
+as a dot on a line (hover one for its day, the median and the reps won), your best session marked, and your goal on
+that drill as a dashed line with its day (✓ once reached).
 
 **His view (4.72).** Lose a duel in any drill and you see the last three seconds again from your killer's eyes (a
 bit slowed down): you as an agent, where he was, how long he had you and why you lost it (you were moving, on the

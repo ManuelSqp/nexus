@@ -814,7 +814,7 @@
     else startRep();
   }
   function restart() {
-    S.reps = []; S.firsts = {head: 0, body: 0, legs: 0, miss: 0}; S.offs = []; S.saved = false; S.styles = {};
+    S.reps = []; S.firsts = {head: 0, body: 0, legs: 0, miss: 0}; S.offs = []; S.saved = false; S.styles = {}; S.histHasMe = false;
     S.shots = []; S.deaths = 0; S.kills = 0; startRep();
   }
   function watch() {
@@ -1200,7 +1200,7 @@
     const bars = S.reps.map((v, i) => `<div class="dr-bar"><span>${v === null ? T('miss') : pct ? Math.round(v) + '%' : v.toFixed(2)}</span>` +
       `<i class="${v === null ? 'miss' : good(v) ? 'beat' : 'slow'}" style="height:${v === null ? 100 : Math.max(3, Math.round(v / top * 100))}%"></i><small>${i + 1}</small></div>`).join('');
     const off = avg(S.offs), mo = matchOff();
-    const h = C.history || {}, meds = (h.medians || []).concat(med !== null ? [med] : []);
+    const h = C.history || {}, meds = (h.medians || []).concat(med !== null && !S.histHasMe ? [med] : []);
     const head = MODE === 'death' && his !== null ? `${esc(T('You beat him'))} <span class="good">${beat} / ${S.reps.length}</span>`
       : MODE === 'hold' ? `${esc(T('Peeks won'))} <span class="good">${beat} / ${S.reps.length}</span>`
       : MODE === 'attack' ? `${esc(T('Spot taken'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
@@ -1231,7 +1231,7 @@
     if (MODE === 'retake') facts.push(`<div><b>${esc(T('Left on the spike'))}</b><p>${S.lefts.length ? S.lefts.map(v => v.toFixed(1) + ' s').join(' · ') : '–'} · ${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
     if (MODE === 'entry') facts.push(`<div><b>${esc(T('Kills and deaths'))}</b><p>${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
     if (MODE === 'clear') facts.push(`<div><b>${esc(T('Hiding places'))}</b><p>${S.hides.map(h2 => `<span class="${h2.off === null ? '' : h2.off <= 7 ? 'good' : 'bad'}">${h2.off === null ? '–' : Math.round(h2.off) + '°'}</span>`).join(' ')} · ${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
-    facts.push(`<div><b>${esc(T('Since the first time'))}</b><p>${meds.length > 1 ? `${esc(T('Median per session'))}: ${meds.slice(-5).map(fmt).join(' → ')}` : esc(T('Your first session on this spot.'))}</p></div>`);
+    facts.push(`<div${C.chart ? ' class="dr-wide"' : ''}><b>${esc(T('Since the first time'))}</b><p>${meds.length > 1 ? `${esc(T('Median per session'))}: ${meds.slice(-5).map(fmt).join(' → ')}` : esc(T('Your first session on this spot.'))}</p>${C.chart || ''}</div>`);   // 4.73: the chart from the server
     el.hidden = false;
     el.innerHTML = `<div class="dr-res">
       <p class="muted small" translate="no">${esc(D.map)} · ${esc(MODE === 'death' ? `${D.where} · ${D.killer_agent} · ${D.weapon}` : title())}</p>
@@ -1257,7 +1257,8 @@
                               // 4.65: what the weekly view calls it
                               map: C.map || D.map || '', where: MODE === 'death' ? [D.where, D.killer_agent].filter(Boolean).join(' vs ') : (C.title || '')})});
       const d = await r.json();
-      if (r.ok && d.history) C.history = d.history;
+      if (r.ok && d.history) { C.history = d.history; S.histHasMe = true; }
+      if (r.ok && d.chart !== undefined) { C.chart = d.chart; if (S.phase === 'done') result(); }   // 4.73: with this session
       const el = $('dr-saved'); if (el) el.textContent = r.ok ? T('Saved.') : (d.error || '');
     } catch (e) {}
   }
