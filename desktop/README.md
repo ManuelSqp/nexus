@@ -10,8 +10,12 @@ background, every few minutes, the app:
 - **sends new KovaaK's scores** from KovaaK's `stats` folder to Nexus (the Aim page uses them).
 - **cuts your matches out of Medal recordings and uploads them.** On the match's coach page in Nexus the
   recording is then picked already (*From the Nexus app*).
+- **sends your VALORANT settings to the aim trainer** (4.71): sensitivity, crosshair and keys, read from the Riot
+  Client while it runs (on this PC only, with the password in its lockfile), else from VALORANT's files
+  (`%LOCALAPPDATA%\VALORANT\Saved\Config`). Only those settings are sent, when they change; nothing else of your
+  account.
 
-Each of the three can be switched off under *This PC*, which also shows the folders, what the app did lately and
+Each of them can be switched off under *This PC*, which also shows the folders, what the app did lately and
 updates.
 
 ## Install

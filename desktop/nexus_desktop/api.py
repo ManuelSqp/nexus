@@ -70,6 +70,10 @@ class Api:
         parts = [("files", (f.name, f.read_bytes(), "text/csv")) for f in files]
         return self._call("POST", f"/api/companion/players/{int(pid)}/kovaaks", files=parts, timeout=120)
 
+    def send_game_settings(self, pid: int, settings: dict) -> dict:
+        """VALORANT's sens, crosshair and keys (4.71) -> what the trainer took over."""
+        return self._call("POST", f"/api/companion/players/{int(pid)}/game-settings", json=settings)
+
     # ---------------------------------------------------------------- recordings
     def matches(self, pid: int) -> list[dict]:
         return self._call("GET", f"/api/companion/players/{int(pid)}/matches", timeout=90)["matches"]

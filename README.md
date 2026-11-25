@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.70.2** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.71.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -168,7 +168,10 @@ the coach finds more online.
 
 **Aim trainer:** *Practice › Aim trainer* is an aim trainer in the browser (and in the Nexus app) that plays like
 Valorant (4.55: with your own keys from Aim on maps, the *Keys* button in the trainer): your Valorant sensitivity (0.07° per mouse count × sens), Valorant's field of view and raw mouse input
-(Chrome, Edge, the Nexus app; other browsers get a warning). A **scenario library** of 100 scenarios (4.24) in eight
+(Chrome, Edge, the Nexus app; other browsers get a warning). With the Nexus app on your PC (4.71) your sens, crosshair and keys come
+straight from VALORANT: the app reads them from the Riot Client while it runs (else from VALORANT's files) and sends
+them when they change; *Keep in step with the game* (on by default) takes them over into the trainer and the drills,
+and the trainer shows what's different (*Use the game's*). A **scenario library** of 100 scenarios (4.24) in eight
 groups, each marked easy, medium or hard: *flicks* (head-line, close, mid, far, wide, vertical, tiny, spider, low,
 high, behind you), *switching* (grid, six shot, head-line, close, tiny, double and triple tap, wide walls, bursts),
 *moving targets* (bouncing, jinking, hopping, strafing, shrinking, a horde walking at you), *reflex* (targets that

@@ -67,6 +67,7 @@
     <button type="button" class="pc-tile" data-go="pc-kovaaks"><span>Scores</span><b id="t-scores">–</b><span id="t-scores-sub"></span></button>{% endif %}
     <button type="button" class="pc-tile" data-go="pc-medal"><span>Medal</span><b id="t-medal">–</b><span id="t-medal-sub"></span></button>
     <button type="button" class="pc-tile" data-go="pc-demos"><span>Replays</span><b id="t-replays">–</b><span id="t-replays-sub"></span></button>
+    <button type="button" class="pc-tile" data-go="pc-game" id="t-game-tile" hidden><span>Game settings</span><b id="t-game">–</b><span id="t-game-sub"></span></button>
   </div>
 
   <div class="pc-cols">
@@ -101,6 +102,16 @@
       <div class="pc-folder"><code id="f-demos" translate="no"></code><button type="button" class="btn sm ghost" data-pick="demos">Change</button></div>
       <div class="pc-switches">
         <label class="switch"><input type="checkbox" data-key="send_replays"><span class="tr" aria-hidden="true"></span><span>Send all replay files to Nexus (any mode)</span></label>
+      </div>
+    </section>
+
+    <section class="panel" id="pc-game" hidden>
+      <header><h2>VALORANT settings</h2></header>
+      <p class="small muted" style="margin-top:0">Your sensitivity, crosshair and keys go to the aim trainer and the drills, so they play
+        like your game. Read from the Riot Client while it runs (else from VALORANT's files on this PC), sent when they change.
+        Nothing else of your account is sent.</p>
+      <div class="pc-switches">
+        <label class="switch"><input type="checkbox" data-key="send_game_settings"><span class="tr" aria-hidden="true"></span><span>Send my VALORANT settings to the trainer</span></label>
       </div>
     </section>
   </div>
@@ -158,6 +169,10 @@
     tile('t-medal', s.upload_matches, s.medal_ok, !s.medal_ok ? 'Folder not found' : `${s.matches_uploaded} match${s.matches_uploaded === 1 ? '' : 'es'} uploaded`);
     if (s.send_replays !== undefined)        // apps before 4.9 don't know replay files
       tile('t-replays', s.send_replays, s.demos_ok, !s.demos_ok ? 'Folder not found' : `${s.replays_sent} sent`);
+    if (s.send_game_settings !== undefined) {        // 4.71
+      $('t-game-tile').hidden = false; $('pc-game').hidden = false;
+      tile('t-game', s.send_game_settings, true, s.game_settings_at ? 'Sent ' + s.game_settings_at : 'Start VALORANT once');
+    }
     if (s.log.length !== logLen) {
       const l = $('pc-log'), atEnd = l.scrollTop + l.clientHeight >= l.scrollHeight - 4;
       l.textContent = s.log.length ? s.log.join('\n') : 'Nothing yet.'; logLen = s.log.length;

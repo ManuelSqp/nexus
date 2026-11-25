@@ -1,4 +1,5 @@
-"""One round of work: playlists into KovaaK's, new scores to Nexus, matches out of Medal recordings, replay files.
+"""One round of work: playlists into KovaaK's, new scores to Nexus, matches out of Medal recordings, replay files,
+VALORANT's settings (4.71).
 The app runs this every few minutes (and on "Sync now"); it only touches what changed since the last round."""
 from __future__ import annotations
 
@@ -7,7 +8,7 @@ import time
 from datetime import date
 from pathlib import Path
 
-from . import demos, kovaaks, medal
+from . import demos, kovaaks, medal, valsettings
 from .api import Api, ApiError
 from .config import Settings
 
@@ -84,6 +85,27 @@ def recordings(s: Settings, api: Api, ffmpeg: str, log, now: float | None = None
             state["state"] = "done"
 
 
+GAME_SETTINGS_RESEND_S = 7 * 86400  # unchanged settings are sent again after a week (a new player picked, a server restored)
+
+
+def game_settings(s: Settings, api: Api, log, now: float | None = None, base: Path | None = None) -> None:
+    """VALORANT's sens, crosshair and keys to the trainer when they changed (4.71). Read from the Riot Client while
+    it runs, else from VALORANT's files; nothing found: nothing to do."""
+    if not (s.send_game_settings and s.player_id):
+        return
+    now = now or time.time()
+    d = valsettings.read(base)
+    if not d:
+        return
+    key = f"{s.player_id}:{valsettings.digest(d)}"
+    if key == s.game_settings_sent and now - s.game_settings_at < GAME_SETTINGS_RESEND_S:
+        return
+    r = api.send_game_settings(s.player_id, d)
+    s.game_settings_sent, s.game_settings_at = key, now
+    if r.get("changed"):
+        log("VALORANT settings: " + ", ".join(r["changed"]) + (" (in the trainer now)" if r.get("applied") else " (the trainer keeps its own)"))
+
+
 RETRY_S = 3 * 86400        # a file the server couldn't read is tried again after this (a server fix may help)
 
 
@@ -128,7 +150,8 @@ def replays(s: Settings, api: Api, log, now: float | None = None) -> None:
 def run_once(s: Settings, api: Api, ffmpeg: str, log, workdir: Path | None = None) -> bool:
     """Everything once. -> False when the server says the device isn't logged in anymore."""
     for step in (lambda: playlists(s, api, log), lambda: scores(s, api, log),
-                 lambda: recordings(s, api, ffmpeg, log, workdir=workdir), lambda: replays(s, api, log)):
+                 lambda: recordings(s, api, ffmpeg, log, workdir=workdir), lambda: replays(s, api, log),
+                 lambda: game_settings(s, api, log)):
         try:
             step()
         except ApiError as e:

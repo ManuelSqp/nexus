@@ -30,7 +30,8 @@ RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 OLD_RUN_VALUE = "valcoach companion"          # the autostart entry up to 4.4
 UPDATE_EVERY_S = 24 * 3600
 BG = "#0e131b"
-SWITCHES = ("put_playlists", "send_scores", "upload_matches", "send_replays", "autostart", "check_updates")
+SWITCHES = ("put_playlists", "send_scores", "upload_matches", "send_replays", "send_game_settings", "autostart",
+            "check_updates")
 
 
 def ffmpeg_path() -> str:
@@ -296,6 +297,7 @@ class App:
             "kovaaks_ok": folder_ok(s.kovaaks_dir, "Saved"), "medal_ok": folder_ok(s.medal_dir),
             "demos_ok": folder_ok(s.demos_dir),
             "replays_sent": sum(1 for x in s.replays.values() if x.get("state") == "done"),
+            "game_settings_at": time.strftime("%d.%m. %H:%M", time.localtime(s.game_settings_at)) if s.game_settings_at else "",
             **{k: bool(getattr(s, k)) for k in SWITCHES},
             "every_min": s.every_min, "last_playlists": s.last_playlists, "scores_sent": len(s.stats_sent),
             "matches_uploaded": sum(len(x.get("matches", [])) for x in s.recordings.values()),
@@ -321,7 +323,7 @@ class App:
         else:
             return {"error": "That can't be changed here."}
         config.save(s)
-        if key in ("player_id", "put_playlists", "send_scores", "upload_matches", "send_replays") and value:
+        if key in ("player_id", "put_playlists", "send_scores", "upload_matches", "send_replays", "send_game_settings") and value:
             self.sync_now()
         return {"ok": True}
 

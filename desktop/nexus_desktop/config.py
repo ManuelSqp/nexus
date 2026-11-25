@@ -45,6 +45,7 @@ class Settings:
     only_coachable: bool = True
     demos_dir: str = ""                  # VALORANT's replay files (4.9): %LOCALAPPDATA%\VALORANT\Saved\Demos
     send_replays: bool = True
+    send_game_settings: bool = True      # 4.71: VALORANT's sens, crosshair and keys to the trainer (valsettings.py)
     autostart: bool = False
     check_updates: bool = True
     last_update_check: float = 0.0
@@ -56,6 +57,8 @@ class Settings:
     # replay files: demos.key(file) -> {"state": "done"|"skipped", "match_id": ..., "why": ...}
     replays: dict = field(default_factory=dict)
     last_playlists: str = ""                                              # the day playlists were last written
+    game_settings_sent: str = ""                                          # digest of VALORANT's settings sent last
+    game_settings_at: float = 0.0                                         # when they were sent
 
 
 def load() -> Settings:

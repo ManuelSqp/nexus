@@ -1,6 +1,10 @@
 """Practice › Aim trainer and Practice › Mouse & monitor (per player). The pages do the work in the browser
 (static/trainer.js, static/gearcheck.js); the server keeps the scores and the settings (stats/trainer.py) and
-ticks off the warm-up or training on the Aim page when a whole one was played."""
+ticks off the warm-up or training on the Aim page when a whole one was played.
+
+4.71: VALORANT's own sens, crosshair and keys from the Nexus app (POST /api/companion/players/<pid>/game-settings,
+stats/gamesettings.py): kept in trainer.json "game"; while "follow_game" is on (the default) a change in the game
+is taken over into the trainer's setup and the user's keys."""
 from __future__ import annotations
 
 import time
@@ -16,8 +20,9 @@ from ..stats import mapangles as ma
 from ..stats import sandbox as sbx
 from ..stats import trainer as tr
 from ..stats import drills as dr
+from ..stats import gamesettings as gs
 from .aim import MAX_LOG, _lock, _read, _write
-from .drills import read_keys
+from .drills import keys_file, read_keys
 
 # 4.55: the keys the aim trainer uses (your keys from Aim on maps; the labels for what they do here)
 TRAINER_KEYS = [["shoot", "Shoot"], ["next", "Start, go on, next scenario"], ["restart", "Play it again"],
@@ -150,7 +155,62 @@ def register(app, store, sr, view_profile, filter_rows, known_maps: list[str] = 
                                play=play if play in tr.SCENARIOS or play in extra else "", setup=setup, numbers=tr.numbers(setup),
                                n_runs=len(runs), today=sum(1 for r in runs if r.get("d") == date.today().isoformat()),
                                keys=read_keys(store.data_dir, g.user.id), key_defaults=dr.default_keys(),
-                               key_actions=TRAINER_KEYS)
+                               key_actions=TRAINER_KEYS, game=d.get("game"), follow_game=d.get("follow_game", True),
+                               game_diff=gs.changes(d["game"], setup, read_keys(store.data_dir, g.user.id)) if d.get("game") else [])
+
+    # ---- 4.71: VALORANT's own settings
+    def take_game(pid: int, uid: int, gm: dict | None = None, force: bool = False) -> dict:
+        """New settings from the game (gm), or the kept ones again (force: "Use the game's"). Taken over when they
+        changed and the player follows the game, or when forced. -> {changed: [...], applied}."""
+        with _lock:
+            d = _read(path(pid), {})
+            old = d.get("game") or {}
+            gm = gm if gm is not None else old
+            if not gm:
+                return {"changed": [], "applied": False}
+            keys = read_keys(store.data_dir, uid)
+            setup = d.get("setup", {})
+            dig = gs.digest(gm)
+            diff = gs.changes(gm, setup, keys)
+            new = dig != old.get("digest")
+            applied = bool(diff) and (force or (new and d.get("follow_game", True)))
+            d["game"] = {k: gm.get(k) for k in ("sens", "crosshair", "crosshair_name", "profiles", "keys", "custom_keys", "skipped", "source")}
+            d["game"].update(digest=dig, at=gm.get("at", time.time()) if gm is old else time.time())
+            if applied:
+                setup, new_keys = gs.apply(gm, setup, keys)
+                setup["t"] = time.time()
+                d["setup"] = setup
+                _write(keys_file(store.data_dir, uid), new_keys)
+            _write(path(pid), d)
+        return {"changed": diff if (new or applied) else [], "applied": applied}
+
+    @app.post("/api/companion/players/<int:pid>/game-settings")
+    def companion_game_settings(pid: int):
+        p = store.profile(pid)
+        if p is None or p.owner_id != g.user.id:
+            abort(404)
+        raw = gs.clean(request.get_json(silent=True))
+        if raw is None:
+            return jsonify(error="No VALORANT settings in that."), 400
+        gm = gs.read(raw)
+        gm["source"] = raw["source"]
+        return jsonify(**take_game(pid, g.user.id, gm))
+
+    @app.post("/profiles/<int:pid>/trainer/game")
+    def trainer_game(pid: int):
+        p, can_edit = view_profile(pid)
+        if not can_save(p, can_edit):
+            abort(403)
+        if request.form.get("do") == "take":
+            take_game(pid, g.user.id, force=True)
+        else:
+            with _lock:
+                d = _read(path(pid), {})
+                d["follow_game"] = request.form.get("on") == "1"
+                _write(path(pid), d)
+            if d["follow_game"]:
+                take_game(pid, g.user.id, force=True)
+        return redirect(url_for("trainer", pid=pid))
 
     @app.get("/profiles/<int:pid>/trainer/insights")
     def aim_insights(pid: int):
