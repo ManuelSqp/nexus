@@ -56,7 +56,7 @@ def test_site_frames_and_spawn_barriers_left_out():
                 "../../VFX/Barrier/Meshes/SM_Barrier.usda", "../../VFX/Barrier/Meshes/SM_Barrier_Back_VisionBlocker.usda"):
         assert mm.TECH.search(ref), ref
     assert not mm.TECH.search("../../Environment/Asset/Props/Gameplay/1/Gameplay_1_ArmorPlateGarage.usda")   # a wall
-    assert mm.VERSION == 8
+    assert mm.VERSION >= 8
 
 
 def test_version():

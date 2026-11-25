@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.70.1** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.70.2** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -246,7 +246,7 @@ size, in one colour (*Floor* › *Height* or *Map areas*: the game's callout zon
 above (*Roofs* shows them). Agents are their real models in the team's colour; walls hide them and their names
 (*Outlines* shows them again). Where you can walk (4.53) is the game's navigation mesh plus the floors of the
 geometry you can get onto (box tops, bridges, ledges), so boxes and bridges are solid; glass is see-through but
-solid too. Kills name the game's callout where they happened, and with line of sight from
+solid too, and a glass box (a crate, every side 40 cm to 4 m) is opaque like any box (4.70.2). Kills name the game's callout where they happened, and with line of sight from
 the walls the replay page says who saw whom first, how many enemies had a line to the victim, and whether he ever had
 his killer in view; *Your deaths* sums it up per match.
 
