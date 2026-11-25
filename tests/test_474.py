@@ -83,6 +83,9 @@ def test_evening_and_scrims(app):  # noqa: F811 (fixture)
     assert c.post(api, json={"action": "strat", "round": 1, "strat": ""}).get_json()["strats"] == {}
     js = (ROOT / "nexus/web/static/evening.js").read_text()
     assert "function renderStrat()" in js and "function renderComp()" in js and "at(k.kw)" in js
+    # the strat's link: only a whole number from the page goes into it (CodeQL: no text from the page as a URL)
+    assert "link.setAttribute('href', '../strats/' + sid)" in js and "strat_url" not in js and "strat_url" not in boot
+    assert f"/teams/{tid}/review-evening/{sid}".rsplit("/", 2)[0] + f"/strats/{s_att}" == f"/teams/{tid}/strats/{s_att}"
     # a scrim in the log on the same day and map: "Review it round by round"
     day = (m.started_at or "")[:10]
     c.post(f"/teams/{tid}/scrims", data={"opponent": "Rivals", "map": m.map_name, "us": "7", "them": "5", "date": day})
