@@ -20,6 +20,8 @@ from pathlib import Path
 from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from .. import replayfile
+from ..stats import drillchart as dch
+from ..stats import drillgoals as dg
 from ..stats import drills as dr
 from ..stats import kits
 from ..stats import map3d as m3
@@ -43,6 +45,12 @@ UTIL_MODES = ("hold", "attack", "entry", "retake", "postplant")   # 4.56: the en
 
 def keys_file(data_dir, uid: int) -> Path:
     return Path(data_dir) / "aim" / f"keys-{int(uid)}.json"
+
+
+def goal_of(goals: list[dict], drill_id: str) -> dict | None:
+    """4.73: the goal to draw on a drill's chart: its open one, else the last one reached."""
+    mine = [x for x in goals if x.get("drill") == drill_id]
+    return next((x for x in mine if not x.get("reached")), None) or (mine[-1] if mine else None)
 
 
 def read_keys(data_dir, uid: int) -> dict:
@@ -219,6 +227,7 @@ def register(app, store, sr, view_profile) -> None:
                 "keys": read_keys(data_dir, g.user.id), "actions": [[a, lbl] for a, (lbl, _d) in dr.ACTIONS.items()],
                 "keys_api": url_for("aim_keys"), "defaults": dr.default_keys(), "gun": dr.gun(d["my_weapon"]), "his_gun": dr.gun(d["weapon"]),
                 "guns": {n: dr.gun(n) for n in dr.GUNS}, "hp": dr.HP, "history": dr.summary(runs),
+                "chart": dch.chart(runs, "death", goal_of(dg.read(stats_dir(pid)), drill_id)),
                 "list": url_for("aim_maps", pid=pid), "queue": nxt, "next": item_url(pid, nxt), "step": step(nxt),
                 "util_col": COLS,
                 "watch": url_for("replay_view", pid=pid, match_id=d["mid"]) + f"?round={d['round']}",
@@ -241,7 +250,8 @@ def register(app, store, sr, view_profile) -> None:
             run["kind"] = g_id.group(1)
         with _lock:
             data = dr.add_run(stats_dir(pid), drill_id, run)
-        return jsonify(ok=True, history=dr.summary(data.get(drill_id, []), run["kind"]))
+        return jsonify(ok=True, history=dr.summary(data.get(drill_id, []), run["kind"]),
+                       chart=dch.chart(data.get(drill_id, []), run["kind"], goal_of(dg.read(stats_dir(pid)), drill_id)))
 
     # ---------------------------------------------------------------- 4.67: drills in a row (the warm-up)
     def queue_of(current: str) -> list[str]:
@@ -417,11 +427,15 @@ def register(app, store, sr, view_profile) -> None:
                            retakes=[], fights=0, pending=0, working=False)
         sp, pending = map_spots(p, name, by[name], True)
         runs = dr.read_runs(stats_dir(pid))
+        goals = dg.read(stats_dir(pid))
         for lst in ("angles", "sites", "retakes"):
             for a in sp[lst]:
                 sm = {k: dr.summary(runs.get(f"g-{k}-{a['id']}", []), k) for k in MODES if LISTS[k] == lst}
                 a["best"] = {k: v["best"] for k, v in sm.items()}
                 a["trend"] = {k: v["medians"][-12:] for k, v in sm.items() if v["medians"]}     # 4.59
+                # 4.73: the sessions as a chart, with the goal on that drill
+                a["chart"] = {k: c for k in sm if (c := dch.chart(runs.get(f"g-{k}-{a['id']}", []), k,
+                                                                 goal_of(goals, f"g-{k}-{a['id']}")))}
         j = jobs.get(p.id) or {}
         return jsonify(maps=[{"name": m, "matches": len(by[m])} for m in maps], map=name, pending=pending,
                        working=bool(j.get("running")), **sp)
@@ -498,6 +512,7 @@ def register(app, store, sr, view_profile) -> None:
                 "keys": read_keys(data_dir, g.user.id), "actions": [[k, lbl] for k, (lbl, _d) in dr.ACTIONS.items()],
                 "keys_api": url_for("aim_keys"), "defaults": dr.default_keys(), "gun": dr.gun(gun_name),
                 "guns": {n: dr.gun(n) for n in dr.GUNS}, "hp": dr.HP, "history": dr.summary(runs, mode),
+                "chart": dch.chart(runs, mode, goal_of(dg.read(stats_dir(pid)), did)),
                 "list": url_for("aim_maps", pid=pid) + f"#{mode}", "util_col": COLS,
                 "queue": queue_of(dr.token(mode, sid, name)), "next": item_url(pid, queue_of(dr.token(mode, sid, name))),
                 "step": step(queue_of(dr.token(mode, sid, name))),

@@ -4,6 +4,13 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.73.0
+- **Every drill's sessions as a chart.** On Practice › Aim on maps, a spot's card now draws your sessions of that
+  drill (the last 20): the median of each session as a dot on a line, the best one marked, the day of the first and
+  the last below, and which way is better. Your goal on that drill is a dashed line with its day ("goal 3.50 s by
+  29.11.", "✓" once reached). Hover a dot for its day, its median and how many reps you won. The same chart is on
+  the drill's result screen, with the session you just played in it.
+
 ## 4.72.0
 - **Retakes like in the game.** The attackers no longer stand still on their places. Two of them hold a crossfire
   on the spike (the widest angle between the places attackers played the spike from in your replays, preferring

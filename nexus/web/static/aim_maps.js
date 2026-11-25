@@ -347,7 +347,8 @@
         <label>${esc(T(tab === 'hold' ? 'Peeks' : 'Reps'))} <select id="am-g-reps">${REPS[tab].map(n => `<option ${n === reps ? 'selected' : ''}>${esc(String(n))}</option>`).join('')}</select></label></div>
       <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${esc(String(reps))} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
         ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${esc(pctTab() ? Math.round(best) + ' %' : (+best).toFixed(2) + ' s')}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>
-      ${(s.trend || {})[tab] ? `<p class="small">${trendText(s.trend[tab], pctTab())}</p>` : ''}`;
+      ${(s.trend || {})[tab] ? `<p class="small">${trendText(s.trend[tab], pctTab())}</p>` : ''}
+      ${(s.chart || {})[tab] ? `<div class="am-chart">${s.chart[tab]}</div>` : ''}`;     // 4.73: made by the server (drillchart.py)
   }
   $('am-g-map').addEventListener('change', e => { g.map = own((G ? G.maps : []).map(m => m.name), e.target.value, g.map); saveG(); sel = null; G = null; plan(); loadSpots(); });
   $('am-g-list').addEventListener('click', e => { const b = e.target.closest('[data-sid]'); if (b) { sel = b.dataset.sid; renderGen(); } });

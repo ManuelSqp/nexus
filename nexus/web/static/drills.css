@@ -146,3 +146,16 @@
 .ag-idea{border:1px dashed var(--line);border-radius:10px;padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .ag-idea>div{flex-basis:100%}.ag-idea label{display:inline-flex;gap:6px;align-items:center;margin:0}
 .ag-idea input{height:32px;padding:2px 8px}
+
+/* 4.73: a drill's sessions (stats/drillchart.py) */
+.dc{display:block;max-width:420px;margin:6px 0 2px;overflow:visible}
+.dc .dc-grid{stroke:var(--line);stroke-width:1}
+.dc .dc-ax{fill:var(--muted);font-size:10px;font-family:var(--font-num,inherit)}
+.dc .dc-line{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.dc .dc-dot{fill:var(--accent);stroke:var(--panel,#111);stroke-width:2}
+.dc .dc-dot.best{fill:var(--good,#5fe0c6)}
+.dc .dc-hit{fill:transparent}
+.dc .dc-pt:hover .dc-dot{stroke:var(--text)}
+.dc .dc-goal{stroke:var(--muted);stroke-width:1.5;stroke-dasharray:5 4}
+.dc .dc-goal.done{stroke:var(--good,#5fe0c6)}
+.dc .dc-goal-l{fill:var(--muted);font-size:10px;font-family:var(--font-num,inherit)}
