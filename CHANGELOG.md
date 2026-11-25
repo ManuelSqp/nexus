@@ -4,6 +4,18 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.70.1
+- **Drills: hits that didn't count.** Whether a wall is between you and the enemy you shoot was decided on a coarse
+  see-through grid (0.5 m cells, every cell that touches a wall or a box counted as solid), so walls and boxes
+  were up to half a metre thicker than drawn. A head or shoulder just past a box edge or a corner (where enemies
+  hide in retakes, post-plants and entries) often showed MISS with the crosshair on it. Now, when the grid says
+  "blocked", the drawn map decides: Nexus draws it along your shot into one pixel off screen and reads how far the
+  first wall is; the shot counts if he's in front of it. (On the real Ascent map about 1 in 10 clear lines near
+  walls was wrongly blocked.)
+- **Drills: the yellow ball.** Your team's flashes, stuns, recon darts and traps (4.65) were drawn as a ball where
+  they popped, often right where you stand. They aren't drawn any more (they still work); their smokes, walls and
+  mollies are.
+
 ## 4.70.0
 - **Drill goals.** *Your goals* on Practice › Aim on maps: a drill, a target and a day ("Retake · Ascent · Retake
   B: under 3.50 s by Sunday"). Ideas come from your week (back to where a slipped drill was, or a step further on

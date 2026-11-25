@@ -173,7 +173,7 @@ def test_scripts():
     dj = (STATIC / "drill.js").read_text()
     for x in ("function rayCapsule(", "function hitboxes(f)", "function shoot()", "function startReload()",
               "function failRep(label)", "function flashes()", "KB.actionsOf(keys", "unadjustedMovement", "const EYE = 1.85",
-              "YAW * (+C.sens || 0.4)", "if (!V().visible(o, p)) hit = null;", "function throughSmoke("):
+              "YAW * (+C.sens || 0.4)", "if (wall === null || wall < hit[2] - 0.02) hit = null;", "function throughSmoke("):
         assert x in dj, x
     kj = (STATIC / "keys.js").read_text()
     assert "window.NexusKeys =" in kj and "'WheelUp'" in kj and "Esc always stops" in kj
