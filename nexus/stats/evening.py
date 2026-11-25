@@ -3,13 +3,21 @@
 each player's rounds, and the themes behind the flagged rounds, which go into the practice plan.
 
 No model is needed. The round facts come from the match data (kills, plant, buys) and are worked out once,
-when the evening is started."""
+when the evening is started.
+
+4.74 (the scrim review): where each kill happened (the killer's and the victim's callout), each player's utility
+per round (C, Q, E, X casts, when Riot's data has them), the comp you played against your comp for the map (the
+draft marked "our comp"), and per round the strat you ran (picked in the evening) against the utility used."""
 from __future__ import annotations
 
 from collections import Counter, defaultdict
 
 from ..models import Match
+from .games import casts as _casts
 from .rounds import kind
+
+KEYS = {"grenade": "C", "ability1": "Q", "ability2": "E", "ultimate": "X"}
+STRAT_SLOTS = {"grenade": "C", "ability1": "Q", "ability2": "E", "ultimate": "X"}   # the strat book's slot names
 
 MARKS = {"fault": "My fault", "good": "Good", "talk": "Talk about it"}
 TRADE_MS = 3000
@@ -58,8 +66,14 @@ def our_side(m: Match, puuids: set[str]) -> str | None:
     return team if n >= 2 else None
 
 
-def round_facts(m: Match, side: str) -> list[dict]:
-    """Every round in plain facts for the evening (the numbers people need to remember the round)."""
+def util_of(ac: dict) -> dict[str, int]:
+    """Riot's casts of one player in one round -> {"C": n, "Q": n, "E": n, "X": n}."""
+    return {KEYS[k]: v for k, v in _casts(ac).items()}
+
+
+def round_facts(m: Match, side: str, area=None) -> list[dict]:
+    """Every round in plain facts for the evening (the numbers people need to remember the round).
+    area(x, y): the callout at a map position (4.74: where each kill was), or None."""
     other = m.other_team(side)
     name = {p.puuid: p.name for p in m.players.values()}
     agent = {p.puuid: p.agent for p in m.players.values()}
@@ -82,7 +96,8 @@ def round_facts(m: Match, side: str) -> list[dict]:
             lead = max(lead, alive[side] - alive[other])
             kills.append({"t": _fmt(k.t_round_ms), "ms": k.t_round_ms, "k": name.get(k.killer, "spike" if not k.killer else "?"),
                           "ka": agent.get(k.killer, ""), "v": name.get(k.victim, "?"), "va": agent.get(k.victim, ""),
-                          "ours": k.killer_team == side, "w": k.weapon or ("ability" if k.killer else "")})
+                          "ours": k.killer_team == side, "w": k.weapon or ("ability" if k.killer else ""),
+                          **_where(k, area)})
             if k.victim_team == side:
                 deaths[k.victim] = k
         # deaths of ours that a teammate paid back within 3 s
@@ -131,7 +146,73 @@ def round_facts(m: Match, side: str) -> list[dict]:
             "plant": ({"site": rnd.plant.site, "ours": planted_by_us, "t": _fmt(rnd.plant.t_round_ms)} if planted else None),
             "defused": rnd.defuse is not None, "alive": [alive[side], alive[other]], "lead": lead, "untraded": untraded,
             "tags": tags, "why": [THEMES[t][0] for t in tags], "kills": kills, "players": players,
+            "util": ({p.name: util_of(rnd.stats[p.puuid].ability_casts) for p in ours if p.puuid in rnd.stats}
+                     if m.has_utility else None),
         })
+    return out
+
+
+def _where(k, area) -> dict:
+    """4.74: the killer's and the victim's callout at the kill."""
+    if area is None:
+        return {}
+    out = {}
+    try:
+        if k.victim_x or k.victim_y:
+            out["vw"] = area(k.victim_x, k.victim_y)
+        kl = k.loc_of(k.killer) if k.killer else None
+        if kl is not None:
+            out["kw"] = area(kl.x, kl.y)
+    except Exception:
+        return {}
+    return {a: b for a, b in out.items() if b and not b.startswith("(")}
+
+
+# ------------------------------------------------------------------------------------------------ 4.74: the plan
+def comp_check(played: list[str], plan: list[str]) -> dict | None:
+    """The agents you played against your comp for the map. None without a plan."""
+    plan = [a for a in plan if a]
+    if not plan:
+        return None
+    left = list(plan)
+    same = []
+    for a in played:
+        if a in left:
+            left.remove(a)
+            same.append(a)
+    extra = list(played)
+    for a in same:
+        extra.remove(a)
+    return {"plan": plan, "played": list(played), "missing": left, "extra": extra, "same": not left and not extra}
+
+
+def strat_util(data: dict) -> list[dict]:
+    """The utility a strat board draws, per agent and key: [{agent, key, n}] (a thing carried over from the step
+    before counts once)."""
+    c: Counter = Counter()
+    for st in (data or {}).get("steps") or []:
+        for it in st.get("items") or []:
+            if not isinstance(it, dict) or it.get("t") != "ab" or it.get("k"):
+                continue
+            key = STRAT_SLOTS.get(str(it.get("s") or "").lower())
+            if key and it.get("a") and it.get("c", "us") != "them":
+                c[(str(it["a"]), key)] += 1
+    return [{"agent": a, "key": k, "n": n} for (a, k), n in sorted(c.items())]
+
+
+def util_check(plan: list[dict], rnd: dict) -> list[dict] | None:
+    """A strat's utility against what was used in the round: [{agent, key, planned, used, ok}], None when the
+    match has no casts or nobody played that agent. A strat's agent nobody played: used None."""
+    util = rnd.get("util")
+    if not util:
+        return None
+    by_agent = {p["agent"]: util.get(n) or {} for n, p in (rnd.get("players") or {}).items()}
+    out = []
+    for x in plan:
+        got = by_agent.get(x["agent"])
+        used = None if got is None else int(got.get(x["key"], 0))
+        out.append({**{"agent": x["agent"], "key": x["key"]}, "planned": x["n"], "used": used,
+                    "ok": used is not None and used >= x["n"]})
     return out
 
 

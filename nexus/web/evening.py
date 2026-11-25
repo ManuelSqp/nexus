@@ -5,7 +5,10 @@ jumps along (the page asks the server every few seconds). Everyone marks his own
 end goes to the practice plan and, if the owner wants, to Discord.
 
 Files: data/teams/<tid>/evenings/<id>.json (facts, marks, state) and <id>.replay.json (the minimap replay,
-made the first time someone opens it)."""
+made the first time someone opens it).
+
+4.74 (the scrim review): the comp you played against your comp for the map, where each kill was, and per round the
+strat you ran (anyone picks it) against the utility used (stats/evening.py comp_check, strat_util, util_check)."""
 from __future__ import annotations
 
 import json
@@ -139,7 +142,26 @@ def register(app, store, sr, get_team) -> None:
     def state(t, ev: dict) -> dict:
         return {"current": ev.get("current", 1), "host": ev.get("host"), "finished": bool(ev.get("finished")),
                 "marks": ev.get("marks") or {}, "here": here(t.id, ev["id"]), "updated": ev.get("updated", 0),
-                "planned": ev.get("planned") or "", "pins": ev.get("pins") or {}}
+                "planned": ev.get("planned") or "", "pins": ev.get("pins") or {}, "strats": ev.get("strats") or {}}
+
+    def our_comp(tid: int, map_name: str) -> tuple[list[str], str]:
+        """4.74: the team's comp for a map: the draft marked "our comp" (its agents in slot order) and its name."""
+        for d in store.drafts(tid, map_name):
+            data = d.get("data") or {}
+            if data.get("status") == "main":
+                return [x.get("agent") or "" for x in data.get("slots") or [] if isinstance(x, dict)], d.get("name") or ""
+        return [], ""
+
+    def strat_list(tid: int, map_name: str) -> list[dict]:
+        """4.74: the team's strats on the map with the utility each one draws (for the round's strat pick)."""
+        out = []
+        for row in store.strats(tid):
+            if row["map"] != map_name:
+                continue
+            full = store.strat(row["id"]) or {}
+            out.append({"id": row["id"], "name": row["name"], "side": row["side"],
+                        "util": ev_stats.strat_util(full.get("data") or {})})
+        return out
 
     # ------------------------------------------------------------------ pages
     @app.route("/teams/<int:tid>/review-evening", methods=["GET", "POST"])
@@ -154,6 +176,11 @@ def register(app, store, sr, get_team) -> None:
                 flash("That match isn't loaded yet: update everyone's stats first.", "error")
                 return redirect(url_for("team_evening", tid=tid))
             m = parse_match(raw)
+            from ..maps import MapRegistry
+            try:
+                mi = MapRegistry(cache).get(m.map_id, m.map_name)
+            except Exception:
+                mi = None
             side = ev_stats.our_side(m, set(member_puuids(t)))
             if side is None:
                 flash("Fewer than two of your team played in that match.", "error")
@@ -168,10 +195,15 @@ def register(app, store, sr, get_team) -> None:
                   "queue": m.queue, "won": ours > theirs, "score": f"{ours}–{theirs}", "side_team": side,
                   "opponent": (rv or {}).get("opponent") or "their team",
                   "players": [{"name": p.name, "agent": p.agent, "puuid": p.puuid} for p in m.players_on(side)],
-                  "rounds": ev_stats.round_facts(m, side), "marks": {}, "current": 1,
+                  "rounds": ev_stats.round_facts(m, side, mi.area if mi and mi.callouts else None), "marks": {}, "current": 1,
                   "host_id": g.user.id, "host": g.user.display_name or g.user.username, "created": time.time(),
                   "finished": False}
             ev["key"] = ev_stats.key_rounds(ev["rounds"])
+            plan, plan_name = our_comp(tid, m.map_name)           # 4.74: your comp against the plan
+            ev["comp"] = ev_stats.comp_check([p["agent"] for p in ev["players"]], plan)
+            if ev["comp"]:
+                ev["comp"]["name"] = plan_name
+            ev["strats"] = {}
             ev["current"] = 1
             save(tid, ev)
             old = evenings(tid)[MAX_EVENINGS:]           # keep the newest ones
@@ -201,7 +233,9 @@ def register(app, store, sr, get_team) -> None:
                                                 "opponent": ev.get("opponent") or "",
                                                 "replay_js": url_for("replay_js"),
                                                 "summary": url_for("team_evening_summary", tid=tid, sid=sid), "marks": ev_stats.MARKS,
-                                                "agent_icon": url_for("agent_icon", name="__A__")}).replace("</", "<\\/"),
+                                                "agent_icon": url_for("agent_icon", name="__A__"),
+                                                "comp": ev.get("comp"), "strat_list": strat_list(tid, ev.get("map") or ""),
+                                                "strat_url": url_for("strat_edit", tid=tid, sid=0)}).replace("</", "<\\/"),
                                discord=bool(_channel(t.discord_info, "review")))
 
     @app.get("/teams/<int:tid>/review-evening/<sid>/summary")
@@ -248,6 +282,22 @@ def register(app, store, sr, get_team) -> None:
                 err = pin_action(ev, b, act, can_host(t, ev))
                 if err:
                     return jsonify(error=err), 400 if err != "not yours" else 403
+            elif act == "strat":                      # 4.74: the strat this round was (anyone in the team)
+                try:
+                    n = int(b.get("round"))
+                except (TypeError, ValueError):
+                    return jsonify(error="unknown round"), 400
+                sid_ = b.get("strat")
+                if not 1 <= n <= n_max:
+                    return jsonify(error="unknown round"), 400
+                picks = ev.setdefault("strats", {})
+                if sid_ in (None, "", 0):
+                    picks.pop(str(n), None)
+                else:
+                    ok = {x["id"]: x for x in store.strats(tid) if x["map"] == ev.get("map")}
+                    if not isinstance(sid_, int) or sid_ not in ok:
+                        return jsonify(error="unknown strat"), 400
+                    picks[str(n)] = sid_
             elif act == "goto":
                 if not can_host(t, ev):
                     return jsonify(error="only the host moves everyone"), 403

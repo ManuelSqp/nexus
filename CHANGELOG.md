@@ -4,6 +4,21 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.74.0
+- **Scrim review.** The review evening (*Practice › Review evening*) now checks a match against your plan:
+  - **Your comp against the plan**: the agents you played against the draft marked *our comp* for that map, with who
+    wasn't played and who was played instead (or "played as planned").
+  - **Where each kill was**: the killer's and the victim's callout next to every kill.
+  - **Utility per round**: each player's C, Q, E and X casts in *Our players this round* (when Riot's data has them).
+  - **Strat this round**: pick the strat you ran (your strat book's strats for the map and that side; everyone sees
+    the pick). It lists the abilities the strat draws, per agent, against what that agent used in the round
+    (✓ / ✗, or "not played").
+- **Scrims link to their match.** A scrim in *Practice › Scrims* whose match is in your games (the same day and map,
+  two or more of you in it; the score decides between two) gets *Review it round by round*, which opens the review
+  evening on that match.
+- Needs a new evening: ones started before 4.74 have no comp check, no callouts and no utility per round (the strat
+  pick works in them too).
+
 ## 4.73.0
 - **Every drill's sessions as a chart.** On Practice › Aim on maps, a spot's card now draws your sessions of that
   drill (the last 20): the median of each session as a dot on a line, the best one marked, the day of the first and

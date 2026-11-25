@@ -49,7 +49,7 @@
     S = st;
     if (st.finished !== wasFinished && !mine) { location.reload(); return; }
     if (follow && !host && S.current !== cur) { cur = S.current; renderRound(); }
-    renderStrip(); renderHere(); renderMarks();
+    renderStrip(); renderHere(); renderMarks(); renderStrat();
     const rb = $('#rp-box'); if (replayOn && rb && rb._redraw) rb._redraw();       // notes from the others
     if (st.updated !== shownSummary) refreshSummary(st.updated);
   }
@@ -110,19 +110,69 @@
       ${r.why.length ? `<div class="tags">${r.why.map(w => `<span class="tag">${esc(w)}</span>`).join('')}</div>` : ''}
       <div class="facts">${facts.map(([k, v]) => `<div class="fact"><span>${k}</span><b>${v}</b></div>`).join('')}</div>`;
     $('#kn').textContent = r.kills.length ? `${r.kills.length} kills` : '';
+    // 4.74: where each of them was
+    const at = w => (w ? ` <small>${esc(w)}</small>` : '');
     $('#kills').innerHTML = r.kills.map(k => `<div class="${k.ours ? 'us' : 'them'}"><span class="t">${esc(k.t)}</span>
-        <span class="n">${ai(k.ka)}${esc(k.k)}</span><span class="w">${esc(k.w)}</span><span class="n">${ai(k.va)}${esc(k.v)}</span></div>`).join('')
+        <span class="n">${ai(k.ka)}${esc(k.k)}${at(k.kw)}</span><span class="w">${esc(k.w)}</span><span class="n">${ai(k.va)}${esc(k.v)}${at(k.vw)}</span></div>`).join('')
       || '<p class="muted small" style="margin:0">No kills in this round.</p>';
     const ps = Object.entries(r.players);
-    $('#ours').innerHTML = '<tr><th>Player</th><th>Weapon</th><th class="x">Kills</th><th class="x">Damage</th><th class="x">Buy</th><th></th></tr>' +
+    const U = r.util || null, uc = n => (U && U[n] ? ['C', 'Q', 'E', 'X'].map(k => U[n][k] ? `${k}${U[n][k] > 1 ? '×' + U[n][k] : ''}` : '').filter(Boolean).join(' ') || '–' : '');
+    $('#ours').innerHTML = '<tr><th>Player</th><th>Weapon</th><th class="x">Kills</th><th class="x">Damage</th><th class="x">Buy</th>' + (U ? '<th>Utility</th>' : '') + '<th></th></tr>' +
       ps.map(([n, p]) => `<tr class="${p.died ? 'dead' : ''}"><td>${ai(p.agent)} ${esc(n)}</td><td>${esc(p.weapon || '–')}</td>
-        <td class="x">${esc(p.k)}</td><td class="x">${esc(p.dmg)}</td><td class="x">${esc(p.loadout.toLocaleString())}</td>
+        <td class="x">${esc(p.k)}</td><td class="x">${esc(p.dmg)}</td><td class="x">${esc(p.loadout.toLocaleString())}</td>${U ? `<td>${esc(uc(n))}</td>` : ''}
         <td><span class="st ${p.died ? '' : 'alive'}">${p.afk ? 'AFK' : p.died ? 'died' : 'alive'}</span></td></tr>`).join('');
     $('#prev').disabled = !step(-1);
     $('#next').disabled = !step(1);
     renderMarks();
+    renderStrat();
     if (replayOn) showReplay();
   }
+
+  // ------------------------------------------------------------------ 4.74: comp and strat against the plan
+  function renderComp() {
+    const c = B.comp, el = $('#comp');
+    if (!el || !c) return;
+    el.hidden = false;
+    const list = a => a.map(x => `${ai(x, 18)} ${esc(x)}`).join(' ');
+    el.innerHTML = `<b>Your comp${c.name ? ` (${esc(c.name)})` : ''}</b> <span>${list(c.plan)}</span>` +
+      (c.same ? '<span class="ok">✓ played as planned</span>'
+        : `${c.missing.length ? `<span class="miss">not played: ${c.missing.map(esc).join(', ')}</span>` : ''}` +
+          `${c.extra.length ? `<span class="ex">instead: ${c.extra.map(esc).join(', ')}</span>` : ''}`);
+  }
+  const STRATS = B.strat_list || [];
+  function renderStrat() {
+    const box = $('#stratc'), sel = $('#strat');
+    if (!box || !sel) return;
+    const r = R[cur], mine = STRATS.filter(x => x.side === r.side);
+    if (!STRATS.length) { box.hidden = true; return; }
+    box.hidden = false;
+    const pick = (S.strats || {})[String(r.n)] || '';
+    if (document.activeElement !== sel)
+      sel.innerHTML = `<option value="">– none –</option>` + mine.map(x => `<option value="${esc(x.id)}" ${+pick === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('');
+    const st = STRATS.find(x => x.id === +pick);
+    const link = $('#stratlink');
+    link.hidden = !st;
+    if (st) link.href = local(B.strat_url).replace(/\/0(?=\/|$|\?)/, '/' + encodeURIComponent(st.id));
+    const out = $('#stratu');
+    if (!st) { out.innerHTML = mine.length ? '<p class="muted small" style="margin:6px 0 0">Pick the strat you ran: its utility against what was used.</p>' : `<p class="muted small" style="margin:6px 0 0">No ${esc(r.side)} strats on this map in your strat book.</p>`; return; }
+    if (!st.util.length) { out.innerHTML = '<p class="muted small" style="margin:6px 0 0">This strat has no abilities drawn.</p>'; return; }
+    if (r.util === undefined) { out.innerHTML = '<p class="muted small" style="margin:6px 0 0">Start a new evening on this match to see the utility.</p>'; return; }
+    if (r.util === null) { out.innerHTML = '<p class="muted small" style="margin:6px 0 0">Riot\'s data has no ability casts for this match.</p>'; return; }
+    const by = {};
+    for (const [n, p] of Object.entries(r.players)) by[p.agent] = r.util[n] || {};
+    out.innerHTML = '<table class="uc"><tr><th>Agent</th><th>Key</th><th class="x">Planned</th><th class="x">Used</th><th></th></tr>' +
+      st.util.map(x => {
+        const got = by[x.agent], used = got ? (got[x.key] || 0) : null, ok = used !== null && used >= x.n;
+        return `<tr><td>${ai(x.agent, 18)} ${esc(x.agent)}</td><td>${esc(x.key)}</td><td class="x">${esc(x.n)}</td><td class="x">${used === null ? 'not played' : esc(used)}</td>` +
+          `<td class="${ok ? 'ok' : 'no'}">${ok ? '✓' : '✗'}</td></tr>`;
+      }).join('') + '</table>';
+  }
+  if ($('#strat')) $('#strat').addEventListener('change', async e => {
+    const v = e.target.value, n = cur;
+    S.strats = Object.assign({}, S.strats || {}); if (v) S.strats[String(n)] = +v; else delete S.strats[String(n)];
+    renderStrat();
+    try { apply(await api({action: 'strat', round: n, strat: v ? +v : ''}), true); } catch (err) { alertLine(err.message); }
+  });
 
   // ------------------------------------------------------------------ marks
   function renderMarks() {
@@ -279,6 +329,6 @@
     else { const box = $('#rp-box'); if (box._destroy) box._destroy(); box.innerHTML = ''; delete box.dataset.built; box.hidden = true; $('#rpnote').hidden = false; $('#rpnote').textContent = 'Where everyone was at every kill and at the plant, with the routes in between estimated.'; }
   });
 
-  renderStrip(); renderRound(); renderHere();
+  renderComp(); renderStrip(); renderRound(); renderHere();
   setTimeout(poll, 2500);
 })();
