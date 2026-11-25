@@ -77,7 +77,43 @@
     else if (d.heSaw !== null && d.heSaw !== undefined && d.heSaw < d.youSaw - 0.05) out.push('he saw you first');
     return out;
   }
-  const api = {retakePlan, trailPath, trailAt, deathFacts, angleOn, CROSS_MIN, SHIFT_AT};
+  // ---- 4.77: crosshair placement. Where your crosshair was the moment a head came into view, before you could move
+  // the mouse: the angle off it in all (off), how far above (+) or below (-) it (up), and to the side (side), in
+  // degrees. eye: [x, y, z]; yaw, pitch: radians (the drill's own: yaw 0 looks along -z); head: [x, y, z].
+  const D2R = Math.PI / 180;
+  function placeError(eye, yaw, pitch, head) {
+    const v = [head[0] - eye[0], head[1] - eye[1], head[2] - eye[2]], L = Math.hypot(...v) || 1e-9;
+    const d = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+    const off = Math.acos(Math.max(-1, Math.min(1, (d[0] * v[0] + d[1] * v[1] + d[2] * v[2]) / L))) / D2R;
+    const hp = Math.asin(Math.max(-1, Math.min(1, v[1] / L))), hy = Math.atan2(v[0], -v[2]);
+    let dy = yaw - hy;
+    while (dy > Math.PI) dy -= 2 * Math.PI;
+    while (dy < -Math.PI) dy += 2 * Math.PI;
+    return {off, up: (pitch - hp) / D2R, side: Math.abs(dy) / D2R * Math.cos(hp)};
+  }
+  const ON_IT = 2;                       // degrees: "on it"
+  // a rep's (or a session's) errors -> {n, median, up (the average above/below), on (within ON_IT), worst}
+  function placeSummary(errs) {
+    const xs = errs.filter(e => e && Number.isFinite(e.off));
+    if (!xs.length) return {n: 0, median: null, up: null, on: 0, worst: null};
+    const o = xs.map(e => e.off).sort((a, b) => a - b), m = o.length >> 1;
+    return {n: xs.length, median: o.length % 2 ? o[m] : (o[m - 1] + o[m]) / 2,
+            up: xs.reduce((a, e) => a + e.up, 0) / xs.length, on: xs.filter(e => e.off <= ON_IT).length, worst: o[o.length - 1]};
+  }
+  // a point along a route ([[x, y, z], …]) d metres from its start -> [x, y, z, yaw of the leg, at the end?]
+  function routeAt(R, d) {
+    let left = Math.max(0, d);
+    for (let i = 1; i < R.length; i++) {
+      const a = R[i - 1], b = R[i], L = Math.hypot(b[0] - a[0], b[2] - a[2]);
+      if (L <= 1e-6) continue;
+      const yaw = Math.atan2(b[0] - a[0], -(b[2] - a[2]));
+      if (left <= L) { const k = left / L; return [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k, yaw, false]; }
+      left -= L;
+    }
+    const e = R[R.length - 1], f = R[Math.max(0, R.length - 2)];
+    return [e[0], e[1], e[2], Math.atan2(e[0] - f[0], -(e[2] - f[2])), true];
+  }
+  const api = {retakePlan, trailPath, trailAt, deathFacts, angleOn, CROSS_MIN, SHIFT_AT, placeError, placeSummary, routeAt, ON_IT};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   root.NexusDrillAI = api;
 })(typeof window !== 'undefined' ? window : globalThis);

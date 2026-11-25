@@ -8,7 +8,7 @@ from __future__ import annotations
 import datetime
 import html
 
-from .drills import HIGHER, KINDS, _median
+from .drills import HIGHER, KINDS, _median, fmt_value
 
 MAX_SESSIONS = 20
 W, H = 320, 120
@@ -31,7 +31,7 @@ def sessions(runs: list[dict], n: int = MAX_SESSIONS) -> list[dict]:
 
 
 def fmt(v: float, unit: str) -> str:
-    return f"{round(v)} %" if unit == "%" else f"{v:.2f} s"
+    return fmt_value(v, unit)
 
 
 def _day(ts: float) -> str:

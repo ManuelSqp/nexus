@@ -31,14 +31,14 @@ from .replays import match_brief, replays_dir
 log = logging.getLogger(__name__)
 MATCHES = {"10": 10, "30": 30, "all": 400}     # "From" on the page: the last this-many matches with a replay
 SPOT_MATCHES = 60                               # 4.52: the spots of a map come from its last this-many replays
-MODES = ("hold", "attack", "track", "clear", "entry", "retake", "postplant")    # 4.54: entry, retake, post-plant
+MODES = ("hold", "attack", "track", "clear", "entry", "retake", "postplant", "place")   # 4.77: place    # 4.54: entry, retake, post-plant
 GENERAL_ID = re.compile(r"^g-(" + "|".join(MODES) + r")-[0-9a-f]{10}$")
 QUEUE_G = re.compile(r"^g-(" + "|".join(MODES) + r")-([0-9a-f]{10})@([A-Za-z' ]{2,24})$")   # 4.67: a general drill in a queue
 PEEKS = ("wide", "jiggle", "crouch", "jump", "two")
 DIFFS = {"easy": 0.9, "medium": 0.6, "hard": 0.42, "pro": 0.3}   # the enemies' reaction time (s)
-DEFAULT_REPS = {"hold": 20, "attack": 5, "track": 1, "clear": 3, "entry": 5, "retake": 5, "postplant": 10}
+DEFAULT_REPS = {"hold": 20, "attack": 5, "track": 1, "clear": 3, "entry": 5, "retake": 5, "postplant": 10, "place": 5}
 LISTS = {"hold": "angles", "attack": "angles", "track": "angles", "clear": "sites", "entry": "sites",
-         "retake": "retakes", "postplant": "retakes"}      # which of a map's spots each kind of drill is played on
+         "retake": "retakes", "postplant": "retakes", "place": "sites"}      # which of a map's spots each kind of drill is played on
 FOES = (1, 2, 3)                                # entry, retake, post-plant: how many enemies (2 by default)
 UTIL_MODES = ("hold", "attack", "entry", "retake", "postplant")   # 4.56: the enemies use their utility
 
@@ -501,7 +501,7 @@ def register(app, store, sr, view_profile) -> None:
         title = {"hold": f"Hold: {frm(spot['az'], spot['dz'])}", "attack": f"Take: {frm(spot['dz'], spot['az'])}",
                  "track": f"Tracking at {spot['az']}", "clear": f"Clear: {frm(spot['dz'], spot['az'])}",
                  "entry": f"Entry: {frm(spot['dz'], spot['az'])}", "retake": f"Retake {spot['dz']}",
-                 "postplant": f"Post-plant {spot['dz']}"}[mode]
+                 "postplant": f"Post-plant {spot['dz']}", "place": f"Crosshair placement: {frm(spot['dz'], spot['az'])}"}[mode]
         boot = {"map": name, "api": "/api/maps3d/", "pid": pid, "mode": mode, "spot": spot, "title": title,
                 "drill": {"id": did, "map": name, "mode": mode, "where": spot["dz"]},
                 "opts": {"styles": styles, "diff": diff, "reps": reps, "react": DIFFS[diff], "foes": foes, "util": util,

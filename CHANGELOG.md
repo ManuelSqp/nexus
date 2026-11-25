@@ -4,6 +4,15 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.77.0
+- **New drill: Crosshair placement** (Practice › Aim on maps, on every site). You're walked along the attackers'
+  route at walking speed, so only your aim counts. A head shows on each hiding place defenders used in your
+  replays the moment it comes into view (then disappears after 1.4 s, or when you shoot it), and where your
+  crosshair was right then counts: degrees off the head, above or below. A rep is the median of them; lower is
+  better. The result shows your height on average ("1.6° too low"), how many you had within 2° and the worst one;
+  the minimap colours each place. Default 5 reps; the warm-ups, the session charts, goals and the weekly view count
+  it in degrees ("3.4°", "0.8° closer").
+
 ## 4.76.0
 - **Economy review, round by round.** For one match: your team's money per player (loadout plus credits left: what
   each had to spend) against what it bought, and the rounds where the buy didn't fit:

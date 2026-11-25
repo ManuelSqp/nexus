@@ -108,7 +108,7 @@ def test_entry_retake_postplant_pages(app, synthetic):  # noqa: F811
     rt = next(r for r in d["retakes"] if r["site"] == "Z")
     assert rt["best"] == {"retake": None, "postplant": None} and rt["routes"] and rt["posts"]
     if site:
-        assert d["sites"][0]["best"] == {"clear": None, "entry": None}
+        assert d["sites"][0]["best"] == {"clear": None, "entry": None, "place": None}    # 4.77: place
         r = c.get(f"/profiles/{pid}/aim/play/entry/testmap/{site['id']}?foes=3")
         boot = json.loads(r.data.decode().split("window.NEXUS_MAP3D = ", 1)[1].split(";</script>", 1)[0])
         assert boot["mode"] == "entry" and boot["opts"]["foes"] == 3 and boot["spot"]["hides"] == site["hides"]
