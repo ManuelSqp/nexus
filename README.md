@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.77.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.78.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -477,6 +477,10 @@ to Discord before your matches: set days, time and minutes before), reviews of y
 posted to #match-prep), and *Opponents*: every team in your division scouted in advance from its recent
 Premier matches, with a page per team (how to play them, players, comps per map) and a map veto for playoffs.
 The first division scout takes a few minutes (HenrikDev rate limit); after that it's quick and runs nightly.
+Since 4.78 each map on a team's page also has *How they play their rounds*, per buy (pistol, eco, force, full
+buy): on attack which site they plant, how fast (plant and first fight), and how they're set up at the first fight
+(stacked in one zone or spread out); on defense how they stand (players per zone) and how often they look for early
+picks. What stands out goes into the "how to play them" lines and the match-day brief (`stats/roundplay.py`).
 
 **Drafts.** On a team, *Drafts* → pick a map → *+ New draft* (your starters in the slots) or *Use* one of the
 suggested comps. Drag agents from the list onto a player (the small box under it is a backup pick), drag between
@@ -955,7 +959,7 @@ Settings (web) or `[video]` (CLI).
 | `stats/progress.py`, `stats/training.py`, `web/player_views.py` | Progress and Training tabs: weekly numbers, focus checks, aim, routine, learning paths |
 | `stats/sessions.py`, `stats/duos.py` | when you play best (sessions, losing streaks, time of day) and which teammates play well together |
 | `stats/peers.py`, `stats/replayprep.py`, `web/prep_views.py` | you vs your rank, replay scouting (setups, utility, plants per team) |
-| `stats/scouting.py` | scouting summaries of other teams, how to play them, the map veto |
+| `stats/scouting.py`, `stats/roundplay.py` | scouting summaries of other teams, how they play their rounds, how to play them, the map veto |
 | `web/premierjobs.py`, `web/premier_views.py` | Premier tab: division scouting, match reviews, this week's map, the brief |
 | `web/drafts.py`, `web/static/drafts.js` | roster drafts: storage (typed fields only), player numbers per agent, the drag-and-drop editor |
 | `web/abilityshapes.py` | every ability's shape and size in meters, and each agent's colour, for the strat board |

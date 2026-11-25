@@ -112,6 +112,8 @@ def summarize(items: list[tuple[Match, str]], cache_dir: Path) -> dict:
                            "attack": f.get("attack", {}), "defense": f.get("defense", {}), "sides": side_rates(ms, mp)}
     from .rounds import round_types
     out["economy"] = round_types(items)
+    from .roundplay import analyse                      # 4.78: how they play their rounds, per map and buy
+    out["play"] = analyse(items, cache_dir)
     return out
 
 
@@ -182,6 +184,7 @@ def map_lines(s: dict, mp: str) -> list[str]:
             w = _pct(x.get("retakes_won"))
             if x["plants"] >= 3 and w is not None and w <= .35:
                 lines.append(f"{mp} defense: they lose most retakes on {site} ({x['retakes_won']}): plant {site} and play post-plant.")
+    lines += ((s.get("play") or {}).get(mp) or {}).get("lines", [])[:4]      # 4.78
     return lines
 
 

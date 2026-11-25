@@ -4,6 +4,19 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.78.0
+- **Opponent scouting: how they play their rounds.** A scouted team's page (Premier › Opponents) gets *How they
+  play their rounds* on each map, split by their buy (pistol, eco, force, full buy):
+  - **Attack:** rounds won, which site they plant (shares, and rounds without a plant), the median plant time and
+    first fight, and how they stand at the first fight: stacked (4 or more in one zone, which one) or spread out
+    (a default).
+  - **Defense:** rounds won, how they stand at the first fight (players per zone, "2 A · 1 Mid · 2 B") and how often
+    they look for early picks (the first fight before 20 s, out of their sites, and where).
+  Positions come from the kill events (everyone's position at the round's first kill). What stands out, with 4 or
+  more rounds behind it, goes into the "how to play them" lines on their page, the match-day brief and the match
+  screen ("Ascent attack, full buys: B 86 % of their plants, fast hits (4 of 7 planted in 35 s), stacked on B at
+  the first fight."). Teams scouted before 4.78: press *Scout again* (their matches are cached, so it's quick).
+
 ## 4.77.0
 - **New drill: Crosshair placement** (Practice › Aim on maps, on every site). You're walked along the attackers'
   route at walking speed, so only your aim counts. A head shows on each hiding place defenders used in your

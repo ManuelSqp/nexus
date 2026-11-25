@@ -344,8 +344,9 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
         mlines = {m: map_lines(s, m) for m in s.get("maps", {})}
         from ..stats import compstyle, counter as ctr                # 4.66: the comp style that counters them
         counters = {m: ctr.counter(s, m) for m in s.get("maps", {})}
+        from ..stats.roundplay import setup_text
         return render_template("premier_team.html", **ctx(t, "division", s=s, v=v, lines=general_lines(s), mlines=mlines, wm=wm,
-                                                           counters=counters, style_names=compstyle.STYLES, team_id=team_id,
+                                                           counters=counters, setup_text=setup_text, style_names=compstyle.STYLES, team_id=team_id,
                                                            status=sr.status(f"scout:{tid}"), replays=replays_of(t, s, wm)))
 
     @app.get("/teams/<int:tid>/premier/review/<match_id>")
