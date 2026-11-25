@@ -33,6 +33,22 @@
     {% for p in r.trade_pairs[:8] %}<div class="small">{{ p.traded_by }} traded {{ p.died }} <b>{{ p.times }}×</b></div>{% else %}<p class="muted small">No trades.</p>{% endfor %}
   </section>
 </div>
+{% if econ %}{# 4.76 #}
+<section class="card" style="margin-top:14px" id="econ">
+  <h2>Economy</h2>
+  <div class="ecs" role="list">
+    {% for n in econ.rounds.keys()|map('int')|sort %}{% set x = econ.rounds[n|string] %}
+    <div class="ec {{ 'w' if x.won else 'l' }}{{ ' bad' if x.text }}" role="listitem" title="Round {{ n }}: {{ x.kind }} ({{ '{:,}'.format(x.bought) }}) with {{ '{:,}'.format(x.money) }} each vs {{ x.them }}{% if x.text %} · {{ x.text|join(' · ') }}{% endif %}">
+      <span>{{ n }}</span><b>{{ {'pistol': 'P', 'eco': 'E', 'force': 'F', 'full': 'B'}.get(x.kind, '?') }}</b>{% if x.text %}<i aria-label="the buy didn't fit">!</i>{% endif %}</div>
+    {% endfor %}</div>
+  <p class="muted small" style="margin:6px 0 0">P pistol · E eco · F force · B full buy · a green or red edge: won or lost · ! the buy didn't fit (hover a round)</p>
+  {% if econ_lines %}<ul class="econ-l">{% for x in econ_lines %}<li>{{ x }}</li>{% endfor %}</ul>{% else %}<p class="small" style="margin:8px 0 0">Every buy fit the money.</p>{% endif %}
+</section>
+<style>.ecs{display:flex;flex-wrap:wrap;gap:4px}.ec{position:relative;width:34px;border:1px solid var(--line);border-bottom-width:3px;border-radius:6px;text-align:center;padding:2px 0;font-size:11px;line-height:1.3}
+.ec span{display:block;color:var(--muted)}.ec b{font-size:13px}.ec.w{border-bottom-color:var(--win)}.ec.l{border-bottom-color:var(--red)}
+.ec.bad{background:color-mix(in srgb,var(--amber) 14%,transparent)}.ec i{position:absolute;top:-6px;right:-4px;font-style:normal;font-weight:800;color:var(--amber);font-size:12px}
+.econ-l{margin:10px 0 0;padding-left:18px;font-size:13.5px;line-height:1.6}</style>
+{% endif %}
 <section class="card" style="margin-top:14px">
   <h2>Every player</h2>
   <div class="prs">

@@ -291,7 +291,9 @@ def summarize(ev: dict) -> dict:
                              f" ({top[0][1]} of {name}'s own rounds: {THEMES[t][0]}.)", "who": [name], "minutes": 10})
         players.append({"name": name, "fault": sorted(v["fault"]), "good": sorted(v["good"]), "talk": sorted(v["talk"]),
                         "notes": sorted(v["notes"], key=lambda x: x["n"]), "focus": focus})
-    return {"counts": {k: counts.get(k, 0) for k in MARKS}, "marked_rounds": len(marked_rounds), "rounds": len(rounds),
+    from .econreview import lines as econ_lines           # 4.76
+    return {"econ": econ_lines(ev.get("econ")),
+            "counts": {k: counts.get(k, 0) for k in MARKS}, "marked_rounds": len(marked_rounds), "rounds": len(rounds),
             "talk": sorted(talk, key=lambda x: x["n"]), "players": players, "themes": themes, "plan": plan}
 
 

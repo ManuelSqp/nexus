@@ -4,6 +4,21 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.76.0
+- **Economy review, round by round.** For one match: your team's money per player (loadout plus credits left: what
+  each had to spend) against what it bought, and the rounds where the buy didn't fit:
+  - half the team bought, half saved (2+ on 3000+, 2+ under 1500)
+  - an eco or force while 4 or more had the money for a full buy
+  - a lost force that broke the next round (no full buy after it)
+  - a lost full buy with no rebuy the round after
+  - one player off the team's buy: bought while the team saved, or saved while it bought (named)
+  Pistol rounds aren't judged, and a lost buy just before the half's switch doesn't count against the next round.
+- **Review evening:** each round shows *Money* (per player, and what was bought) and, where it didn't fit, *Buy* in
+  amber; the summary gets an *Economy* list ("1× a lost force that broke the next round (round 4; 1 lost)").
+  Evenings from before get it too (worked out from the match).
+- **Premier match review:** an *Economy* card with every round as a cell (P pistol, E eco, F force, B full buy; won
+  or lost; ! where the buy didn't fit, the reason on hover) and the same list.
+
 ## 4.75.0
 - **Strat win rates.** Every round you tag with a strat in a review evening (*Strat this round*, 4.74) now counts
   for that strat:

@@ -30,6 +30,10 @@
       {% else %}<p class="muted small">No round marked "talk about it" yet.</p>{% endfor %}
     </div>
     <div>
+      {% if summary.econ %}{# 4.76: the rounds where the buy didn't fit #}
+      <h3>Economy</h3>
+      <ul class="econ-l">{% for x in summary.econ %}<li>{{ x }}</li>{% endfor %}</ul>
+      {% endif %}
       <h3>Every player</h3>
       {% for p in summary.players %}<div class="ps"><b>{{ p.name }}</b>
         <div class="rr">{% if p.fault %}my fault in R{{ p.fault|join(', R') }}{% endif %}{% if p.fault and p.good %} · {% endif %}{% if p.good %}good in R{{ p.good|join(', R') }}{% endif %}{% if p.talk %}{{ ' · ' if p.fault or p.good }}talk: R{{ p.talk|join(', R') }}{% endif %}</div>
