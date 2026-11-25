@@ -172,7 +172,7 @@ def test_scripts():
     assert "const NM = window.NexusMotion;" in rj and "NM.deathClip(p, kp)" in rj
     dj = (STATIC / "drill.js").read_text()
     for x in ("function rayCapsule(", "function hitboxes(f)", "function shoot()", "function startReload()",
-              "function failRep(label)", "function flashes()", "KB.actionsOf(keys", "unadjustedMovement", "const EYE = 1.85",
+              "function failRep(label, killer = null)", "function flashes()", "KB.actionsOf(keys", "unadjustedMovement", "const EYE = 1.85",
               "YAW * (+C.sens || 0.4)", "if (wall === null || wall < hit[2] - 0.02) hit = null;", "function throughSmoke("):
         assert x in dj, x
     kj = (STATIC / "keys.js").read_text()

@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.72.0
+- **Retakes like in the game.** The attackers no longer stand still on their places. Two of them hold a crossfire
+  on the spike (the widest angle between the places attackers played the spike from in your replays, preferring
+  places that can see it), one of them shifts to another place after 3 to 8 seconds, and a defuse is heard: whoever
+  can't see you peeks the spike a moment later. So a tapped defuse baits them out, a full defuse into an unchecked
+  angle gets you killed ("Killed on the spike"). Half a defuse still stays.
+- **His view after a lost duel (every drill).** When an enemy gets you, the last three seconds play again from his
+  eyes, a bit slowed down: you as an agent, where you were and what he saw, how long he had you, and why you lost
+  it (you were moving, on the spike, reloading, he saw you first, you never saw him). Your *next* key skips it;
+  *Options & keys › After a lost duel: his view* switches it off. In death drills too (your killer from the replay).
+
 ## 4.71.0
 - **Trainer settings from the game.** The Nexus app now reads your VALORANT settings on your PC and sends the ones
   the trainer uses: your sensitivity, your crosshair (the profile you use, colour, outlines, dot, inner and outer

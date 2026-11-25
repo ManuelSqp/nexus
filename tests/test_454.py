@@ -128,7 +128,7 @@ def test_entry_retake_postplant_pages(app, synthetic):  # noqa: F811
 
 def test_scripts():
     dj = (STATIC / "drill.js").read_text()
-    for x in ("function retakePath(R, delay)", "function swing(f)", "function spikeTick(dt)", "function entryTick()",
+    for x in ("function retakePath(R, delay)", "function swing(f, delay = 0)", "function spikeTick(dt)", "function entryTick()",
               "function fairHides()", "function postStands()", "function routeOnRadar(g, toR, R)", "holds('defuse')",
               "if (S.defusing) { m.vx = 0; m.vz = 0;", "S.phase !== 'run' || S.dead || S.defusing", "sp.half = true",
               "T('The spike went off')", "T('They defused the spike')", "const NFOES = O.foes || 2"):

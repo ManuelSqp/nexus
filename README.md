@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.71.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.72.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -799,7 +799,14 @@ defenders on the places they hid, one of them swings you), **retake** (the spike
 defenders' real way, kill the attackers on their post-plant places and defuse, holding your defuse key, 4 by
 default) and **post-plant** (you play the spike, the retakers come in on their real routes at their real speed and go
 for it). The retake spots come from the fights after a plant in the map's replays: where the spike usually is, where
-attackers played it, the defenders' ways back in.
+attackers played it, the defenders' ways back in. Since 4.72 the attackers play it like in the game: two of them
+in a crossfire on the spike (the widest angle there is between the places they played it from), one of them shifts
+to another place after a few seconds, and a defuse is heard: whoever can't see you peeks the spike, so a tapped
+defuse baits them out.
+
+**His view (4.72).** Lose a duel in any drill and you see the last three seconds again from your killer's eyes (a
+bit slowed down): you as an agent, where he was, how long he had you and why you lost it (you were moving, on the
+spike, reloading, he saw you first, you never saw him). Your *next* key skips it; *Options & keys* switches it off.
 
 **Their utility (4.56).** In hold, attack, entry, retake and post-plant the enemies use their utility: what their side
 really threw around these fights in your replays, one round's worth a rep, at its real time (from the fight, or from

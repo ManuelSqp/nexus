@@ -9,7 +9,7 @@ def test_solid_smokes():
     dj = (STATIC / "drill.js").read_text()
     assert "SOLID_A = 1.8" in dj
     assert ".map(o => (o.block ? {...o, a: SOLID_A} : o))" in dj
-    assert "function smoked(f)" in dj and "if (!f.url || hiding(f) || smoked(f)) continue;" in dj
+    assert "function smoked(f)" in dj and "if (!f.url || hiding(f) || (!replay && smoked(f))) continue;" in dj
     assert "throughSmoke(eye(), hd[1]) && (!chest || throughSmoke(eye(), chest[2]))" in dj
     # the replay viewer keeps them see-through
     assert "SOLID_A" not in (STATIC / "replay.js").read_text()
