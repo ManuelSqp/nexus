@@ -27,13 +27,17 @@
 // your keys, quick-cast where you aim (stats/kits.py says what each one is): smokes and walls block their sight,
 // a flash blinds whoever looks at it (you too), a molly burns them (and you), a concuss / nearsight / tether stops
 // them fighting you for a moment, recon and traps reveal them, a dash / teleport / anchor moves you.
+// 4.72: retakes like in the game: the attackers hold a crossfire on the spike, one of them shifts after a few
+// seconds, and a defuse is heard (whoever can't see you peeks the spike: tap it to bait them). After a lost duel
+// (every drill) a few seconds of replay from your killer's eyes: what he saw of you, and why you lost it
+// (drillai.js: the attackers' plan, the replay's path and the reasons).
 // The spots and routes come from the fights in all replays of the map (stats/drills.py spots()).
 (function () {
   'use strict';
   const C = window.NEXUS_MAP3D;
   if (!C || !C.drill) return;
   const MODE = C.mode || 'death', D = C.drill, SP = C.spot || null, O = C.opts || {};
-  const NM = window.NexusMotion, KB = window.NexusKeys;
+  const NM = window.NexusMotion, KB = window.NexusKeys, AI = window.NexusDrillAI;
   const $ = id => document.getElementById(id);
   const T = s => (window.vcT ? window.vcT(s) : s);
   const V = () => window.nexusMap3D;
@@ -51,15 +55,20 @@
   const NFOES = O.foes || 2, DEFUSE = O.defuse || 7;
   const canvas = $('m3-canvas');
   let keys = KB.normalize(C.keys, C.defaults);
-  const opt = {speed: 1, heads: true, reps: O.reps || 10};
+  const opt = {speed: 1, heads: true, reps: O.reps || 10, replay: true};
   if (MODE === 'death') try { Object.assign(opt, JSON.parse(localStorage.getItem('nexus.drill') || '{}')); } catch (e) {}
-  else try { opt.heads = JSON.parse(localStorage.getItem('nexus.drill') || '{}').heads !== false; } catch (e) {}
+  else try {
+    const o = JSON.parse(localStorage.getItem('nexus.drill') || '{}');
+    opt.heads = o.heads !== false; opt.replay = o.replay !== false;
+  } catch (e) {}
   const saveOpt = () => {
     try {
       const old = JSON.parse(localStorage.getItem('nexus.drill') || '{}');
-      localStorage.setItem('nexus.drill', JSON.stringify(MODE === 'death' ? opt : Object.assign(old, {heads: opt.heads})));
+      localStorage.setItem('nexus.drill', JSON.stringify(MODE === 'death' ? opt : Object.assign(old, {heads: opt.heads, replay: opt.replay})));
     } catch (e) {}
   };
+  const REPLAY_S = 3, REPLAY_SPEED = 0.75, TRAIL_S = 4;   // the death replay: the last 3 s, a bit slowed down
+  const ME_COL = [0.18, 0.77, 0.7];
   const gun = C.gun, HP = C.hp || 150;
   const react = O.react || 0.6;
   const UTIL = !!O.util && MODE !== 'death';
@@ -79,7 +88,8 @@
              me: {x: 0, y: 0, z: 0, vx: 0, vz: 0, crouch: false, still: 0}, styles: {}, shots: [], track: null,
              hides: [], deaths: 0, kills: 0, spike: null, defusing: false, lefts: [],
              U: [], hp: HP_ME, revealed: 0, slowed: false, burnt: 0, utilReps: 0, teamUtil: 0,
-             kit: {}, anchor: {}, tp: null, fast: 0, fastMult: 1, casts: 0, toast: '', toastT: 0};
+             kit: {}, anchor: {}, tp: null, fast: 0, fastMult: 1, casts: 0, toast: '', toastT: 0,
+             trail: [], rp: null, heard: false};
 
   // ------------------------------------------------------------------------------------------ where you stand
   function home() {                       // where a rep starts: [x, y, z, yaw]
@@ -358,11 +368,13 @@
     return [out, at];
   }
   // entry: the defender who swings you when you get close (he heard you): out of his place towards you, at a run
-  function swing(f) {
+  function swing(f, delay = 0) {          // 4.72: delay: he reacts to a sound first
     const p = foeAt(f, S.t), dx = S.me.x - p[0], dz = S.me.z - p[2], L = Math.hypot(dx, dz) || 1;
     const fl = floor(p[0], p[2], p[1]) ?? p[1];
-    const out = [[-1, p[0], fl, p[2], p[3], 0, fl], [S.t, p[0], fl, p[2], yawTo(p, eye()), 0, fl]];
-    let cur = [p[0], fl, p[2]], t = S.t;
+    const before = (f.path || []).filter(r => r[0] < S.t).map(r => r.slice(0, 7));   // kept for the death replay
+    const out = [...(before.length ? before : [[-1, p[0], fl, p[2], p[3], 0, fl]]), ...(delay > 0 ? [[S.t, p[0], p[1], p[2], p[3], 0, fl]] : []),
+                 [S.t + delay, p[0], fl, p[2], yawTo(p, eye()), 0, fl]];
+    let cur = [p[0], fl, p[2]], t = S.t + delay;
     for (let s = 0.2; s <= 2.4; s += 0.2) {
       const x = p[0] + dx / L * s, z = p[2] + dz / L * s, y = floor(x, z, cur[1]);
       if (y === null || V().blocked(x, z, y)) break;
@@ -371,6 +383,29 @@
     }
     out.push([t + 60, cur[0], cur[1], cur[2], yawTo(cur, eye()), 0, cur[1]]);
     f.path = prepPath(out); f.swing = 'done';
+  }
+
+  // 4.72 retake: an attacker who shifts: on his place until at, then walks (quietly) to the other place and holds
+  // there, looking where retakers come from
+  function shiftPath(from, to, at, R, crouch) {
+    const y0 = from[1] - (crouch ? 0.45 : 0), yaw0 = yawTo(from, nearestOn(R, from));
+    const out = [[-1, from[0], y0, from[2], yaw0, 0, from[1]], [at, from[0], y0, from[2], yaw0, 0, from[1]]];
+    const d = Math.hypot(to[0] - from[0], to[2] - from[2]), n = Math.max(1, Math.ceil(d / 0.2)), yaw = yawTo(from, to);
+    let t = at, cur = from.slice();
+    for (let i = 1; i <= n; i++) {
+      const k = i / n, x = from[0] + (to[0] - from[0]) * k, z = from[2] + (to[2] - from[2]) * k, y = floor(x, z, cur[1]);
+      if (y === null || V().blocked(x, z, y)) break;
+      t += d / n / WALK; cur = [x, y, z];
+      out.push([t, x, y, z, yaw, 0, y]);
+    }
+    const look = yawTo(cur, nearestOn(R, cur));
+    out.push([t + 0.3, cur[0], cur[1], cur[2], look, 0, cur[1]], [t + 999, cur[0], cur[1], cur[2], look, 0, cur[1]]);
+    return out;
+  }
+  // a defuse is heard: whoever can't see you peeks the spike (a moment to react, then a swing at a run)
+  function heard() {
+    S.heard = true;
+    for (const f of S.foes) if (!f.dead && f.swing !== 'done' && !seesMe(f)) swing(f, 0.25 + Math.random() * 0.45);
   }
 
   // ------------------------------------------------------------------------------------------ loading
@@ -481,7 +516,7 @@
     S.t = MODE === 'death' ? D.t0 : 0; S.lastT = S.t; S.t0 = S.t;
     place(home());
     S.dead = false; S.ammo = gun.mag; S.reload = 0; S.next = 0; S.first = null; S.flash = 0; S.msg = '';
-    S.foes = []; S.spike = null; S.defusing = false;
+    S.foes = []; S.spike = null; S.defusing = false; S.heard = false; S.trail = []; S.rp = null;
     S.U = []; S.hp = HP_ME; S.revealed = 0; S.slowed = false;
     resetKit();
     const uset = chooseUtil();
@@ -508,9 +543,13 @@
       const order = SP._fair.slice().sort(() => Math.random() - 0.5).slice(0, Math.min(NFOES, SP._fair.length));
       S.foes = order.map((i, k) => foe(k, still(SP.hides[i], yawTo(SP.hides[i], nearestOnRoute(SP.hides[i])), Math.random() < 0.3), {fov: 60}));
       if (S.foes.length) pick(S.foes).swing = 'wait';
-    } else if (MODE === 'retake') {
-      const R = myRoute(), posts = SP.posts.slice(0, 5).sort(() => Math.random() - 0.5).slice(0, Math.min(NFOES, SP.posts.length));
-      S.foes = posts.map((p, k) => foe(k, still(p, yawTo(p, nearestOn(R, p)), Math.random() < 0.35), {fov: 60}));
+    } else if (MODE === 'retake') {           // 4.72: a crossfire on the spike, one of them shifts (drillai.js)
+      const R = myRoute(), plan = AI.retakePlan(SP.posts.slice(0, 6), SP.plant, Math.min(NFOES, SP.posts.length), (a, b) => V().visible(a, b));
+      S.foes = plan.map((x, k) => {
+        const crouch = !x.shift && Math.random() < 0.35;
+        return foe(k, x.shift ? shiftPath(x.post, x.shift, x.at, R, false) : still(x.post, yawTo(x.post, nearestOn(R, x.post)), crouch),
+                   {fov: 60, cross: x.cross, shifts: !!x.shift});
+      });
       S.spike = {left: SP.left, prog: 0, half: false};
     } else if (MODE === 'postplant') {
       S.spike = {left: SP.left};
@@ -726,11 +765,45 @@
     S.until = performance.now() / 1000 + (mine === null ? 1.3 : 1.6);
     hud(true);
   }
-  function failRep(label) {
+  function failRep(label, killer = null) {
     if (S.phase !== 'run') return;
     S.dead = true; S.deaths++;
     S.reps.push(MODE === 'clear' ? placement() : null);
-    endRep(null, label);
+    const onSpike = S.defusing;
+    endRep(null, label || (onSpike ? T('Killed on the spike') : null));
+    if (killer && opt.replay && AI) startReplay(killer, onSpike);
+  }
+  // ------------------------------------------------------------------------------------------ the death replay (4.72)
+  // The last seconds again from your killer's eyes (a bit slowed down): you as an agent, where he looked, and why
+  // you lost it. Your next key skips it.
+  function startReplay(f, onSpike) {
+    const t1 = S.t, t0 = Math.max(S.t0, t1 - REPLAY_S);
+    if (S.trail.length < 2 || t1 - t0 < 0.3) return;
+    const at = AI.trailAt(S.trail, t1), prev = AI.trailAt(S.trail, t1 - 0.15) || at;
+    const moving = at && prev && at[0] > prev[0] ? Math.hypot(at[1] - prev[1], at[3] - prev[3]) / (at[0] - prev[0]) : 0;
+    const why = AI.deathFacts({moving: MOVING ? moving : null, accurate: ACCURATE, defusing: onSpike, youSaw: f.seen,
+                               heSaw: f.sees, reloading: S.reload > performance.now() / 1000});
+    const mine = MODE === 'death' ? D.agent : AGENT;          // a death drill: the agent you played
+    const myAgent = (C.agents || {})[mine] ? mine : (AGENTS.find(a => a !== f.agent) || AGENTS[0] || '');
+    S.rp = {f, t0, t1, path: prepPath(AI.trailPath(S.trail)), url: (C.agents || {})[myAgent] || null,
+            had: f.sees !== null ? Math.max(0, t1 - f.sees) : null};
+    S.phase = 'replay'; S.t = t0;
+    S.msg = `<b class="bad">${esc(T('His view'))}</b>` + (S.rp.had !== null ? ` · ${esc(T('he had you for'))} ${S.rp.had.toFixed(2)} s` : '') +
+      (why.length ? ` · ${why.map(w => esc(T(w))).join(' · ')}` : '') + ` <span class="muted small">(${esc(keyName('next'))} ${esc(T('skip'))})</span>`;
+    hud(true);
+  }
+  function replayTick(dt) {
+    S.t += dt * REPLAY_SPEED;
+    if (S.t >= S.rp.t1 + 0.35) endReplay();
+  }
+  function endReplay() {
+    if (S.phase !== 'replay') return;
+    S.t = S.rp.t1; S.phase = 'between'; S.until = performance.now() / 1000 + 0.4;
+  }
+  function replayCam() {                   // from his eyes, onto your chest
+    const p = foeAt(S.rp.f, S.t), me = NM.atClamped(S.rp.path, S.t) || [S.me.x, S.me.y, S.me.z];
+    const e = [p[0], p[1] + 1.6, p[2]], to = [me[0], me[1] + 1.3, me[2]], v = sub(to, e), L = Math.hypot(...v) || 1;
+    V().view({x: e[0], y: e[1] - MAP_EYE, z: e[2], yaw: Math.atan2(v[0], -v[2]), pitch: Math.asin(v[1] / L), fly: true, fov: VFOV});
   }
   function placement() {                    // % of the opened hiding places your crosshair was on (within 7°)
     const op = S.hides.filter(h => h.off !== null);
@@ -780,10 +853,16 @@
     const now = performance.now() / 1000;
     if (S.phase === 'count' && now >= S.until) { S.phase = 'run'; panel(); }
     if (S.phase === 'between' && now >= S.until) afterRep();
+    if (S.phase === 'replay') replayTick(dt);
     if (S.phase === 'run' || S.phase === 'watch') {
       S.lastT = S.t;
       S.t += dt * (S.phase === 'watch' ? WATCH : (MODE === 'death' ? opt.speed : 1));
       if (MOVING && S.phase === 'run') move(dt);
+      if (S.phase === 'run') {                 // 4.72: your last seconds, for the death replay
+        const tr = S.trail, last = tr[tr.length - 1];
+        if (!last || S.t - last[0] >= 1 / 30) tr.push([S.t, S.me.x, S.me.y, S.me.z, S.yaw, S.me.crouch || S.defusing ? 1 : 0]);
+        while (tr.length > 2 && tr[0][0] < S.t - TRAIL_S) tr.shift();
+      }
       for (const f of S.foes) {
         if (f.dead) continue;
         if (f.seen === null && seenBy(f)) {
@@ -792,9 +871,12 @@
         }
         if (MODE === 'death' || f.harmless || S.phase !== 'run') continue;
         if (seesMe(f)) { if (f.sees === null) f.sees = S.t; } else f.sees = null;
-        if (f.sees !== null && S.t - f.sees >= react * (S.t < S.revealed ? REVEAL_REACT : 1)) { failRep(); break; }
+        if (f.sees !== null && S.t - f.sees >= react * (S.t < S.revealed ? REVEAL_REACT : 1)) { failRep(null, f); break; }
       }
-      if (MODE === 'death' && S.phase === 'run' && !S.foes[0].dead && S.t >= D.t_kill) failRep();
+      if (MODE === 'death' && S.phase === 'run' && !S.foes[0].dead && S.t >= D.t_kill) {
+        if (S.foes[0].sees === null) S.foes[0].sees = D.t_kill - (D.his ?? react);
+        failRep(null, S.foes[0]);
+      }
       if (MODE === 'death' && S.phase === 'watch' && S.t >= D.t_kill) { S.phase = 'between'; S.msg = ''; S.until = now + 0.8; }
       if (MODE === 'track' && S.phase === 'run') trackTick(dt);
       if (MODE === 'clear' && S.phase === 'run') clearTick();
@@ -853,6 +935,7 @@
     if (MODE === 'retake') {
       const P = SP.plant, on = Math.hypot(S.me.x - P[0], S.me.z - P[2]) < 1.6 && Math.abs(S.me.y - P[1]) < 1.8;
       S.defusing = on && holds('defuse');
+      if (S.defusing && !S.heard) heard();          // 4.72: they hear it
       if (S.defusing) {
         sp.prog += dt;
         if (sp.prog >= DEFUSE / 2) sp.half = true;
@@ -883,6 +966,7 @@
     }
   }
   function camera() {
+    if (S.phase === 'replay' && S.rp) { replayCam(); return; }
     V().view({x: S.me.x, y: S.me.y + eyeH() - MAP_EYE, z: S.me.z, yaw: S.yaw, pitch: S.pitch, fly: true, fov: VFOV / zoom()});
   }
 
@@ -894,18 +978,32 @@
   }
   function models() {
     const out = [];
+    const replay = S.phase === 'replay' && S.rp;
     for (const f of S.foes) {
-      if (!f.url || hiding(f) || smoked(f)) continue;
-      const p = foeAt(f, f.dead ? f.dead.t : S.t);
+      if (!f.url || hiding(f) || (!replay && smoked(f))) continue;
+      const dead = f.dead && !(replay && S.t < f.dead.t);       // the replay: alive until he died
+      const p = foeAt(f, dead ? f.dead.t : S.t);
       if (!p) continue;
+      if (replay && f === S.rp.f) continue;                     // his eyes are the camera
       const o = {key: f.key, url: f.url, x: p[0], y: p[1], z: p[2], yaw: p[3], col: ENEMY};
-      if (f.dead) {
+      if (dead) {
         o.anim = {lb: [[NM.deathClip(p, eye()), performance.now() / 1000 - f.dead.wall, 1]], ub: null};
       } else if (C.anims) {
         const m = NM.motion(f.path, S.t, p, NM.holdFor(f.weapon));
         o.anim = m.anim; o.y += m.lift; o.gun = (C.guns && C.guns[f.weapon]) || null; o.hold = NM.holdFor(f.weapon);
       }
       out.push(o);
+    }
+    if (replay && S.rp.url) {                // you, as he saw you
+      const p = NM.atClamped(S.rp.path, S.t);
+      if (p) {
+        const o = {key: 99, url: S.rp.url, x: p[0], y: p[1], z: p[2], yaw: p[3], col: ME_COL};
+        if (C.anims) {
+          const m = NM.motion(S.rp.path, S.t, p, NM.holdFor(gun.name));
+          o.anim = m.anim; o.y += m.lift; o.gun = (C.guns && C.guns[gun.name]) || null; o.hold = NM.holdFor(gun.name);
+        }
+        out.push(o);
+      }
     }
     return out;
   }
@@ -1043,7 +1141,7 @@
     track: 'He strafes left and right. Stay on his head for 30 seconds.',
     clear: 'Walk the route onto the site. Have your crosshair on each hiding place, at head height, the moment it opens. Some have an enemy.',
     entry: 'You are first onto the site. Defenders wait on the places they hid in your replays, and one of them swings you when you get close. Take the site.',
-    retake: 'The spike is down. Come back in on the defenders\' way, kill the attackers where they played the spike, and defuse before it goes off (hold your defuse key; half a defuse stays).',
+    retake: 'The spike is down. Come back in on the defenders\' way, kill the attackers where they played the spike, and defuse before it goes off (hold your defuse key; half a defuse stays). They hold a crossfire and shift; when they hear the defuse, they peek the spike: tap it to bait them.',
     postplant: 'You play the spike after the plant. The retakers come in on their real routes at their real speed. Kill each before he has you, and before anyone defuses.'};
   function panel(err) {
     const el = $('dr-panel');
@@ -1182,7 +1280,7 @@
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement === canvas) return;
     S.firing = false; S.ads = false; S.held.clear();
-    if (['run', 'count', 'watch', 'between'].includes(S.phase)) {
+    if (['run', 'count', 'watch', 'between', 'replay'].includes(S.phase)) {
       S.paused = true; S.phase = 'hold'; S.msg = '';
       panel(); hud(true);
     }
@@ -1202,7 +1300,7 @@
       else if (a === 'reload') startReload();
       else if (SLOT_OF[a]) cast(SLOT_OF[a]);
       else if (a === 'restart') { if (document.pointerLockElement !== canvas) lock(); S.paused = false; restart(); }
-      else if (a === 'next') { if (S.phase === 'between' && !S.paused) S.until = 0; }
+      else if (a === 'next') { if (S.phase === 'replay') endReplay(); if (S.phase === 'between' && !S.paused) S.until = 0; }
       else if (a === 'watch') { if (MODE === 'death' && (document.pointerLockElement === canvas || S.phase === 'done')) { if (S.phase === 'done') lock(); watch(); } }
       else if (a === 'full') {
         const el = $('dr');
@@ -1250,12 +1348,14 @@
     const el = $('dr-opts');
     el.hidden = false;
     $('dr-o-speed').value = String(opt.speed); $('dr-o-heads').checked = !!opt.heads; $('dr-o-reps').value = String(opt.reps);
+    if ($('dr-o-replay')) $('dr-o-replay').checked = !!opt.replay;
     $('dr-o-speed').closest('label').hidden = MODE !== 'death';
     $('dr-o-reps').closest('label').hidden = MODE !== 'death';
     KB.editor($('dr-keys'), {keys, defaults: C.defaults || keys, actions: C.actions, api: C.keys_api, onSave: k => { keys = k; panel(); }});
   }
   $('dr-opts').addEventListener('change', () => {
     opt.heads = $('dr-o-heads').checked;
+    if ($('dr-o-replay')) opt.replay = $('dr-o-replay').checked;
     if (MODE === 'death') { opt.speed = +$('dr-o-speed').value || 1; opt.reps = +$('dr-o-reps').value || 10; }
     saveOpt(); hud(true);
   });
@@ -1301,5 +1401,7 @@
                        foeInfo: (i = 0) => (S.foes[i] ? {at: S.foes[i].at, swing: S.foes[i].swing || null, seen: S.foes[i].seen,
                                                           hp: S.foes[i].hp, blind: S.foes[i].blind || 0, daze: S.foes[i].daze || 0, rev: S.foes[i].rev || 0} : null),
                        kit: () => ({...S.kit}),
+                       replay: () => (S.rp ? {t0: S.rp.t0, t1: S.rp.t1, had: S.rp.had, killer: S.foes.indexOf(S.rp.f), on: S.phase === 'replay'} : null),
+                       heard: () => S.heard, plan: () => S.foes.map(f => ({cross: !!f.cross, shifts: !!f.shifts})),
                        foeDead: i => !!(S.foes[i] && S.foes[i].dead)};
 })();
