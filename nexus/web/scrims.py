@@ -1,5 +1,9 @@
 """Team › Practice › Scrims: the team's scrim log (stats/scrims.py). Everyone in the team adds scrims and reads them;
-a scrim can be changed or removed by whoever wrote it and by the team owner."""
+a scrim can be changed or removed by whoever wrote it and by the team owner.
+
+4.74: a scrim whose match is in your games (the same day and map, two or more of you in it) gets "Review it
+round by round": a review evening on that match (comp against your plan, strats against the utility used, where
+each kill was)."""
 from __future__ import annotations
 
 import json
@@ -33,6 +37,25 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
 
     def maps_of(t) -> list[str]:
         return list(t.map_list) + sorted(set(known_maps) - set(t.map_list))
+
+    def match_of(t, scrims: list[dict]) -> dict[str, str]:
+        """4.74: scrim id -> the match id it most likely was: same day and map, two or more members in it, the
+        score the same if one fits."""
+        found: dict[str, dict] = {}
+        for m in t.member_list:
+            for r in sr.games(m["pid"]).rows()[:120]:
+                mid = r.get("match_id")
+                if mid:
+                    e = found.setdefault(mid, {"map": r.get("map"), "day": (r.get("started_at") or "")[:10],
+                                                "score": (r.get("score") or "").replace("–", "-"), "n": 0})
+                    e["n"] += 1
+        out = {}
+        for sc_ in scrims:
+            fits = [(mid, e) for mid, e in found.items() if e["n"] >= 2 and e["map"] == sc_["map"] and e["day"] == sc_["date"]]
+            exact = [mid for mid, e in fits if e["score"] == f"{sc_['us']}-{sc_['them']}"]
+            if exact or len(fits) == 1:
+                out[sc_["id"]] = (exact or [fits[0][0]])[0]
+        return out
 
     def form_dict() -> dict:
         f = request.form
@@ -75,7 +98,8 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             edit = None
         return render_template("team_scrims.html", t=t, tab="scrims", scrims=list(reversed(shown)), n_all=len(scrims), sm=sm,
                                tend=sc.tendencies(sm), maps=maps, topics=sc.TOPICS, sides=sc.SIDES, f_map=mp, f_opp=opp,
-                               edit=edit, result=sc.result, today=date.today().isoformat(), opponents=sorted({s["opponent"] for s in scrims}, key=str.lower))
+                               edit=edit, result=sc.result, today=date.today().isoformat(), opponents=sorted({s["opponent"] for s in scrims}, key=str.lower),
+                               matches=match_of(t, shown))
 
     @app.post("/teams/<int:tid>/scrims/<sid>/delete")
     def team_scrim_delete(tid: int, sid: str):

@@ -114,6 +114,7 @@
     {% if s.worked or s.didnt %}<div class="txt">
       {% if s.worked %}<div><small>What worked</small><p>{{ s.worked }}</p></div>{% endif %}
       {% if s.didnt %}<div><small>What didn't</small><p>{{ s.didnt }}</p></div>{% endif %}</div>{% endif %}
+    {% if matches.get(s.id) %}<div class="acts"><a class="btn sm" href="{{ url_for('team_evening', tid=t.id, match=matches[s.id]) }}" title="A review evening on this match: your comp against the plan, the strats against the utility used, where each kill was">Review it round by round</a></div>{% endif %}
     {% if s.uid == user.id or g.team_owner %}<div class="acts"><a class="btn sm ghost" href="{{ url_for('team_scrims', tid=t.id, edit=s.id) }}#add">Change</a>
       <form method="post" action="{{ url_for('team_scrim_delete', tid=t.id, sid=s.id) }}" data-q="Remove this scrim?" onsubmit="return confirm(this.dataset.q)"><button class="btn sm ghost danger">Remove</button></form></div>{% endif %}
   </div>

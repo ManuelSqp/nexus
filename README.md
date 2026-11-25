@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.73.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.74.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -156,6 +156,11 @@ and the placed utility. *⤓ Picture* saves the moment as a PNG and *📷 Discor
 time) to the team's review channel (4.20). The playback in your own coaching reports has the same buttons (4.20):
 notes there are just for you, the strat board goes to your team's strat book and the picture to its clip channel;
 older reports get them too.
+**Scrim review (4.74):** the evening also checks the match against your plan: the comp you played against the draft
+marked *our comp* for the map (who wasn't played, who instead), where each kill was (the killer's and the victim's
+callout), each player's utility in the round (C, Q, E, X, when Riot's data has the casts), and *Strat this round*:
+pick the strat you ran and see its drawn abilities against what each agent used. A scrim in *Practice › Scrims*
+whose match is in your games (same day and map) links to it: *Review it round by round*.
 *Practice › Aim* keeps aim routines (Aimlabs share links, KovaaK's codes, steps for the Range), picks the ones that fit
 your matches and sets your warm-up, which shows on the match screen, in the practice plan and as a push before the match.
 KovaaK's is switched off on the web pages since 4.26 (the code and stored scores stay; `WEB = True` in
