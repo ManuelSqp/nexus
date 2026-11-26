@@ -7,9 +7,10 @@
    'Aim drills on the real maps, with the game\'s agents') }}
 
 <section class="card am-suggest" id="am-suggest" hidden></section>
+<p class="small" style="margin:-6px 0 12px"><a href="{{ url_for('aim_lineups', pid=p.id) }}">Lineups</a> <span class="muted">· record where you stand and aim for an ability, then practise finding it (4.81)</span></p>
 
-{% macro val(x, unit) %}{% if x is none %}–{% elif unit == '%' %}{{ x|round|int }} %{% else %}{{ '%.2f'|format(x) }} s{% endif %}{% endmacro %}
-{% macro diff(b, unit) %}{% if b is none %}<span class="muted">–</span>{% elif (unit == '%' and b|abs < 0.5) or (unit != '%' and b|abs < 0.005) %}<span class="muted">same</span>{% elif unit == '%' %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '+' if b > 0 }}{{ b|round|int }} points</span>{% else %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '%.2f'|format(b|abs) }} s {{ 'faster' if b > 0 else 'slower' }}</span>{% endif %}{% endmacro %}
+{% macro val(x, unit) %}{% if x is none %}–{% elif unit == '%' %}{{ x|round|int }} %{% elif unit == '°' %}{{ '%.1f'|format(x) }}°{% else %}{{ '%.2f'|format(x) }} s{% endif %}{% endmacro %}
+{% macro diff(b, unit) %}{% if b is none %}<span class="muted">–</span>{% elif (unit == '%' and b|abs < 0.5) or (unit == '°' and b|abs < 0.05) or (unit == 's' and b|abs < 0.005) %}<span class="muted">same</span>{% elif unit == '%' %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '+' if b > 0 }}{{ b|round|int }} points</span>{% elif unit == '°' %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '%.1f'|format(b|abs) }}° {{ 'closer' if b > 0 else 'further off' }}</span>{% else %}<span class="{{ 'up' if b > 0 else 'down' }}">{{ '%.2f'|format(b|abs) }} s {{ 'faster' if b > 0 else 'slower' }}</span>{% endif %}{% endmacro %}
 {# 4.67: the daily warm-up #}
 <section class="card am-warm">
   <div><b>Daily warm-up</b> <span class="muted small">about 10 minutes: up to 6 drills in a row: what slipped this week, what your newest match points to, one tracking drill, and what you got better at.</span></div>

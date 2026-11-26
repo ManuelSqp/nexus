@@ -542,7 +542,8 @@ def read_runs(stats_dir: Path) -> dict:
 
 KINDS = {"death": "s", "hold": "s", "attack": "s", "track": "%", "clear": "%",      # what a rep's number is
          "entry": "s", "retake": "s", "postplant": "s",                              # 4.54
-         "place": "°"}                                   # 4.77: crosshair placement, degrees off the heads
+         "place": "°",                                   # 4.77: crosshair placement, degrees off the heads
+         "lineup": "°"}                                  # 4.81: lineups, degrees off the saved aim
 HIGHER = {"track", "clear"}                     # the bigger the better (the others: times, the smaller the better)
 
 
@@ -610,7 +611,7 @@ def summary(runs: list[dict], kind: str = "death") -> dict:
 # ------------------------------------------------------------------------------------------------ 4.65: your week
 MODE_NAMES = {"death": "Your deaths", "hold": "Hold an angle", "attack": "Take an angle", "track": "Tracking",
               "clear": "Clear a site", "entry": "Entry", "retake": "Retake", "postplant": "Post-plant",
-              "place": "Crosshair placement"}
+              "place": "Crosshair placement", "lineup": "Lineups"}
 WEEKS = 8
 
 

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% import "_ui.html" as vc %}
+{% block title %}Lineups · {{ p.riot_id }} · Nexus{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='drills.css') }}?v={{ app_version }}">
+<style>
+.lu-map{margin-bottom:14px}.lu-map h2{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 8px}
+.lu-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px}
+.lu{border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.lu b{display:block}.lu form{margin:0}
+.lu-rec{display:flex;flex-wrap:wrap;gap:8px;align-items:end}.lu-rec label{display:flex;flex-direction:column;font-size:12.5px;gap:3px}
+.lu-ideas li{margin:4px 0}
+</style>{% endblock %}
+{% block content %}
+{{ vc.pagehead('Lineups', [('Players', url_for('index') ~ '#players'), (p.name ~ '#' ~ p.tag, url_for('profile', pid=p.id)), ('Aim on maps', url_for('aim_maps', pid=p.id))],
+   'Where to stand and aim for an ability, recorded in the 3D map, then found again from memory') }}
+
+{% if can_edit %}
+<section class="card">
+  <h2 style="margin-top:0">Record a lineup</h2>
+  <p class="muted small" style="margin-top:0">You start on the map and walk where you throw it from, aim, and press your shoot key: where you stand and look is saved (press it again to save it over). Crouch first if the lineup is crouched.</p>
+  {% if maps %}
+  <form class="lu-rec" method="get" action="{{ url_for('aim_lineup_record', pid=p.id) }}">
+    <label>Map<select name="map">{% for m in maps %}<option>{{ m }}</option>{% endfor %}</select></label>
+    <label>Agent<select name="agent">{% for a in agents %}<option>{{ a }}</option>{% endfor %}</select></label>
+    <label>Ability<select name="ability">{% for k in keys %}<option>{{ k }}</option>{% endfor %}</select></label>
+    <label>Name<input name="name" maxlength="60" placeholder="Sova Q A Main from spawn" required></label>
+    <button class="btn primary">Record</button>
+  </form>
+  {% else %}<p class="muted">No maps with a 3D view yet: Aim on maps needs replay files of a map first.</p>{% endif %}
+  {% if ideas %}
+  <h3 style="margin:14px 0 4px">From your strat book</h3>
+  <p class="muted small" style="margin:0">Abilities your team's strats draw that you have no lineup for yet.</p>
+  <ul class="lu-ideas small">{% for x in ideas %}{% if x.map in maps %}
+    <li><b>{{ x.name }}</b> <span class="muted">· {{ x.map }} · in “{{ x.strat }}”</span>
+      <a href="{{ url_for('aim_lineup_play', pid=p.id, map_name=x.map, record=1, agent=x.agent, ability=x.ability, name=x.name) }}">record it</a></li>{% endif %}{% endfor %}</ul>
+  {% endif %}
+</section>
+{% endif %}
+
+{% for m, xs in by_map|dictsort %}
+<section class="card lu-map">
+  <h2>{{ m }} <span class="muted small">{{ xs|length }} {{ 'lineup' if xs|length == 1 else 'lineups' }}{% if best.get(m) is not none %} · best session {{ '%.1f'|format(best[m]) }}° off{% endif %}</span>
+    {% if m in maps %}<a class="btn sm primary" href="{{ url_for('aim_lineup_play', pid=p.id, map_name=m) }}">Practise them</a>{% endif %}</h2>
+  <div class="lu-list">{% for x in xs %}
+    <div class="lu"><span><b>{{ x.name }}</b><span class="muted small">{{ x.agent }} {{ x.ability }}{{ ' · crouched' if x.crouch }}</span></span>
+      <span class="row" style="gap:6px">
+        {% if m in maps %}<a class="btn sm ghost" href="{{ url_for('aim_lineup_play', pid=p.id, map_name=m, ids=x.id) }}">Practise</a>{% endif %}
+        {% if can_edit %}<form method="post" action="{{ url_for('aim_lineup_delete', pid=p.id, lid=x.id) }}" data-q="Delete {{ x.name }}?" onsubmit="return confirm(this.dataset.q)"><button class="btn sm ghost" title="Delete">×</button></form>{% endif %}
+      </span></div>
+  {% endfor %}</div>
+</section>
+{% else %}
+<section class="card"><p class="muted">No lineups yet. Record one above.</p></section>
+{% endfor %}
+{% endblock %}
