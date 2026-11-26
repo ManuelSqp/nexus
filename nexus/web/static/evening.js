@@ -97,6 +97,11 @@
     const buy = r.buy;
     const facts = [];
     if (buy) facts.push(['Buys', `${esc(BUY[buy.us] || buy.us)} (${esc(buy.us_avg.toLocaleString())}) vs ${esc(BUY[buy.them] || buy.them)} (${esc(buy.them_avg.toLocaleString())})`]);
+    const ec = (B.econ && B.econ.rounds || {})[String(r.n)];         // 4.76: money against the buy
+    if (ec) {
+      facts.push(['Money', `${esc(ec.money.toLocaleString())} each · bought ${esc(ec.bought.toLocaleString())}`]);
+      if (ec.text.length) facts.push(['Buy', `<span class="econ-bad">${ec.text.map(esc).join(' · ')}</span>`]);
+    }
     if (r.first) facts.push(['First kill', `${r.first.ours ? esc(r.first.k) : esc(r.first.k) + ' (them)'} on ${esc(r.first.v)} at ${esc(r.first.t)}`]);
     if (r.plant) facts.push([r.plant.ours ? 'You planted' : 'They planted', `${r.plant.site ? esc(r.plant.site) + ' site' : 'spike'} at ${esc(r.plant.t)}${r.defused ? ', defused' : ''}`]);
     facts.push(['Alive at the end', `${esc(r.alive[0])} of you, ${esc(r.alive[1])} of them`]);

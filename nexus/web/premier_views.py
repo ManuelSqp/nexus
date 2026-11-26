@@ -354,7 +354,10 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
         r = pj.review(tid, match_id)
         if r is None:
             abort(404)
-        return render_template("premier_review.html", **ctx(t, "overview", r=r))
+        from ..stats import econreview
+        er = app.extensions["nexus"].get("econ_review")
+        econ = er(t, match_id) if er else None                  # 4.76: money against the buys, round by round
+        return render_template("premier_review.html", **ctx(t, "overview", r=r, econ=econ, econ_lines=econreview.lines(econ)))
 
     @app.post("/teams/<int:tid>/premier/reviews")
     def team_reviews_run(tid: int):

@@ -23,6 +23,7 @@ from flask import abort, flash, g, jsonify, redirect, render_template, request, 
 from .. import pipeline
 from ..parse import parse_match
 from ..discord import channel as _channel
+from ..stats import econreview
 from ..stats import evening as ev_stats
 
 SID_RE = re.compile(r"[0-9a-f]{10}")
@@ -144,6 +145,21 @@ def register(app, store, sr, get_team) -> None:
                 "marks": ev.get("marks") or {}, "here": here(t.id, ev["id"]), "updated": ev.get("updated", 0),
                 "planned": ev.get("planned") or "", "pins": ev.get("pins") or {}, "strats": ev.get("strats") or {}}
 
+    def econ_of(t, match_id: str) -> dict | None:
+        """4.76: a match's economy for the team (econreview), from the match in the cache; None without it."""
+        if not pipeline.valid_match_id(match_id or ""):
+            return None
+        raw = _read(cache / "matches" / f"{match_id}.json")
+        if not raw:
+            return None
+        try:
+            m = parse_match(raw)
+        except Exception:
+            return None
+        side = ev_stats.our_side(m, set(member_puuids(t)))
+        return econreview.review(m, side) if side else None
+    app.extensions["nexus"]["econ_review"] = econ_of
+
     def our_comp(tid: int, map_name: str) -> tuple[list[str], str]:
         """4.74: the team's comp for a map: the draft marked "our comp" (its agents in slot order) and its name."""
         for d in store.drafts(tid, map_name):
@@ -203,6 +219,7 @@ def register(app, store, sr, get_team) -> None:
                   "host_id": g.user.id, "host": g.user.display_name or g.user.username, "created": time.time(),
                   "finished": False}
             ev["key"] = ev_stats.key_rounds(ev["rounds"])
+            ev["econ"] = econreview.review(m, side)               # 4.76: money against the buys
             plan, plan_name = our_comp(tid, m.map_name)           # 4.74: your comp against the plan
             ev["comp"] = ev_stats.comp_check([p["agent"] for p in ev["players"]], plan)
             if ev["comp"]:
@@ -223,6 +240,8 @@ def register(app, store, sr, get_team) -> None:
     def team_evening_session(tid: int, sid: str):
         t = get_team(tid)
         ev = load(tid, sid)
+        if "econ" not in ev:                                  # 4.76: an evening from before: worked out now
+            ev = {**ev, "econ": econ_of(t, ev.get("match_id"))}
         summary = ev_stats.summarize(ev)
         return render_template("team_evening_session.html", t=t, tab="evening", premier_status=None, ev=ev,
                                me=my_player(t, ev), host=can_host(t, ev), summary=summary, marks=ev_stats.MARKS,
@@ -238,7 +257,8 @@ def register(app, store, sr, get_team) -> None:
                                                 "replay_js": url_for("replay_js"),
                                                 "summary": url_for("team_evening_summary", tid=tid, sid=sid), "marks": ev_stats.MARKS,
                                                 "agent_icon": url_for("agent_icon", name="__A__"),
-                                                "comp": ev.get("comp"), "strat_list": strat_list(tid, ev.get("map") or "")}).replace("</", "<\\/"),
+                                                "comp": ev.get("comp"), "strat_list": strat_list(tid, ev.get("map") or ""),
+                                                "econ": ev["econ"]}).replace("</", "<\\/"),
                                discord=bool(_channel(t.discord_info, "review")))
 
     @app.get("/teams/<int:tid>/review-evening/<sid>/summary")
@@ -246,6 +266,8 @@ def register(app, store, sr, get_team) -> None:
         """Just the summary block, so it stays current while people mark."""
         t = get_team(tid)
         ev = load(tid, sid)
+        if "econ" not in ev:
+            ev = {**ev, "econ": econ_of(t, ev.get("match_id"))}
         return render_template("_evening_summary.html", t=t, ev=ev, host=can_host(t, ev), summary=ev_stats.summarize(ev),
                                discord=bool(_channel(t.discord_info, "review")))
 
