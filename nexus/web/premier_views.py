@@ -148,6 +148,8 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
                                                                      for pk in c["picks"]]}
         plans = sr.read_plans(t.id, map_name) or {}
         out["plans"] = [{"title": p.get("title"), "side": p.get("side"), "idea": p.get("idea")} for p in plans.get("plans", [])[:3]]
+        ps = app.extensions["nexus"].get("prep_strats")                  # 4.79: boards drafted against opponents
+        out["prep"] = [dict(x, url=url_for("strat_edit", tid=t.id, sid=x["id"])) for x in (ps(t.id, map_name) if ps else [])[:4]]
         f = sr.read_focus(t.id) or {}
         out["focus"] = []
         for m in t.member_list:

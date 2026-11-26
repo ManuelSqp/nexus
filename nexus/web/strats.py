@@ -308,6 +308,68 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
         store.update_strat(sid, g.user.id, **fields)
         return jsonify(ok=True, saved_at=time.strftime("%H:%M:%S"))
 
+    # ---- 4.79: a plan against a scouted team, drafted from their scouting
+    def zone_centres(map_name: str) -> dict:
+        from ..stats.stratprep import zone_centres as zc
+        try:
+            mi = maps_reg.get(name=map_name)
+        except Exception:
+            mi = None
+        if not mi:
+            return {}
+        pts = [(c.super_region, *mi.to_uv(c.x, c.y)) for c in mi.callouts if c.region.lower() != "spawn"]
+        return zc(pts)
+
+    def prep_strats(tid: int, map_name: str | None = None) -> list[dict]:
+        """The drafts made against scouted teams (newest first): {id, name, side, map, team, made}."""
+        out = []
+        for row in store.strats(tid):
+            if map_name and row["map"] != map_name:
+                continue
+            full = store.strat(row["id"]) or {}
+            pr = (full.get("data") or {}).get("prep")
+            if isinstance(pr, dict):
+                out.append({"id": row["id"], "name": row["name"], "side": row["side"], "map": row["map"],
+                            "team": pr.get("team", ""), "made": pr.get("made", "")})
+        return sorted(out, key=lambda x: x["made"], reverse=True)
+    app.extensions["nexus"]["prep_strats"] = prep_strats
+
+    @app.post("/teams/<int:tid>/strats/prep")
+    def strat_prep(tid: int):
+        """4.79: draft boards against a scouted team (one map, or all their maps), from its scouting."""
+        from ..stats import scouting as sc
+        from ..stats import stratprep
+        t = get_team(tid)
+        pj = app.extensions["nexus"].get("premier")
+        team_id = str(request.form.get("team_id") or "")
+        s = pj.scouted(tid, team_id) if pj and team_id else None
+        if not s:
+            abort(404)
+        want = request.form.get("map") or ""
+        maps = [m for m in (s.get("play") or {}) if m in maps_for(t) and (not want or m == want)]
+        have = {(x["map"], x["name"]) for x in store.strats(tid)}
+        made, kept = [], 0
+        for m in maps:
+            for p in stratprep.plans(s, m, zone_centres(m), sc.map_lines(s, m)):
+                if (m, p["name"]) in have:
+                    kept += 1
+                    continue
+                data = clean_board({"steps": [{"name": "Their " + ("setup" if p["side"] == "attack" else "hit"),
+                                               "call": p["call"], "items": p["items"]}], "notes": p["notes"],
+                                    "prep": {"team_id": team_id, "team": s.get("name") or team_id, "tag": s.get("tag") or "",
+                                             "made": time.strftime("%Y-%m-%d")}})
+                made.append(store.create_strat(tid, g.user.id, m, p["side"], p["name"], data))
+        if made:
+            flash(f"Drafted {len(made)} board{'s' if len(made) != 1 else ''} against {s.get('name') or team_id}"
+                  + (f" ({kept} already there)" if kept else "") + ". Edit them like any strat.", "ok")
+        elif kept:
+            flash(f"The boards against {s.get('name') or team_id} are already in your strat book.", "ok")
+        else:
+            flash("Not enough of their rounds scouted to draft a plan. Scout them again or later.", "error")
+        if len(made) == 1:
+            return redirect(url_for("strat_edit", tid=tid, sid=made[0]))
+        return redirect(url_for("team_strats", tid=tid, map=want or None))
+
     @app.post("/api/teams/<int:tid>/strats/from-replay")
     def strat_from_replay(tid: int):
         """4.18: a moment of the round playback (positions, utility, drawings) as a new strat board."""

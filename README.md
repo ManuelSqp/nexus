@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.78.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.79.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -481,6 +481,11 @@ Since 4.78 each map on a team's page also has *How they play their rounds*, per 
 buy): on attack which site they plant, how fast (plant and first fight), and how they're set up at the first fight
 (stacked in one zone or spread out); on defense how they stand (players per zone) and how often they look for early
 picks. What stands out goes into the "how to play them" lines and the match-day brief (`stats/roundplay.py`).
+*Draft a plan in the strat book* (4.79, on each map there) turns it into two boards in your strat book: *their
+setup* for your attack (their defenders where they stand at the first fight, the site with the fewest of them
+marked, retake and early-pick notes) and *their hit* for your defense (their five where they go on full buys, their
+main site marked, how fast). Each has a call and their scouting as notes; edit them like any strat, and the
+match-day brief lists them under *Against your opponents* (`stats/stratprep.py`).
 
 **Drafts.** On a team, *Drafts* → pick a map → *+ New draft* (your starters in the slots) or *Use* one of the
 suggested comps. Drag agents from the list onto a player (the small box under it is a backup pick), drag between
