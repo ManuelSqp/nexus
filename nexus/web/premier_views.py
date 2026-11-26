@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 
@@ -60,6 +60,8 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
         b.setdefault("days", [])
         b.setdefault("time", "20:00")
         b.setdefault("before", 60)
+        b.setdefault("ping", False)                          # 4.85: the match-day ping in the morning
+        b.setdefault("ping_at", "12:00")
         return b
 
     def pool(t) -> list[str]:
@@ -245,7 +247,90 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
                 pass
         return done
 
+    def ping_text(t, day, url: str = "") -> tuple[str, list[str]]:
+        """4.85: the match-day ping for a day ("" if it's no match day)."""
+        from .availability import morning_text
+        ext = app.extensions["nexus"]
+        s, ids = ext["avail_ping"](t, day)
+        if s is None:
+            return "", []
+        b = brief_cfg(t)
+        extra = []
+        ps = ext.get("prep_strats")
+        if s.get("map") and ps:
+            boards = [x["name"] for x in ps(t.id, s["map"])][:4]
+            if boards:
+                extra.append(f"**Boards against opponents on {s['map']}:** " + ", ".join(boards))
+        try:
+            hh, mm = (int(x) for x in str(b["time"]).split(":"))
+            at = (hh * 60 + mm - int(b["before"])) % (24 * 60)
+            if b["on"]:
+                extra.append(f"The brief (comp, game plans, focus) comes at {at // 60:02d}:{at % 60:02d}. "
+                             "Your lineups for the strats: the match screen in Nexus.")
+        except ValueError:
+            pass
+        return morning_text(s, ids, t.name, b["time"], extra, url)
+
+    def post_ping(t, day=None, url: str = "") -> bool:
+        from ..discord import post as dpost
+        hook = t.discord_info.get("prep_url") or t.discord_info.get("focus_url")
+        if not hook:
+            raise RuntimeError("Add a Discord webhook under the team's ⚙ Settings first.")
+        text, ping = ping_text(t, day or datetime.now().date(), url)
+        if not text:
+            return False
+        dpost(hook, text, mentions=ping)
+        return True
+
+    def tick_ping(now: datetime | None = None) -> list[int]:
+        """4.85: on the match days set for the brief, once a day from ping_at until the match starts."""
+        now = now or datetime.now()
+        done = []
+        for t in store.all_teams():
+            b = brief_cfg(t)
+            if not b["ping"] or not b["days"] or now.weekday() not in b["days"]:
+                continue
+            today = now.strftime("%Y-%m-%d")
+            try:
+                ph, pm = (int(x) for x in str(b["ping_at"]).split(":"))
+                hh, mm = (int(x) for x in str(b["time"]).split(":"))
+            except ValueError:
+                continue
+            if not (ph * 60 + pm <= now.hour * 60 + now.minute < hh * 60 + mm) or b.get("ping_day") == today:
+                continue
+            info = t.sync_info
+            info.setdefault("brief", {})["ping_day"] = today
+            store.update_team(t.id, sync=info)
+            site = store.get("site_url") or ""               # the address Nexus is opened at (4.16), for the link
+            try:
+                if post_ping(t, now.date(), f"{site}/teams/{t.id}/premier/availability" if site else ""):
+                    done.append(t.id)
+            except Exception:
+                app.logger.exception("match-day ping")
+        return done
+
+    @app.post("/teams/<int:tid>/premier/ping")
+    def team_ping_now(tid: int):
+        """Send today's (or the next match day's) ping now."""
+        t = get_team(tid, manage=True)
+        from .availability import DEFAULT_DAYS
+        days = brief_cfg(t)["days"] or DEFAULT_DAYS
+        day = datetime.now().date()
+        for k in range(7):
+            if (day + timedelta(days=k)).weekday() in days:
+                day = day + timedelta(days=k)
+                break
+        try:
+            ok = post_ping(t, day, url_for("team_availability", tid=tid, _external=True))
+            flash(f"Posted the match-day ping for {day.strftime('%a %d.%m.')}." if ok else "No match day in the next 7 days.",
+                  "ok" if ok else "error")
+        except Exception as e:
+            flash(str(e), "error")
+        return redirect(url_for("team_premier", tid=tid))
+
+    app.extensions["nexus"]["match_ping"] = ping_text
     app.extensions["nexus"].setdefault("ticks", []).append(tick_brief)
+    app.extensions["nexus"]["ticks"].append(tick_ping)
     app.extensions["nexus"]["premier"] = pj
     app.extensions["nexus"]["week_map"] = lambda t: week_map(t)[0]
     app.extensions["nexus"]["next_avail"] = next_avail
@@ -551,6 +636,9 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
                 b["before"] = max(10, min(240, int(f.get("before", 60))))
             except ValueError:
                 b["before"] = 60
+            b["ping"] = bool(f.get("ping"))                   # 4.85
+            pa = f.get("ping_at", "12:00")
+            b["ping_at"] = pa if re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", pa) else "12:00"
         info["brief"] = b
         store.update_team(tid, sync=info)
         flash("Saved.", "ok")

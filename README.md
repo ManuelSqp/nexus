@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.84.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.85.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -840,6 +840,11 @@ defuse baits them out.
 **Sessions as a chart (4.73).** A drill's card (and its result screen) draws your sessions: the median of each
 as a dot on a line (hover one for its day, the median and the reps won), your best session marked, and your goal on
 that drill as a dashed line with its day (✓ once reached).
+
+**Match-day ping (4.85).** *Premier › Brief before each match › Match-day ping*: on the match days, from the time
+you set (12:00 by default) until the match, once a day to Discord: the time and map, who's playing (who can't, the
+sub), the ones who haven't answered pinged (with their Discord ID set), the boards against opponents on the map
+and when the brief comes. *Send the match-day ping now* posts the next one by hand.
 
 **Did the prep work (4.84).** The boards drafted against a scouted team (4.79) are checked against the rounds you
 tag with them in review evenings. In the evening of a match against that team they come first in the strat pick

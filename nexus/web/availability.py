@@ -140,6 +140,28 @@ def reminder_text(sums: list[dict], ids: dict[int, str], team: str, url: str) ->
     return (f"**{team}**: who can play? No answer yet:\n" + "\n".join(lines) + f"\nMark your days: {url}", sorted(set(ping)))
 
 
+def morning_text(s: dict, ids: dict[int, str], team: str, time: str, extra: list[str] | None = None,
+                 url: str = "") -> tuple[str, list[str]]:
+    """4.85: the match-day ping: when and where, who's playing (who can't, the sub), the ones who haven't answered
+    pinged, then extra lines (the boards against opponents, when the brief comes). -> (text, Discord ids to allow)."""
+    what = "Playoffs today" if s.get("playoffs") else "Match day today"
+    lines = [f"🏆 **{team}: {what}**, {time}" + (f" on **{s['map']}**" if s.get("map") else "")]
+    lines.append("**Who's playing:** " + summary_line({**s, "unknown": []}))
+    ping, who = [], []
+    for m in s.get("unknown") or []:
+        did = ids.get(m["pid"])
+        if did:
+            who.append(f"<@{did}>")
+            ping.append(did)
+        else:
+            who.append(m["name"])
+    if who:
+        lines.append("**No answer yet:** " + ", ".join(who) + " (can you play? Mark it under Premier › Availability"
+                     + (f": {url}" if url else "") + ")")
+    lines += extra or []
+    return "\n".join(lines)[:1900], sorted(set(ping))
+
+
 def find_me(members: list[dict], user_id: int, ingame: str) -> int | None:
     """Which team player you are: the one linked to your account, else the one whose Riot ID (Name#TAG) is your
     in-game name. None if neither."""
@@ -310,6 +332,12 @@ def register(app, store, get_team, h: dict):
                            "map": m, "playoffs": po, "today": False})
         return {s["day"]: s for s in summaries(t, ds)[0]} if ds else {}
 
+    def ping_of(t, day: date) -> tuple[dict | None, dict[int, str]]:
+        """4.85: the day's summary (None if it's no match day) and the players' Discord ids."""
+        members, _ = members_of(t)
+        return summary_for(t, day), {m["pid"]: m["discord_id"] for m in members if m.get("discord_id")}
+
+    app.extensions["nexus"]["avail_ping"] = ping_of
     app.extensions["nexus"]["avail_days"] = days_of
     app.extensions["nexus"]["avail_line"] = summary_line
     return summary_for, next_summary

@@ -92,9 +92,13 @@
         <div class="field" style="margin:0"><label for="bt">Match time</label><input id="bt" type="time" name="time" value="{{ cfg.time }}" style="width:auto"></div>
         <div class="field" style="margin:0"><label for="bb">Minutes before</label><input id="bb" type="number" name="before" min="10" max="240" value="{{ cfg.before }}" style="width:90px"></div>
       </div>
+      <label class="choice" style="margin-top:10px"><input type="checkbox" name="ping" value="1" {{ 'checked' if cfg.ping }}>
+        <span><b>Match-day ping</b><span class="muted small">On match days: the time and map, who's playing (who can't, the sub), the ones who haven't answered pinged, the boards against opponents.</span></span></label>
+      <div class="field" style="margin:0"><label for="bp">Ping at</label><input id="bp" type="time" name="ping_at" value="{{ cfg.ping_at }}" style="width:auto"></div>
       <button class="btn sm" style="margin-top:10px">Save</button>
       {% if not (discord.prep_url or discord.focus_url) %}<p class="small" style="color:var(--amber)">Add a Discord webhook under <a href="{{ url_for('team_settings', tid=t.id) }}">Team settings</a> first.</p>{% endif %}
     </form>
+    {% if discord.prep_url or discord.focus_url %}<form method="post" action="{{ url_for('team_ping_now', tid=t.id) }}" style="margin-top:8px"><button class="btn sm ghost" title="The next match day's ping, now">Send the match-day ping now</button></form>{% endif %}
     {% else %}<p class="muted small">{% if cfg.on %}Posted to Discord {{ cfg.before }} min before {{ cfg.time }} on {% for d in cfg.days %}{{ days[d] }}{{ ', ' if not loop.last }}{% endfor %}.{% else %}Not set up by the team owner.{% endif %}</p>{% endif %}
   </section>
 </div>
