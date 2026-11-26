@@ -52,6 +52,14 @@ kbd{background:var(--ink);border:1px solid var(--line);border-radius:4px;padding
 {% endblock %}
 {% block content %}
 <div class="muted small" style="margin-bottom:6px"><a href="{{ url_for('team_strats', tid=t.id, map=s.map) }}">{{ t.name }} · Strat book</a> › {{ s.map }}</div>
+{% if rate %}{# 4.75: how it did in the rounds you tagged with it in review evenings #}
+<details class="srec small"><summary><b>{{ rate_text }}</b>{% if rate.few %} <span class="muted">· few rounds yet</span>{% endif %}{% if rate_util %} <span class="muted">· {{ rate_util }}</span>{% endif %}</summary>
+  <div class="srec-r">{% for r in rate.rounds[:20] %}<a class="{{ 'w' if r.won else 'l' }}" href="{{ url_for('team_evening_session', tid=t.id, sid=r.ev) }}#r{{ r.n }}" title="{{ r.at[:10] }} · round {{ r.n }} · {{ r.score }}">{{ 'W' if r.won else 'L' }} <span>vs {{ r.opponent }} · R{{ r.n }}</span></a>{% endfor %}</div>
+</details>
+<style>.srec{margin:0 0 8px}.srec summary{cursor:pointer}.srec-r{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.srec-r a{text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:2px 8px;color:var(--text)}
+.srec-r a.w{border-color:var(--win)}.srec-r a.l{border-color:var(--red)}.srec-r a span{color:var(--muted)}</style>
+{% else %}<div class="muted small" style="margin:0 0 8px">Tag rounds with this strat in a <a href="{{ url_for('team_evening', tid=t.id) }}">review evening</a> to see how it does.</div>{% endif %}
 <div id="strat">
 <div class="sb-top">
   <input type="text" id="sb-name" maxlength="80" aria-label="Name">

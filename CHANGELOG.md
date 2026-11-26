@@ -4,6 +4,16 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.75.0
+- **Strat win rates.** Every round you tag with a strat in a review evening (*Strat this round*, 4.74) now counts
+  for that strat:
+  - **Strat book:** each card shows how often you ran it and the rounds won ("Ran 9 rounds · won 5 (56 %)", with a
+    bar), and whether the utility went in as drawn ("Utility as drawn in 5 of 8 · won 4 of those, 1 of the other 3").
+    Under 5 rounds it says "few rounds yet". Each map names its best strat per side among those run 5 times or more.
+  - **A strat's page:** the same numbers, and its rounds (won/lost, opponent, round number); a click opens the
+    review evening at that round.
+  - **The evening's strat pick** shows each strat's record next to its name.
+
 ## 4.74.1
 - The *open it* link next to *Strat this round* (review evening) no longer takes its address from the page: it's the
   strat's page next to the evening, with the strat's number checked (a CodeQL alert from 4.74.0).

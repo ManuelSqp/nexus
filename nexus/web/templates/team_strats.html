@@ -16,6 +16,10 @@
 .cmap{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .cmap h3{margin:0 0 4px;font-size:16px}.cmap ul{margin:6px 0 0;padding-left:18px;font-size:13px;line-height:1.6}
 .cmap .miss{color:var(--amber)}
+/* 4.75: how a strat did in your reviewed rounds */
+.srate{margin-top:6px;font-size:12.5px}.srate .bar{height:4px;border-radius:2px;background:var(--line);margin-top:4px;overflow:hidden}
+.srate .bar i{display:block;height:100%;background:var(--win)}.srate .few{color:var(--muted)}
+.sbest{font-size:12.5px;font-weight:500;color:var(--muted);margin-left:10px}.sbest b{color:var(--text)}
 </style>
 {% endblock %}
 {% block content %}
@@ -61,11 +65,15 @@
 {% endif %}
 {% for m, ss in by_map|dictsort %}
 <div class="mapblock" id="map-{{ m }}">
-  <h3>{{ m }} <span class="muted small">{{ ss|length }}</span></h3>
+  <h3>{{ m }} <span class="muted small">{{ ss|length }}</span>
+    {% for side, b in (best.get(m) or {})|dictsort %}<span class="sbest">best on {{ side }}: <b>{{ b.name }}</b> {{ b.pct }} % of {{ b.ran }}</span>{% endfor %}</h3>
   <div class="sgrid">{% for s in ss %}
     <div class="scard-w"><a class="scard" href="{{ url_for('strat_edit', tid=t.id, sid=s.id) }}">
       <div class="side {{ s.side }}">{{ s.side|capitalize }}</div><b>{{ s.name }}</b>
-      <div class="muted small">changed {{ s.updated_at|localtime }}{% if s.author %} by {{ s.author }}{% endif %}</div></a>
+      <div class="muted small">changed {{ s.updated_at|localtime }}{% if s.author %} by {{ s.author }}{% endif %}</div>
+      {% if s.rate %}<div class="srate"><span>{{ s.rate }}</span>{% if s.few %} <span class="few">· few rounds yet</span>{% endif %}
+        {% if s.rate_util %}<div class="muted">{{ s.rate_util }}</div>{% endif %}
+        <div class="bar" role="img" aria-label="{{ s.pct }} % won"><i style="width:{{ s.pct }}%"></i></div></div>{% endif %}</a>
       <form method="post" action="{{ url_for('strat_style', tid=t.id, sid=s.id) }}" class="sstyle">
         <select name="style" aria-label="Style of {{ s.name }}" onchange="this.form.submit()">
           <option value="">{{ ('looks ' ~ styles[s.style]|lower) if s.style and not s.style_set else 'no style' }}</option>
