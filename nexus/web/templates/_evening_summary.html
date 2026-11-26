@@ -30,6 +30,10 @@
       {% else %}<p class="muted small">No round marked "talk about it" yet.</p>{% endfor %}
     </div>
     <div>
+      {% if summary.prep %}{# 4.84: the boards drafted against them #}
+      <h3>Your prep against them</h3>
+      <ul class="econ-l">{% for x in summary.prep %}<li>{{ x }}</li>{% endfor %}</ul>
+      {% endif %}
       {% if summary.econ %}{# 4.76: the rounds where the buy didn't fit #}
       <h3>Economy</h3>
       <ul class="econ-l">{% for x in summary.econ %}<li>{{ x }}</li>{% endfor %}</ul>

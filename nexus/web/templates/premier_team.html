@@ -3,7 +3,7 @@
 {% macro ai(agent, size=22) %}<img class="ai" src="{{ url_for('agent_icon', name=agent) }}" width="{{ size }}" height="{{ size }}" alt="{{ agent }}" title="{{ agent }}" loading="lazy" onerror="this.style.visibility='hidden'">{% endmacro %}
 {% block head %}
 <style>
-.prep-f{margin:8px 0 0}
+.prep-f{margin:8px 0 0}.prep-b{margin:6px 0 0;border-left:3px solid var(--amber);padding-left:7px}
 /* 4.78: how they play their rounds */
 .rplay{margin-top:8px}.rplay summary{cursor:pointer}
 .rp{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px}
@@ -114,6 +114,10 @@
     </div>
     {% if mlines.get(m) %}<ul class="howto small" style="margin-top:6px">{% for l in mlines[m] %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
     {% set pl = (s.play or {}).get(m) %}{# 4.78: how they play their rounds, per buy #}
+    {% for b in boards.get(m, []) %}{# 4.84: your boards against them #}
+    <div class="small prep-b"><a href="{{ url_for('strat_edit', tid=t.id, sid=b.id) }}">{{ b.name }}</a> <span class="muted">{{ b.side }}</span> ·
+      {% if b.rec.ran %}won {{ b.rec.won }} of {{ b.rec.ran }} round{{ 's' if b.rec.ran != 1 }} against them{% else %}<span class="muted">not tagged in a review evening against them yet</span>{% endif %}</div>
+    {% endfor %}
     {% if pl and (pl.attack or pl.defense) %}{# 4.79 #}
     <form method="post" action="{{ url_for('strat_prep', tid=t.id) }}" class="prep-f"><input type="hidden" name="team_id" value="{{ team_id }}"><input type="hidden" name="map" value="{{ m }}">
       <button class="btn sm ghost" title="Two boards in your strat book: their setup on defense, their hit on attack, with a call and notes">Draft a plan in the strat book</button></form>

@@ -153,7 +153,7 @@
     box.hidden = false;
     const pick = (S.strats || {})[String(r.n)] || '';
     if (document.activeElement !== sel)
-      sel.innerHTML = `<option value="">– none –</option>` + mine.map(x => `<option value="${esc(x.id)}" ${+pick === x.id ? 'selected' : ''}>${esc(x.name)}${x.rate ? ` · ${esc(x.rate.pct)} % of ${esc(x.rate.ran)}` : ''}</option>`).join('');   // 4.75: its record
+      sel.innerHTML = `<option value="">– none –</option>` + mine.map(x => `<option value="${esc(x.id)}" ${+pick === x.id ? 'selected' : ''}>${x.prep ? '★ ' : ''}${esc(x.name)}${x.rate ? ` · ${esc(x.rate.pct)} % of ${esc(x.rate.ran)}` : ''}</option>`).join('');   // 4.75: its record
     const st = STRATS.find(x => x.id === +pick);
     const link = $('#stratlink');
     link.hidden = !st;

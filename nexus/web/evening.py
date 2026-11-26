@@ -25,6 +25,7 @@ from ..parse import parse_match
 from ..discord import channel as _channel
 from ..stats import econreview
 from ..stats import evening as ev_stats
+from ..stats import prepresult
 
 SID_RE = re.compile(r"[0-9a-f]{10}")
 PRESENT_S = 20                   # someone counts as "here" this long after his last refresh
@@ -168,8 +169,28 @@ def register(app, store, sr, get_team) -> None:
                 return [x.get("agent") or "" for x in data.get("slots") or [] if isinstance(x, dict)], d.get("name") or ""
         return [], ""
 
-    def strat_list(tid: int, map_name: str) -> list[dict]:
-        """4.74: the team's strats on the map with the utility each one draws (for the round's strat pick)."""
+    def prep_of(t, ev: dict) -> list[dict]:
+        """4.84: the boards drafted against this evening's opponent (stats/prepresult.evening)."""
+        from ..stats import prepresult
+        ps = app.extensions["nexus"].get("prep_strats")
+        if not ps or not ev.get("map"):
+            return []
+        opp_id = ev.get("opponent_id") or ""
+        if not opp_id and ev.get("match_id"):
+            pj = app.extensions["nexus"].get("premier")
+            try:
+                opp_id = ((pj.review(t.id, ev["match_id"]) if pj else None) or {}).get("opponent_id") or ""
+            except Exception:
+                opp_id = ""
+        try:
+            return prepresult.evening(ev, ps(t.id, ev["map"]), opp_id)
+        except Exception:
+            app.logger.exception("prep of an evening")
+            return []
+
+    def strat_list(tid: int, map_name: str, prep_ids: set | None = None) -> list[dict]:
+        """4.74: the team's strats on the map with the utility each one draws (for the round's strat pick). 4.84:
+        the boards drafted against this opponent first, marked."""
         out = []
         rates_of = app.extensions["nexus"].get("strat_rates")
         rates = rates_of(tid) if rates_of else {}           # 4.75: how each one did so far
@@ -180,7 +201,8 @@ def register(app, store, sr, get_team) -> None:
             r = rates.get(row["id"])
             out.append({"id": row["id"], "name": row["name"], "side": row["side"],
                         "util": ev_stats.strat_util(full.get("data") or {}),
-                        "rate": {"ran": r["ran"], "pct": r["pct"]} if r else None})
+                        "rate": {"ran": r["ran"], "pct": r["pct"]} if r else None, "prep": row["id"] in (prep_ids or ())})
+        out.sort(key=lambda x: not x["prep"])
         return out
 
     # ------------------------------------------------------------------ pages
@@ -213,7 +235,7 @@ def register(app, store, sr, get_team) -> None:
             ours, theirs = m.team_rounds_won.get(side, 0), m.team_rounds_won.get(other, 0)
             ev = {"id": secrets.token_hex(5), "match_id": m.match_id or mid, "map": m.map_name, "started_at": m.started_at,
                   "queue": m.queue, "won": ours > theirs, "score": f"{ours}–{theirs}", "side_team": side,
-                  "opponent": (rv or {}).get("opponent") or "their team",
+                  "opponent": (rv or {}).get("opponent") or "their team", "opponent_id": (rv or {}).get("opponent_id") or "",
                   "players": [{"name": p.name, "agent": p.agent, "puuid": p.puuid} for p in m.players_on(side)],
                   "rounds": ev_stats.round_facts(m, side, mi.area if mi and mi.callouts else None), "marks": {}, "current": 1,
                   "host_id": g.user.id, "host": g.user.display_name or g.user.username, "created": time.time(),
@@ -243,6 +265,8 @@ def register(app, store, sr, get_team) -> None:
         if "econ" not in ev:                                  # 4.76: an evening from before: worked out now
             ev = {**ev, "econ": econ_of(t, ev.get("match_id"))}
         summary = ev_stats.summarize(ev)
+        prep = prep_of(t, ev)                                 # 4.84
+        summary["prep"] = prepresult.lines(prep)
         return render_template("team_evening_session.html", t=t, tab="evening", premier_status=None, ev=ev,
                                me=my_player(t, ev), host=can_host(t, ev), summary=summary, marks=ev_stats.MARKS,
                                boot=json.dumps({"state": state(t, ev), "rounds": ev["rounds"], "key": ev.get("key") or [],
@@ -257,7 +281,7 @@ def register(app, store, sr, get_team) -> None:
                                                 "replay_js": url_for("replay_js"),
                                                 "summary": url_for("team_evening_summary", tid=tid, sid=sid), "marks": ev_stats.MARKS,
                                                 "agent_icon": url_for("agent_icon", name="__A__"),
-                                                "comp": ev.get("comp"), "strat_list": strat_list(tid, ev.get("map") or ""),
+                                                "comp": ev.get("comp"), "strat_list": strat_list(tid, ev.get("map") or "", {x["id"] for x in prep}),
                                                 "econ": ev["econ"]}).replace("</", "<\\/"),
                                discord=bool(_channel(t.discord_info, "review")))
 
@@ -268,7 +292,9 @@ def register(app, store, sr, get_team) -> None:
         ev = load(tid, sid)
         if "econ" not in ev:
             ev = {**ev, "econ": econ_of(t, ev.get("match_id"))}
-        return render_template("_evening_summary.html", t=t, ev=ev, host=can_host(t, ev), summary=ev_stats.summarize(ev),
+        summary = ev_stats.summarize(ev)
+        summary["prep"] = prepresult.lines(prep_of(t, ev))    # 4.84
+        return render_template("_evening_summary.html", t=t, ev=ev, host=can_host(t, ev), summary=summary,
                                discord=bool(_channel(t.discord_info, "review")))
 
     @app.get("/api/teams/<int:tid>/review-evening/<sid>")
@@ -386,7 +412,9 @@ def register(app, store, sr, get_team) -> None:
         try:
             if not url:
                 raise RuntimeError("Add a Discord webhook under Team settings first.")
-            dpost(url, ev_stats.discord_text(ev, ev_stats.summarize(ev), t.name))
+            summary = ev_stats.summarize(ev)
+            summary["prep"] = prepresult.lines(prep_of(t, ev))    # 4.84
+            dpost(url, ev_stats.discord_text(ev, summary, t.name))
             flash("Posted the summary to Discord.", "ok")
         except Exception as e:
             flash(f"Not posted: {e}", "error")

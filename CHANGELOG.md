@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.84.0
+- **Did the prep work?** The boards you draft against a scouted team (*Draft a plan in the strat book*, 4.79) are
+  checked against the rounds you tag with them in review evenings.
+  - **Review evening** of a match against that team: the boards come first in the round's strat pick, marked ★. The
+    summary gets *Your prep against them*: each board, the rounds you ran it in and how many you won, or that it
+    wasn't tagged in any round. The summary's Discord post includes it too.
+  - **Strat book:** a board's card shows *Prep against Rivals · won 3 of 4 rounds* (plus its rounds against others).
+  - **Their scouting page:** under each map, your boards against them with their record.
+  - New evenings store the opponent's Premier id, so the boards are found even if the team renames itself; older
+    evenings use the match's review or the name and tag.
+
 ## 4.83.0
 - **Lineups for your strats:** the coach goes through every ability your side has on a strat board, step by step,
   and puts the matching lineup from the team's lineups library next to it, with the clip. It matches the agent and

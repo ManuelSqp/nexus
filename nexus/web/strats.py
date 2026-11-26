@@ -250,6 +250,12 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             r = rates.get(s["id"])
             s["rate"], s["rate_util"] = stratrates.text(r), stratrates.util_text(r)
             s["pct"], s["few"] = (r["pct"], r["few"]) if r else (None, True)
+        from ..stats import prepresult
+        for p in prep_strats(tid):                           # 4.84: a board against a team: how it did against them
+            s = next((x for x in strats if x["id"] == p["id"]), None)
+            if s is not None:
+                s["prep_for"] = p["team"] or "them"
+                s["prep_rec"] = prepresult.record_text(prepresult.record(rates.get(p["id"]), p), p["team"])
         best = {m: stratrates.best(ss, rates) for m, ss in by_map.items()}
         return render_template("team_strats.html", t=t, tab="strats", by_map=by_map, maps=maps_for(t),
                                sel=request.args.get("map", ""), premier_status=sr.status(f"premier:{tid}"),
@@ -378,7 +384,8 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             pr = (full.get("data") or {}).get("prep")
             if isinstance(pr, dict):
                 out.append({"id": row["id"], "name": row["name"], "side": row["side"], "map": row["map"],
-                            "team": pr.get("team", ""), "made": pr.get("made", "")})
+                            "team": pr.get("team", ""), "made": pr.get("made", ""), "tag": pr.get("tag", ""),
+                            "team_id": str(pr.get("team_id") or "")})
         return sorted(out, key=lambda x: x["made"], reverse=True)
     app.extensions["nexus"]["prep_strats"] = prep_strats
 

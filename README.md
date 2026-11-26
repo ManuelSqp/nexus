@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.83.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.84.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -840,6 +840,12 @@ defuse baits them out.
 **Sessions as a chart (4.73).** A drill's card (and its result screen) draws your sessions: the median of each
 as a dot on a line (hover one for its day, the median and the reps won), your best session marked, and your goal on
 that drill as a dashed line with its day (✓ once reached).
+
+**Did the prep work (4.84).** The boards drafted against a scouted team (4.79) are checked against the rounds you
+tag with them in review evenings. In the evening of a match against that team they come first in the strat pick
+(★), and the summary (and its Discord post) says which ones you ran, in which rounds, and how many you won, or
+that one wasn't tagged. The strat book's cards and the team's scouting page show each board's record against them
+(`stats/prepresult.py`).
 
 **Lineups for your strats (4.83).** Each strat lists, step by step, every ability your side has on the board
 with the lineup from the team's library that fits it (same agent and ability, the site it lands on, the side, the
