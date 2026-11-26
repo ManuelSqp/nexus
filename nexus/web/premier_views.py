@@ -348,7 +348,16 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
         from ..stats import compstyle, counter as ctr                # 4.66: the comp style that counters them
         counters = {m: ctr.counter(s, m) for m in s.get("maps", {})}
         from ..stats.roundplay import setup_text
-        return render_template("premier_team.html", **ctx(t, "division", s=s, v=v, lines=general_lines(s), mlines=mlines, wm=wm,
+        boards: dict[str, list] = {}                                  # 4.84: your boards against them, how they did
+        ps, rt = app.extensions["nexus"].get("prep_strats"), app.extensions["nexus"].get("strat_rates")
+        if ps:
+            from ..stats import prepresult
+            rates = rt(tid) if rt else {}
+            for p in ps(tid):
+                if prepresult.against(p, team_id, f"{s.get('name', '')}#{s.get('tag', '')}"):
+                    rec = prepresult.record(rates.get(p["id"]), p)
+                    boards.setdefault(p["map"], []).append({**p, "rec": rec["vs"]})
+        return render_template("premier_team.html", **ctx(t, "division", s=s, v=v, lines=general_lines(s), mlines=mlines, wm=wm, boards=boards,
                                                            counters=counters, setup_text=setup_text, style_names=compstyle.STYLES, team_id=team_id,
                                                            status=sr.status(f"scout:{tid}"), replays=replays_of(t, s, wm)))
 

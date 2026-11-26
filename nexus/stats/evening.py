@@ -309,4 +309,7 @@ def discord_text(ev: dict, s: dict, team: str) -> str:
     if s["plan"]:
         lines.append("\n**Into the practice plan**")
         lines += [f"• {p['title']}" for p in s["plan"]]
+    if s.get("prep"):                                        # 4.84: the boards drafted against them
+        lines.append("\n**Our prep against them**")
+        lines += [f"• {x}" for x in s["prep"]]
     return "\n".join(lines)[:1900]
