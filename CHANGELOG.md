@@ -4,6 +4,16 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.85.0
+- **Match-day ping on Discord** (Premier › *Brief before each match* › *Match-day ping*, with the time to send it,
+  12:00 by default): on the match days, once a day between that time and the match, it posts:
+  - the time and the map (or *Playoffs today*);
+  - who's playing: confirmed out of 5, maybe, who can't play and the sub for them;
+  - the players who haven't answered yet, pinged (the ones with a Discord ID set under Availability);
+  - the boards against opponents on the map, and when the brief comes (if it's on).
+  - *Send the match-day ping now* posts the next match day's ping by hand, with the link to the availability page.
+- The brief 60 minutes before the match stays as it was: the ping is the heads-up earlier in the day.
+
 ## 4.84.0
 - **Did the prep work?** The boards you draft against a scouted team (*Draft a plan in the strat book*, 4.79) are
   checked against the rounds you tag with them in review evenings.
