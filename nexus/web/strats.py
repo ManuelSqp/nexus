@@ -141,6 +141,44 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
             mp["m"] = round(abs(mi.x_mult) * 100 * 1000, 3) or 7.0
         return {"agents": out_agents, "map": mp}
 
+    def strat_lineups(t, s: dict, ideas: list[dict] | None = None, library: list[dict] | None = None) -> list[dict]:
+        """4.83: the lineups the strat needs, step by step (stats/stratlineups), matched with the library and, for the
+        ones it has nothing for, the lineups your team throws in its replays (ideas: pass them to save the work when
+        doing several strats of a map)."""
+        from ..stats import stratlineups as sl
+        try:
+            names = {a["name"]: {ab["slot"].lower(): ab["name"] for ab in a.get("abilities", [])} for a in agents_reg.load() if a.get("name")}
+        except Exception:
+            names = {}
+        try:
+            mi = maps_reg.get(name=s["map"])
+        except Exception:
+            mi = None
+        pts = []
+        if mi:
+            for c in mi.callouts:
+                u, v = mi.to_uv(c.x, c.y)
+                pts.append((c.label, c.super_region, u * 1000, v * 1000))
+
+        def place(x: float, y: float) -> tuple[str, str]:
+            if not pts:
+                return "", ""
+            c = min(pts, key=lambda p: (p[2] - x) ** 2 + (p[3] - y) ** 2)
+            return c[0], c[1]
+
+        steps = sl.uses(s.get("data") or {}, lambda a, slot: names.get(a, {}).get(slot.lower(), ""), place)
+        if not steps:
+            return []
+        if ideas is None:
+            fn = app.extensions["nexus"].get("lineup_ideas")
+            try:
+                ideas = fn(t, s["map"]) if fn else []
+            except Exception:
+                ideas = []
+        lib = library if library is not None else store.lineups(t.id, s["map"])
+        return sl.match(steps, lib, s.get("side") or "", ideas)
+    app.extensions["nexus"]["strat_lineups"] = strat_lineups
+
     # ------------------------------------------------------------------ helpers
     def get_strat(tid: int, sid: int):
         t = get_team(tid)
@@ -273,7 +311,17 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
         can_delete = g.team_owner or s["author_id"] == g.user.id
         from ..stats import stratrates
         rate = team_rates(tid).get(sid)                      # 4.75: how it did in your reviewed rounds
-        return render_template("strat_edit.html", t=t, s=s, tab="strats", can_delete=can_delete,
+        try:                                                 # 4.83: the lineups it needs, from the library (not in the
+            needs = [] if request.args.get("embed") == "1" else strat_lineups(t, s)     # match screen's player)
+        except Exception:
+            app.logger.exception("lineups for a strat")
+            needs = []
+        from .lineups import clip_info
+        for st in needs:
+            for u in st["uses"]:
+                if u["lineup"] and u["lineup"].get("url"):
+                    u["lineup"]["clip"] = clip_info(u["lineup"]["url"])
+        return render_template("strat_edit.html", t=t, s=s, tab="strats", can_delete=can_delete, needs=needs,
                                boot=json.dumps(boot).replace("</", "<\\/"), premier_status=None,
                                rate=rate, rate_text=stratrates.text(rate), rate_util=stratrates.util_text(rate))
 
@@ -440,7 +488,16 @@ def register(app, store, sr, get_team, known_maps: list[str]) -> None:
         notes = (s["data"].get("notes") or "").strip()
         text = f"**{s['name']}** · {s['map']} {s['side']}{' · ' + step if step else ''}"
         if notes:
-            text += "\n" + notes[:1500]
+            text += "\n" + notes[:1200]
+        try:                                                  # 4.83: the lineups of the step (or the strat), with their clips
+            from ..stats import stratlineups as sl
+            needs = strat_lineups(t, s, ideas=[])
+            lu = sl.lines(needs, step if any(x["step"] == step for x in needs) else "")
+        except Exception:
+            lu = []
+        if lu:
+            add = "\n**Lineups**\n" + "\n".join(f"- {x}" for x in lu)
+            text += add if len(text) + len(add) <= 1990 else add[: max(0, 1990 - len(text))].rsplit("\n", 1)[0]
         try:
             post_file(url, text, f"{re.sub(r'[^A-Za-z0-9]+', '-', s['name'])[:40] or 'strat'}.png", data)
         except Exception:

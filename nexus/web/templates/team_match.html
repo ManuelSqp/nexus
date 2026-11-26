@@ -51,6 +51,8 @@ body[data-side=attack] [data-side-only=attack],body[data-side=defense] [data-sid
 .stratbox[hidden]{display:none}.stratbox .bar{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
 .stratbox iframe{flex:1;border:0;width:100%;border-radius:0 0 var(--radius) var(--radius)}
 .keys{font-size:12.5px;color:var(--faint);margin-top:14px}
+.slu-m{margin:-2px 0 10px;padding-left:4px;font-size:13px}.slu-m .mine{display:flex;gap:6px;align-items:flex-start;margin:3px 0}
+.slu-m .mine a{margin-left:4px}.slu-m details{margin-top:2px}.slu-u{margin:2px 0 2px 10px}
 </style>
 {% endblock %}
 {% block content %}
@@ -135,6 +137,14 @@ body[data-side=attack] [data-side-only=attack],body[data-side=defense] [data-sid
       {% for sd in ('attack', 'defense') %}<div data-side-only="{{ sd }}">
         {% for x in strats if x.side == sd %}<div class="sr"><span><b>{{ x.name }}</b><br><span class="small">changed {{ x.updated_at|localtime }}</span></span>
           <button type="button" class="btn sm" data-strat="{{ url_for('strat_edit', tid=t.id, sid=x.id, play=1, embed=1) }}" data-name="{{ x.name }}">Play</button></div>
+        {% set nd = needs.get(x.id) %}{% if nd %}{# 4.83: the lineups it needs; yours first #}
+        <div class="slu-m">{% for stp, u in nd.mine %}<div class="mine">{{ ai(u.agent, 18) }}<span><b>{{ stp }}</b> · {{ u.ability }}{% if u.near %} → {{ u.near }}{% endif %}:
+            {% if u.lineup and u.lineup.url %}<a href="{{ u.lineup.url }}" target="_blank" rel="noopener">▶ {{ u.lineup.title }}</a>{% elif u.lineup %}{{ u.lineup.title }}{% elif u.idea %}<span class="muted">not in the library (you throw “{{ u.idea.title }}”)</span>{% else %}<span class="muted">no lineup yet</span>{% endif %}
+            {% if u.d3 %}<a class="small" href="{{ u.d3 }}">{{ 'practise in 3D' if 'ids=' in u.d3 else 'record in 3D' }}</a>{% endif %}</span></div>{% endfor %}
+          <details><summary class="small muted">{{ nd.n }} {{ 'lineup' if nd.n == 1 else 'lineups' }}{% if nd.missing %} · {{ nd.missing }} not in the library{% endif %}</summary>
+            {% for st in nd.steps %}<div class="small"><b>{{ st.step }}</b>{% for u in st.uses %}<div class="slu-u">{{ u.agent }}{% if u.player %} ({{ u.player }}){% endif %} · {{ u.ability }}{% if u.near %} → {{ u.near }}{% endif %}:
+              {% if u.lineup and u.lineup.url %}<a href="{{ u.lineup.url }}" target="_blank" rel="noopener">▶ {{ u.lineup.title }}</a>{% elif u.lineup %}{{ u.lineup.title }}{% else %}<span class="muted">none</span>{% endif %}</div>{% endfor %}</div>{% endfor %}
+            <a class="small" href="{{ url_for('strat_edit', tid=t.id, sid=x.id) }}#lineups">on the strat page</a></details></div>{% endif %}
         {% else %}<p class="empty-s">No {{ sd }} strats on {{ sel }}.</p>{% endfor %}
       </div>{% endfor %}
     </section>

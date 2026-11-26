@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.82.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.83.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -840,6 +840,12 @@ defuse baits them out.
 **Sessions as a chart (4.73).** A drill's card (and its result screen) draws your sessions: the median of each
 as a dot on a line (hover one for its day, the median and the reps won), your best session marked, and your goal on
 that drill as a dashed line with its day (✓ once reached).
+
+**Lineups for your strats (4.83).** Each strat lists, step by step, every ability your side has on the board
+with the lineup from the team's library that fits it (same agent and ability, the site it lands on, the side, the
+callout in its name) and its clip. If the library has none, it names one your team throws in its replay files or
+asks you to add one. On the match screen each strat shows your lineups first, with a link to practise or record
+them in the 3D trainer, and posting a strat step to Discord adds its lineups as links (`stats/stratlineups.py`).
 
 **Lineups (4.81).** *Aim on maps › Lineups*: record a lineup in the 3D map (pick the map, agent, ability and a
 name, walk where you throw it from, aim, press your shoot key: where you stand and look is saved), then practise

@@ -414,6 +414,53 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
         mins = (now - start).total_seconds() / 60
         return -90 <= mins <= 180
 
+    def strat_needs(t, m, strats, lineups, comp_agents, b, me_name, me_pid) -> dict:
+        """4.83: per strat of the map, the lineups it needs (web/strats.strat_lineups), yours marked (your comp agent
+        or your name on the agent token), with a link to practise or record it in the 3D trainer."""
+        from ..stats import lineups as lu3
+        from ..stats import stratlineups as sl
+        ext = app.extensions["nexus"]
+        fn = ext.get("strat_lineups")
+        if not m or fn is None or not strats:
+            return {}
+        my_agent = next((p["agent"] for p in (b.get("comp") or {}).get("picks", []) if me_name and p.get("player") == me_name), "")
+        out = {}
+        for x in strats:
+            full = store.strat(x["id"]) or {}
+            try:
+                steps = fn(t, full, ideas=[], library=lineups)
+            except Exception:
+                app.logger.exception("lineups for a strat")
+                steps = []
+            if steps:
+                out[x["id"]] = {"steps": steps, "side": full.get("side") or ""}
+        if any(sl.missing(v["steps"]) for v in out.values()) and ext.get("lineup_ideas"):
+            try:
+                ideas = ext["lineup_ideas"](t, m)
+            except Exception:
+                ideas = []
+            for v in out.values():
+                sl.match(v["steps"], lineups, v["side"], ideas)
+        d3 = ext["lineup3d"](me_pid, m) if me_pid and ext.get("lineup3d") else {"map": None, "have": []}
+        for v in out.values():
+            mine = []
+            for st in v["steps"]:
+                for u in st["uses"]:
+                    u["mine"] = bool(me_name) and (u["player"] == me_name or (not u["player"] and u["agent"] == my_agent))
+                    if u["mine"]:
+                        key = lu3.SLOT_KEY.get(u["slot"].lower(), "")
+                        have = next((h for h in d3["have"] if h["agent"] == u["agent"] and h["ability"] == key), None)
+                        if d3["map"] and have:
+                            u["d3"] = url_for("aim_lineup_play", pid=me_pid, map_name=d3["map"], ids=have["id"])
+                        elif d3["map"] and key:
+                            u["d3"] = url_for("aim_lineup_record", pid=me_pid, map=d3["map"], agent=u["agent"], ability=key,
+                                              name=(f"{u['agent']} {key} {u['near']}".strip())[:60])
+                        mine.append((st["step"], u))
+            v["mine"] = mine
+            v["n"] = sum(len(st["uses"]) for st in v["steps"])
+            v["missing"] = sl.missing(v["steps"])
+        return out
+
     @app.get("/teams/<int:tid>/match")
     def team_match(tid: int):
         """Everything for the match you're playing, on one screen: comp, plans, strats, lineups, the opponent."""
@@ -432,11 +479,12 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
             r["clip"] = clip_info(r["url"]) if r.get("url") else None
         lineups.sort(key=lambda r: (r["agent"] not in comp_agents, r["agent"], r.get("site") or "", r["title"]))
         # you: the member linked to your account (or named like your in-game name)
-        me_name = ""
+        me_name, me_pid = "", None
         for mm in t.member_list:
             p = store.profile(mm["pid"])
             if p and (mm.get("user_id") == g.user.id or (g.user.display_name and p.riot_id.lower() == g.user.display_name.lower())):
-                me_name = p.name
+                me_name, me_pid = p.name, p.id
+        needs = strat_needs(t, m, strats, lineups, comp_agents, b, me_name, me_pid)        # 4.83
         idx = pj.scout_index(t.id)
         opponents = sorted(((tm["id"], tm["name"]) for tm in (idx.get("teams") or {}).values()), key=lambda x: x[1].lower())
         opp = None
@@ -451,7 +499,7 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
                        "comps": (mp.get("comps") or [])[:2], "replays": replays_of(t, s, m)}
         roles.load(cache_dir)
         return render_template("team_match.html", **ctx(t, "match", b=b, sel=m, maps=maps, plans=plans, strats=strats,
-                                                         lineups=lineups, comp_agents=comp_agents, me_name=me_name,
+                                                         lineups=lineups, comp_agents=comp_agents, me_name=me_name, needs=needs,
                                                          opponents=opponents, opp=opp, live=match_window(t),
                                                          warm=(app.extensions["nexus"].get("aim") or {}).get("card", lambda *_: None)(t, g.user.id),
                                                          side=request.args.get("side") if request.args.get("side") in ("attack", "defense") else "attack"))

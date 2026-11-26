@@ -145,6 +145,8 @@ def register(app, store, get_team, known_maps: list[str]) -> None:
             out.append(x)
         return out[:12]
 
+    app.extensions["nexus"]["lineup_ideas"] = lambda t, m: suggestions(t, m, store.lineups(t.id, m))   # 4.83
+
     @app.post("/teams/<int:tid>/lineups/<int:lid>/delete")
     def lineup_delete(tid: int, lid: int):
         get_team(tid)
