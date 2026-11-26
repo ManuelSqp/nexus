@@ -541,7 +541,8 @@ def read_runs(stats_dir: Path) -> dict:
 
 
 KINDS = {"death": "s", "hold": "s", "attack": "s", "track": "%", "clear": "%",      # what a rep's number is
-         "entry": "s", "retake": "s", "postplant": "s"}                              # 4.54
+         "entry": "s", "retake": "s", "postplant": "s",                              # 4.54
+         "place": "°"}                                   # 4.77: crosshair placement, degrees off the heads
 HIGHER = {"track", "clear"}                     # the bigger the better (the others: times, the smaller the better)
 
 
@@ -550,8 +551,8 @@ def clean_run(body: dict) -> dict | None:
     percentage for tracking and clearing), None for a rep you lost."""
     reps = body.get("reps")
     kind = body.get("kind") if body.get("kind") in KINDS else "death"
-    top = (100.0 if KINDS[kind] == "%" else 120.0 if kind in ("attack", "entry", "retake")   # moving: up to a minute
-           else 30.0)
+    top = (100.0 if KINDS[kind] == "%" else 180.0 if KINDS[kind] == "°"
+           else 120.0 if kind in ("attack", "entry", "retake") else 30.0)       # moving: up to a minute
     if not isinstance(reps, list) or not 0 < len(reps) <= 50:
         return None
     out_reps = []
@@ -608,7 +609,8 @@ def summary(runs: list[dict], kind: str = "death") -> dict:
 
 # ------------------------------------------------------------------------------------------------ 4.65: your week
 MODE_NAMES = {"death": "Your deaths", "hold": "Hold an angle", "attack": "Take an angle", "track": "Tracking",
-              "clear": "Clear a site", "entry": "Entry", "retake": "Retake", "postplant": "Post-plant"}
+              "clear": "Clear a site", "entry": "Entry", "retake": "Retake", "postplant": "Post-plant",
+              "place": "Crosshair placement"}
 WEEKS = 8
 
 
@@ -690,17 +692,25 @@ def weekly(data: dict, now: float | None = None, weeks: int = WEEKS) -> dict:
             "total": sum(w["sessions"] for w in weeks_out), "this": weeks_out[-1], "last": weeks_out[-2] if weeks > 1 else None}
 
 
-def _fmt(x, unit: str) -> str:
-    return "–" if x is None else (f"{round(x)} %" if unit == "%" else f"{x:.2f} s")
+def fmt_value(x, unit: str) -> str:
+    """A rep's or session's number as people read it: "62 %", "0.48 s", "3.4°" (4.77)."""
+    if x is None:
+        return "–"
+    return f"{round(x)} %" if unit == "%" else f"{x:.1f}°" if unit == "°" else f"{x:.2f} s"
+
+
+_fmt = fmt_value
 
 
 def _diff(b, unit: str) -> str:
     if b is None:
         return "no run last week"
-    if (unit == "%" and abs(b) < 0.5) or (unit != "%" and abs(b) < 0.005):
+    if (unit == "%" and abs(b) < 0.5) or (unit == "°" and abs(b) < 0.05) or (unit == "s" and abs(b) < 0.005):
         return "about the same"
     if unit == "%":
         return f"{'+' if b > 0 else ''}{round(b)} points ({'better' if b > 0 else 'worse'})"
+    if unit == "°":
+        return f"{abs(b):.1f}° {'closer' if b > 0 else 'further off'}"
     return f"{abs(b):.2f} s {'faster' if b > 0 else 'slower'}"
 
 
@@ -743,7 +753,7 @@ def coach_facts(data: dict, now: float | None = None, goals: list[dict] | None =
 
 
 # ------------------------------------------------------------------------------------------------ 4.67: warm-up
-WARM_REPS = {"hold": 10, "attack": 3, "track": 1, "clear": 2, "entry": 3, "retake": 3, "postplant": 5}
+WARM_REPS = {"hold": 10, "attack": 3, "track": 1, "clear": 2, "entry": 3, "retake": 3, "postplant": 5, "place": 3}
 WARM_MAX = 6                  # drills in a warm-up (about 10 minutes)
 
 

@@ -149,7 +149,7 @@ def suggest(week: dict, goals: list[dict], n: int = 3) -> list[dict]:
             target = d["before"]
         else:
             target = d["now"] + 3 if unit == "%" else d["now"] * 0.95
-        target = round(min(100, target), 1) if unit == "%" else round(target, 2)
+        target = round(min(100, target), 1) if unit in ("%", "°") else round(target, 2)
         out.append({"drill": d["id"], "kind": d["kind"], "map": d.get("map", ""), "where": d.get("where", ""),
                     "label": " · ".join(x for x in (d["name"], d.get("map"), d.get("where")) if x),
                     "now": d["now"], "target": target, "unit": unit, "why": why, "by": next_sunday().isoformat()})
@@ -160,7 +160,8 @@ def suggest(week: dict, goals: list[dict], n: int = 3) -> list[dict]:
 
 
 def fmt(x, unit: str) -> str:
-    return "–" if x is None else (f"{round(x)} %" if unit == "%" else f"{x:.2f} s")
+    from .drills import fmt_value
+    return fmt_value(x, unit)
 
 
 def text(g: dict) -> str:

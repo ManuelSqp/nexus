@@ -31,6 +31,9 @@
 // seconds, and a defuse is heard (whoever can't see you peeks the spike: tap it to bait them). After a lost duel
 // (every drill) a few seconds of replay from your killer's eyes: what he saw of you, and why you lost it
 // (drillai.js: the attackers' plan, the replay's path and the reasons).
+// 4.77: crosshair placement ("place"): you're walked along the attackers' route onto the site (only your mouse to
+// think about); every hiding place shows a head the moment it comes into view, and where your crosshair was right
+// then counts (degrees off, above or below). A rep: the median of them (drillai.js placeError, placeSummary).
 // The spots and routes come from the fights in all replays of the map (stats/drills.py spots()).
 (function () {
   'use strict';
@@ -52,6 +55,9 @@
   const RUN = 6.75, WALK = 3.6, CROUCH = 2.4, ACCEL = 40, STOP = 55, ACCURATE = 1.75, SPREAD = 6;
   const MOVING = MODE === 'attack' || MODE === 'clear' || MODE === 'entry' || MODE === 'retake';
   const SPIKE = MODE === 'retake' || MODE === 'postplant';
+  const PLACE = MODE === 'place';
+  const PLACE_SPEED = 3.6, PLACE_SHOW = 1.4;   // walked at walking speed; a head stays this long (or until shot)
+  const ROUTE = MODE === 'clear' || MODE === 'entry' || PLACE;     // the modes on an attackers' route
   const NFOES = O.foes || 2, DEFUSE = O.defuse || 7;
   const canvas = $('m3-canvas');
   let keys = KB.normalize(C.keys, C.defaults);
@@ -95,7 +101,7 @@
   function home() {                       // where a rep starts: [x, y, z, yaw]
     if (MODE === 'death') return D.me;
     if (MODE === 'attack') return SP._start || [...SP.start, SP.start_yaw];
-    if (MODE === 'clear' || MODE === 'entry') {
+    if (ROUTE) {
       const i = SP._from || 0, p = SP.route[i];
       return [p[0], p[1], p[2], yawTo(p, SP.route[Math.min(SP.route.length - 1, i + 4)])];
     }
@@ -229,7 +235,7 @@
     return false;
   }
   const clear = (a, b) => V().visible(a, b) && !throughSmoke(a, b);
-  const hiding = f => f.appear !== undefined && S.t < f.appear;   // not there yet (comes out of cover at this time)
+  const hiding = f => (f.appear !== undefined && S.t < f.appear) || (f.gone !== undefined && S.t >= f.gone && !f.dead);   // not there (yet / any more)
   function seenBy(f) {                      // can you see him (head or chest)?
     if (hiding(f)) return false;
     const hb = hitboxes(f), hd = hb[0], chest = hb.find(h => h[0] === 'body');
@@ -430,7 +436,7 @@
       });
       if (MODE === 'hold' || MODE === 'track') SP._stand = stand();
       if (MODE === 'attack') SP._start = attackStart();
-      if (MODE === 'clear' || MODE === 'entry') SP._from = clearStart();
+      if (ROUTE) SP._from = clearStart();
       if (MODE === 'entry') SP._fair = fairHides();
       if (MODE === 'postplant') SP._posts = postStands();
       place(home());
@@ -560,6 +566,12 @@
       }
     }
     placeUtil(uset);
+    if (PLACE) {                            // 4.77: a head on every hiding place, there once it comes into view
+      S.walk = {d: 0, R: SP.route.slice(SP._from || 0), end: null};
+      S.hides = SP.hides.map(p => ({p, open: null, off: null, up: null}));
+      S.foes = SP.hides.map((p, i) => foe(i, still(p, yawTo(p, nearestOnRoute(p)), Math.random() < 0.3),
+                                         {fov: 0, harmless: true, hide: i, appear: Infinity}));
+    }
     if (MODE === 'clear') {
       const order = SP.hides.map((p, i) => i).sort(() => Math.random() - 0.5);
       const busy = new Set(order.slice(0, Math.min(2, SP.hides.length)));
@@ -759,6 +771,7 @@
     if (mine === null) S.msg = `<b class="bad">${esc(label || T('He got you'))}</b>`;
     else if (MODE === 'track') S.msg = `<b class="good">${Math.round(mine)} % ${esc(T('on his head'))}</b>`;
     else if (MODE === 'clear') S.msg = `<b class="good">${Math.round(mine)} % ${esc(T('crosshair placement'))}</b>`;
+    else if (PLACE) S.msg = `<b class="${mine <= AI.ON_IT * 2 ? 'good' : 'bad'}">${mine.toFixed(1)}° ${esc(T('off their heads (median)'))}</b>`;
     else if (MODE === 'retake') S.msg = `<b class="good">${esc(T('Defused'))} · ${Math.max(0, S.spike.left).toFixed(1)} s ${esc(T('left on the spike'))}</b>`;
     else if (his !== null && his !== undefined) S.msg = mine < his ? `<b class="good">${esc(T('Faster than him'))} · ${mine.toFixed(2)} s</b>` : `<b class="bad">${esc(T('Slower than him'))} · ${mine.toFixed(2)} s</b>`;
     else S.msg = `<b class="good">${esc(label || '')} ${mine.toFixed(2)} s</b>`;
@@ -814,7 +827,7 @@
     else startRep();
   }
   function restart() {
-    S.reps = []; S.firsts = {head: 0, body: 0, legs: 0, miss: 0}; S.offs = []; S.saved = false; S.styles = {}; S.histHasMe = false;
+    S.reps = []; S.firsts = {head: 0, body: 0, legs: 0, miss: 0}; S.offs = []; S.saved = false; S.styles = {}; S.histHasMe = false; S.placed = [];
     S.shots = []; S.deaths = 0; S.kills = 0; startRep();
   }
   function watch() {
@@ -880,6 +893,7 @@
       if (MODE === 'death' && S.phase === 'watch' && S.t >= D.t_kill) { S.phase = 'between'; S.msg = ''; S.until = now + 0.8; }
       if (MODE === 'track' && S.phase === 'run') trackTick(dt);
       if (MODE === 'clear' && S.phase === 'run') clearTick();
+      if (PLACE && S.phase === 'run') placeTick(dt);
       if (MODE === 'attack' && S.phase === 'run' && S.t > 60) failRep(T('Out of time'));
       if (MODE === 'entry' && S.phase === 'run') entryTick();
       if (SPIKE && S.phase === 'run') spikeTick(dt);
@@ -918,6 +932,30 @@
       const pct = placement();
       S.reps.push(pct);
       endRep(pct);
+    }
+  }
+  // 4.77: walked along the route; each head counts the moment it comes into view
+  function placeTick(dt) {
+    const w = S.walk, at = AI.routeAt(w.R, w.d += PLACE_SPEED * dt);
+    S.me.x = at[0]; S.me.y = at[1]; S.me.z = at[2]; S.me.vx = 0; S.me.vz = 0;   // carried: your shots stay accurate
+    if (at[4] && w.end === null) w.end = S.t;
+    for (const h of S.hides) {
+      if (h.open !== null) continue;
+      const f = S.foes.find(x => x.hide === S.hides.indexOf(h)), hd = f && hitboxes(f)[0];
+      const head = hd ? hd[1] : [h.p[0], h.p[1] + 1.95, h.p[2]];
+      if (Math.hypot(head[0] - S.me.x, head[2] - S.me.z) < 40 && clear(eye(), head)) {
+        const e = AI.placeError(eye(), S.yaw, S.pitch, head);
+        h.open = S.t; h.off = e.off; h.up = e.up; h.side = e.side;
+        if (f) { f.appear = S.t; f.gone = S.t + PLACE_SHOW; }
+      }
+    }
+    if (w.end !== null && S.t - w.end > 0.8) {
+      const sm = AI.placeSummary(S.hides.filter(h => h.off !== null));
+      S.placed = (S.placed || []).concat(S.hides.filter(h => h.off !== null).map(h => ({off: h.off, up: h.up})));
+      if (sm.median === null) { S.reps.push(null); endRep(null, T('No hiding place came into view')); return; }
+      const v = Math.round(sm.median * 10) / 10;
+      S.reps.push(v);
+      endRep(v);
     }
   }
   function entryTick() {
@@ -1041,7 +1079,7 @@
   }
   function radar(g, toR) {                  // the route, the hiding places, the spike on the minimap
     if (!SP) return;
-    if (MODE === 'clear' || MODE === 'entry') routeOnRadar(g, toR, SP.route.slice(SP._from || 0));
+    if (ROUTE) routeOnRadar(g, toR, SP.route.slice(SP._from || 0));
     if (MODE === 'retake') routeOnRadar(g, toR, myRoute());
     if (SPIKE && SP.plant) {
       const [x, y] = toR(SP.plant[0], SP.plant[2]);
@@ -1054,10 +1092,11 @@
       g.fillStyle = '#ff3b4e'; g.strokeStyle = '#fff'; g.lineWidth = 1.5;
       g.beginPath(); g.arc(x, y, 5, 0, Math.PI * 2); g.fill(); g.stroke();
     }
-    if (MODE !== 'clear') return;
+    if (MODE !== 'clear' && !PLACE) return;
+    const okOff = PLACE ? AI.ON_IT * 2 : 7;
     for (const h of S.hides) {
       const [x, y] = toR(h.p[0], h.p[2]);
-      g.fillStyle = h.off === null ? '#5b6b8c' : h.off <= 7 ? '#2fc4b2' : '#e2a23a';
+      g.fillStyle = h.off === null ? '#5b6b8c' : h.off <= okOff ? '#2fc4b2' : '#e2a23a';
       g.beginPath(); g.arc(x, y, 6, 0, 2 * Math.PI); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.stroke();
     }
   }
@@ -1070,6 +1109,7 @@
       case 'attack': return `${T('Take:')} ${fromTo(SP.dz, SP.az)}`;
       case 'track': return `${T('Tracking at')} ${SP.az}`;
       case 'clear': return `${T('Clear:')} ${fromTo(SP.dz, SP.az)}`;
+      case 'place': return `${T('Crosshair placement:')} ${fromTo(SP.dz, SP.az)}`;
       case 'entry': return `${T('Entry:')} ${fromTo(SP.dz, SP.az)}`;
       case 'retake': return `${T('Retake')} ${SP.dz}`;
       case 'postplant': return `${T('Post-plant')} ${SP.dz}`;
@@ -1086,6 +1126,7 @@
     let clock = '–';
     if (MODE === 'track' && S.track) clock = S.track.all ? Math.round(S.track.head / S.track.all * 100) + ' %' : '0 %';
     else if (MODE === 'clear') clock = S.hides.some(h => h.off !== null) ? Math.round(placement()) + ' %' : '–';
+    else if (PLACE) { const sm = AI.placeSummary(S.hides.filter(h => h.off !== null)); clock = sm.median === null ? '–' : sm.median.toFixed(1) + '°'; }
     else if (MODE === 'attack' || MODE === 'entry') clock = S.phase === 'run' || S.phase === 'between' ? S.t.toFixed(1) + ' s' : '–';
     else if (SPIKE) clock = S.spike ? Math.max(0, S.spike.left).toFixed(1) + ' s' : (SP.left || 45).toFixed(0) + ' s';
     else if (S.phase === 'run' && seen.length && live.length) clock = (S.t - Math.min(...seen)).toFixed(2) + ' s';
@@ -1105,7 +1146,7 @@
     const pct = MODE === 'track' || MODE === 'clear';
     $('dr-reps').innerHTML = Array.from({length: Math.min(opt.reps, 40)}, (_, i) => {
       const v = S.reps[i];
-      const good = v !== null && v !== undefined && (pct ? v >= 60 : MODE === 'death' ? (D.his === null || D.his === undefined || v < D.his) : MODE === 'hold' || MODE === 'postplant' ? v < react : true);
+      const good = v !== null && v !== undefined && (pct ? v >= 60 : PLACE ? v <= AI.ON_IT * 2 : MODE === 'death' ? (D.his === null || D.his === undefined || v < D.his) : MODE === 'hold' || MODE === 'postplant' ? v < react : true);
       const cls = i < S.reps.length ? (v === null ? 'miss' : good ? 'beat' : 'slow') : (i === S.reps.length ? 'now' : '');
       return `<i class="${cls}" title="${esc(T('Rep'))} ${i + 1}"></i>`;
     }).join('');
@@ -1140,6 +1181,7 @@
     attack: 'Take the spot: move up and peek the defenders on their usual places. Stop before you shoot (counter-strafe): shots while moving go wide.',
     track: 'He strafes left and right. Stay on his head for 30 seconds.',
     clear: 'Walk the route onto the site. Have your crosshair on each hiding place, at head height, the moment it opens. Some have an enemy.',
+    place: 'You\'re walked along the attackers\' route onto the site: only your mouse to think about. A head shows on every hiding place the moment it comes into view, and where your crosshair was right then counts. Keep it at head height on the next angle, before you see anyone. Shoot them if you like; it doesn\'t change the score.',
     entry: 'You are first onto the site. Defenders wait on the places they hid in your replays, and one of them swings you when you get close. Take the site.',
     retake: 'The spike is down. Come back in on the defenders\' way, kill the attackers where they played the spike, and defuse before it goes off (hold your defuse key; half a defuse stays). They hold a crossfire and shift; when they hear the defuse, they peek the spike: tap it to bait them.',
     postplant: 'You play the spike after the plant. The retakers come in on their real routes at their real speed. Kill each before he has you, and before anyone defuses.'};
@@ -1192,12 +1234,12 @@
     const el = $('dr-panel'), vals = S.reps.filter(v => v !== null);
     const pct = MODE === 'track' || MODE === 'clear';
     const his = MODE === 'death' ? D.his ?? null : MODE === 'hold' || MODE === 'postplant' ? react : null;
-    const good = v => (pct ? v >= 60 : his === null || v < his);
+    const good = v => (pct ? v >= 60 : PLACE ? v <= AI.ON_IT * 2 : his === null || v < his);
     const beat = vals.filter(good).length;
     const best = vals.length ? (pct ? Math.max(...vals) : Math.min(...vals)) : null, med = median(vals);
-    const fmt = v => (v === null ? '–' : pct ? Math.round(v) + ' %' : v.toFixed(2) + ' s');
-    const top = pct ? 100 : Math.max(his || 0, ...vals, 0.3) * 1.15;
-    const bars = S.reps.map((v, i) => `<div class="dr-bar"><span>${v === null ? T('miss') : pct ? Math.round(v) + '%' : v.toFixed(2)}</span>` +
+    const fmt = v => (v === null ? '–' : pct ? Math.round(v) + ' %' : PLACE ? (+v).toFixed(1) + '°' : v.toFixed(2) + ' s');
+    const top = pct ? 100 : PLACE ? Math.max(AI.ON_IT * 4, ...vals) * 1.15 : Math.max(his || 0, ...vals, 0.3) * 1.15;
+    const bars = S.reps.map((v, i) => `<div class="dr-bar"><span>${v === null ? T('miss') : pct ? Math.round(v) + '%' : PLACE ? v.toFixed(1) + '°' : v.toFixed(2)}</span>` +
       `<i class="${v === null ? 'miss' : good(v) ? 'beat' : 'slow'}" style="height:${v === null ? 100 : Math.max(3, Math.round(v / top * 100))}%"></i><small>${i + 1}</small></div>`).join('');
     const off = avg(S.offs), mo = matchOff();
     const h = C.history || {}, meds = (h.medians || []).concat(med !== null && !S.histHasMe ? [med] : []);
@@ -1206,6 +1248,7 @@
       : MODE === 'attack' ? `${esc(T('Spot taken'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
       : MODE === 'track' ? `${esc(T('On his head'))} <span class="good">${fmt(best)}</span>`
       : MODE === 'clear' ? `${esc(T('Crosshair placement'))} <span class="good">${fmt(med)}</span>`
+      : PLACE ? `${esc(T('Off their heads'))} <span class="good">${fmt(med)}</span>`
       : MODE === 'entry' ? `${esc(T('Site taken'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
       : MODE === 'retake' ? `${esc(T('Retakes won'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
       : MODE === 'postplant' ? `${esc(T('Post-plants won'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
@@ -1230,6 +1273,12 @@
     }
     if (MODE === 'retake') facts.push(`<div><b>${esc(T('Left on the spike'))}</b><p>${S.lefts.length ? S.lefts.map(v => v.toFixed(1) + ' s').join(' · ') : '–'} · ${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
     if (MODE === 'entry') facts.push(`<div><b>${esc(T('Kills and deaths'))}</b><p>${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
+    if (PLACE) {                             // 4.77: where it was: too low, too high, on it
+      const sm = AI.placeSummary(S.placed || []);
+      const ud = sm.up === null ? '–' : Math.abs(sm.up) < 0.5 ? T('at head height') : `${Math.abs(sm.up).toFixed(1)}° ${T(sm.up < 0 ? 'too low' : 'too high')}`;
+      facts.push(`<div><b>${esc(T('Height, on average'))}</b><p>${esc(ud)}</p></div>`);
+      facts.push(`<div><b>${esc(T('On the head (within 2°)'))}</b><p>${sm.n ? `${sm.on} / ${sm.n}` : '–'}${sm.worst !== null ? ` · ${esc(T('worst'))} ${Math.round(sm.worst)}°` : ''}</p></div>`);
+    }
     if (MODE === 'clear') facts.push(`<div><b>${esc(T('Hiding places'))}</b><p>${S.hides.map(h2 => `<span class="${h2.off === null ? '' : h2.off <= 7 ? 'good' : 'bad'}">${h2.off === null ? '–' : Math.round(h2.off) + '°'}</span>`).join(' ')} · ${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
     facts.push(`<div${C.chart ? ' class="dr-wide"' : ''}><b>${esc(T('Since the first time'))}</b><p>${meds.length > 1 ? `${esc(T('Median per session'))}: ${meds.slice(-5).map(fmt).join(' → ')}` : esc(T('Your first session on this spot.'))}</p>${C.chart || ''}</div>`);   // 4.73: the chart from the server
     el.hidden = false;

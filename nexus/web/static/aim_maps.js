@@ -13,7 +13,7 @@
   const $ = id => document.getElementById(id);
   const T = s => (window.vcT ? window.vcT(s) : s);
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const TABS = ['deaths', 'hold', 'attack', 'track', 'clear', 'entry', 'retake', 'postplant'];
+  const TABS = ['deaths', 'hold', 'attack', 'track', 'clear', 'place', 'entry', 'retake', 'postplant'];
   // the tab from the address or a button: always one of our own names (never the text itself)
   const tabOf = v => {
     switch (v) {
@@ -22,6 +22,7 @@
       case 'attack': return 'attack';
       case 'track': return 'track';
       case 'clear': return 'clear';
+      case 'place': return 'place';
       case 'entry': return 'entry';
       case 'retake': return 'retake';
       case 'postplant': return 'postplant';
@@ -104,6 +105,7 @@
     hold: ['Hold an angle', 'You hold where defenders fight in your replays; enemies peek from the real corner: wide swings, jiggles, crouch and jump peeks, sometimes two at once. Kill each before he has you for his reaction time.'],
     attack: ['Attacking: you peek', 'You move (your keys, the game\'s speeds) and take the spot from defenders on the places they hold in your replays. Stop before you shoot: shots while moving go wide, and the drill shows how fast you stopped.'],
     track: ['Tracking', 'An enemy strafes left and right (ADAD) where the fights happen. Stay on his head for 30 seconds.'],
+    place: ['Crosshair placement', 'You\'re walked along the attackers\' route onto a site, so only your aim counts. A head shows on each hiding place defenders used the moment it comes into view: how far your crosshair was from it right then, before you could react. Lower is better; aim at head height on the next angle.'],
     clear: ['Clear a site', 'Walk the attackers\' route onto a site. Each hiding place defenders used is checked the moment it opens: was your crosshair on it, at head height? Some have an enemy.'],
     entry: ['Entry', 'First onto the site on the attackers\' route. Defenders wait on the places they hid in your replays, and one of them swings you when you get close. Take the site: the time from the start until the last one is down.'],
     retake: ['Retake', 'The spike is down. You come back in on the defenders\' real way, the attackers play it from the places they used in your replays. Kill them and defuse before it goes off (hold your defuse key, 7 s; half of it stays).'],
@@ -117,14 +119,15 @@
       case 'entry': return `${T('Entry:')} ${fromTo(s.dz, s.az)}`;
       case 'retake': return `${T('Retake')} ${s.dz}`;
       case 'postplant': return `${T('Post-plant')} ${s.dz}`;
+      case 'place': return `${T('Crosshair placement:')} ${fromTo(s.dz, s.az)}`;
       default: return `${T('Clear:')} ${fromTo(s.dz, s.az)}`;
     }
   }
   const STYLE = {wide: 'Wide swing', jiggle: 'Jiggle peek', crouch: 'Crouch peek', jump: 'Jump peek', two: 'Two at once'};
   const DIFF = {easy: 'Easy', medium: 'Medium', hard: 'Hard', pro: 'Pro'};
-  const REPS = {hold: [10, 20, 30], attack: [3, 5, 10], track: [1, 3, 5], clear: [1, 3, 5], entry: [3, 5, 10],
+  const REPS = {hold: [10, 20, 30], attack: [3, 5, 10], track: [1, 3, 5], clear: [1, 3, 5], place: [3, 5, 10], entry: [3, 5, 10],
                 retake: [3, 5, 10], postplant: [5, 10, 20]};
-  const SITES = new Set(['clear', 'entry']), SPIKE = new Set(['retake', 'postplant']);
+  const SITES = new Set(['clear', 'entry', 'place']), SPIKE = new Set(['retake', 'postplant']);
   const FOES = new Set(['entry', 'retake', 'postplant']);       // how many enemies: 1, 2 or 3
   let G = null, gTimer = 0, sel = null;
   const g = {map: '', styles: ['wide', 'jiggle', 'crouch'], diff: 'medium', gun: 'Vandal', reps: {}, foes: 2, util: true, agent: ''};
@@ -164,6 +167,8 @@
   const list = () => (!G ? [] : SITES.has(tab) ? G.sites : SPIKE.has(tab) ? (G.retakes || []) : G.angles);
   const where = s => (SITES.has(tab) ? (s.hides[0] || s.route[s.route.length - 1]) : SPIKE.has(tab) ? s.plant : s.hold);
   const pctTab = () => tab === 'track' || tab === 'clear';
+  // 4.77: a number in this tab's unit: "62 %", "3.4°" (crosshair placement), "0.48 s"
+  const fmtTab = v => (pctTab() ? Math.round(v) + ' %' : tab === 'place' ? (+v).toFixed(1) + '°' : (+v).toFixed(2) + ' s');
   // 4.59: your sessions on a spot (the median of each, oldest first) as a small line: better is up
   function spark(meds, higher) {
     if (!meds || meds.length < 2) return '';
@@ -174,11 +179,11 @@
   }
   function trendText(meds, higher) {
     if (!meds || !meds.length) return '';
-    const f = v => (higher ? Math.round(v) + ' %' : v.toFixed(2) + ' s');
+    const f = fmtTab;
     if (meds.length === 1) return `${esc(T('1 session:'))} ${esc(f(+meds[0]))}`;
     const n = Math.min(3, Math.floor(meds.length / 2)), a = meds.slice(0, n), b = meds.slice(-n);    // the first and last few
     const m = v => v.slice().sort((x, y) => x - y)[Math.floor(v.length / 2)];
-    const ma = m(a), mb = m(b), better = higher ? mb > ma : mb < ma, same = Math.abs(mb - ma) < (higher ? 2 : 0.03);
+    const ma = m(a), mb = m(b), better = higher ? mb > ma : mb < ma, same = Math.abs(mb - ma) < (higher ? 2 : tab === 'place' ? 0.3 : 0.03);
     return `${esc(String(meds.length))} ${esc(T('sessions:'))} ${esc(f(+ma))} → ${esc(f(+mb))} <span class="${same ? 'muted' : better ? 'good' : 'bad'}">${esc(T(same ? 'about the same' : better ? 'better' : 'worse'))}</span>${spark(meds.map(Number), higher)}`;
   }
 
@@ -238,7 +243,7 @@
       : SPIKE.has(tab) ? 'No retakes on this map yet. They come from the fights after a plant in its replays.' : 'No spots on this map yet. They come from the fights in its replays.'))}</p>`;
     $('am-g-list').innerHTML = L.slice(0, 40).map(s => {
       const best = (s.best || {})[tab];
-      const b = best === null || best === undefined ? '' : `<span class="good">${pctTab() ? Math.round(best) + ' %' : best.toFixed(2) + ' s'}</span>`;
+      const b = best === null || best === undefined ? '' : `<span class="good">${fmtTab(best)}</span>`;
       return `<li><button type="button" data-sid="${esc(s.id)}" class="${s.id === sel ? 'on' : ''}"><span translate="no">${esc(title(s))}</span><small>×${s.count}${b ? ' · ' + b : ''}${spark((s.trend || {})[tab], pctTab())}</small></button></li>`;
     }).join('');
     plan();
@@ -346,7 +351,7 @@
       <div class="am-row"><label>${esc(T('Gun'))} <select id="am-g-gun">${C.guns.map(n => `<option ${n === g.gun ? 'selected' : ''} translate="no">${esc(n)}</option>`).join('')}</select></label>
         <label>${esc(T(tab === 'hold' ? 'Peeks' : 'Reps'))} <select id="am-g-reps">${REPS[tab].map(n => `<option ${n === reps ? 'selected' : ''}>${esc(String(n))}</option>`).join('')}</select></label></div>
       <p class="am-btns"><a class="btn primary" id="am-g-play" href="${esc(playUrl(s))}">${esc(T('Play drill'))} · ${esc(String(reps))} ${esc(T(tab === 'hold' ? 'peeks' : reps === 1 ? 'rep' : 'reps'))}</a>
-        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${esc(pctTab() ? Math.round(best) + ' %' : (+best).toFixed(2) + ' s')}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>
+        ${best !== null && best !== undefined ? `<span class="good">${esc(T('your best'))} ${esc(fmtTab(best))}</span>` : `<span class="muted">${esc(T('not played yet'))}</span>`}</p>
       ${(s.trend || {})[tab] ? `<p class="small">${trendText(s.trend[tab], pctTab())}</p>` : ''}
       ${(s.chart || {})[tab] ? `<div class="am-chart">${s.chart[tab]}</div>` : ''}`;     // 4.73: made by the server (drillchart.py)
   }
