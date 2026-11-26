@@ -4,6 +4,19 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.86.0
+- **Team calendar:** *Practice › 📅 In your calendar* makes a calendar link for the team. Subscribe once and every
+  practice and match day shows up in your own calendar, and changes come in by themselves (calendar apps check
+  every few hours).
+  - It's the standard iCalendar format, so it works in Apple Calendar (iPhone, iPad, Mac), Google Calendar (and
+    Android), Outlook, Proton, Thunderbird and the like. The page has the steps for each, plus *Copy link* and
+    *Open in my calendar app* (webcal).
+  - Events: practices at their time and length (once the practice days are set), and matches (once the match days
+    are set for the brief) with the Premier week's map or *playoffs*. Times are sent in UTC, so every app shows
+    them in its own time zone. It covers the last 2 weeks and the next 12.
+  - The link works without logging in, because calendar apps can't log in. It contains a secret and shows only the
+    team name and the times. The team owner can replace it with *New link*, after which the old one stops working.
+
 ## 4.85.0
 - **Match-day ping on Discord** (Premier › *Brief before each match* › *Match-day ping*, with the time to send it,
   12:00 by default): on the match days, once a day between that time and the match, it posts:
