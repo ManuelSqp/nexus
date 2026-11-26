@@ -3,6 +3,11 @@
 {% macro ai(agent, size=22) %}<img class="ai" src="{{ url_for('agent_icon', name=agent) }}" width="{{ size }}" height="{{ size }}" alt="{{ agent }}" title="{{ agent }}" loading="lazy" onerror="this.style.visibility='hidden'">{% endmacro %}
 {% block head %}
 <style>
+/* 4.78: how they play their rounds */
+.rplay{margin-top:8px}.rplay summary{cursor:pointer}
+.rp{width:100%;border-collapse:collapse;margin-top:6px;font-size:12.5px}
+.rp td,.rp th{padding:3px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
+.rp th{font-weight:600;color:var(--muted)}.rp .rp-side{color:var(--text);padding-top:8px;border-top:0}
 .ai{border-radius:50%;vertical-align:middle;background:var(--ink);object-fit:cover;flex:none}
 .sgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px;align-items:start}
 @media(max-width:900px){.sgrid{grid-template-columns:1fr}}
@@ -107,6 +112,23 @@
       {% if x.defense.enemy_plants %}<br>Defense: {% for site, y in x.defense.enemy_plants.items() %}retakes on {{ site }} {{ y.retakes_won }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}
     </div>
     {% if mlines.get(m) %}<ul class="howto small" style="margin-top:6px">{% for l in mlines[m] %}<li>{{ l }}</li>{% endfor %}</ul>{% endif %}
+    {% set pl = (s.play or {}).get(m) %}{# 4.78: how they play their rounds, per buy #}
+    {% if pl and (pl.attack or pl.defense) %}
+    <details class="rplay"><summary class="small"><b>How they play their rounds</b> <span class="muted">per buy, from the first fight of each round</span></summary>
+      {% set buys = [('pistol', 'Pistol'), ('eco', 'Eco'), ('force', 'Force'), ('full', 'Full buy')] %}
+      <table class="rp"><tr><th></th>{% for b, label in buys %}<th>{{ label }}</th>{% endfor %}</tr>
+        <tr><th colspan="5" class="rp-side">Attack</th></tr>
+        <tr><td>Rounds</td>{% for b, _ in buys %}{% set a = pl.attack.get(b) %}<td>{% if a %}{{ a.won }}/{{ a.rounds }} won{% else %}–{% endif %}</td>{% endfor %}</tr>
+        <tr><td>Plants</td>{% for b, _ in buys %}{% set a = pl.attack.get(b) %}<td>{% if a and a.sites %}{% for x in a.sites %}{{ x.site }} {{ (x.share * 100)|round|int }}%{{ ' · ' if not loop.last }}{% endfor %}{% if a.no_plant %} <span class="muted">({{ a.no_plant }} none)</span>{% endif %}{% else %}–{% endif %}</td>{% endfor %}</tr>
+        <tr><td>Plant / first fight</td>{% for b, _ in buys %}{% set a = pl.attack.get(b) %}<td>{% if a %}{{ '~%s s'|format(a.plant_s) if a.plant_s else '–' }} / {{ '~%s s'|format(a.first_s) if a.first_s else '–' }}{% else %}–{% endif %}</td>{% endfor %}</tr>
+        <tr><td>At the first fight</td>{% for b, _ in buys %}{% set a = pl.attack.get(b) %}<td>{% if a and a.seen %}{% if a.stack %}stack {{ a.stack }}/{{ a.seen }}{% if a.stack_zone %} ({{ a.stack_zone }}){% endif %}{% endif %}{% if a.stack and a.spread %} · {% endif %}{% if a.spread %}spread {{ a.spread }}/{{ a.seen }}{% endif %}{% if not a.stack and not a.spread %}–{% endif %}{% else %}–{% endif %}</td>{% endfor %}</tr>
+        <tr><th colspan="5" class="rp-side">Defense</th></tr>
+        <tr><td>Rounds</td>{% for b, _ in buys %}{% set d = pl.defense.get(b) %}<td>{% if d %}{{ d.won }}/{{ d.rounds }} won{% else %}–{% endif %}</td>{% endfor %}</tr>
+        <tr><td>They stand</td>{% for b, _ in buys %}{% set d = pl.defense.get(b) %}<td>{{ setup_text(d.setup) if d and d.setup else '–' }}</td>{% endfor %}</tr>
+        <tr><td>Early picks</td>{% for b, _ in buys %}{% set d = pl.defense.get(b) %}<td>{% if d %}{{ d.early }}/{{ d.rounds }}{% if d.early_area %} <span class="muted">{{ d.early_area }}</span>{% endif %}{% else %}–{% endif %}</td>{% endfor %}</tr>
+      </table>
+    </details>
+    {% elif s.matches and s.play is not defined %}<p class="muted small" style="margin:6px 0 0">Press <b>Scout again</b> to see how they play their rounds (sites per buy, setups, early picks).</p>{% endif %}
     {% set cx = counters.get(m) %}{% if cx and cx.style != 'balanced' %}<p class="small" style="margin:6px 0 0">Counter: <b>{{ style_names[cx.style] }}</b> <span class="muted">({{ cx.reasons[0] }})</span>
       · <a href="{{ url_for('team', tid=t.id, map=m, vs=team_id) }}#compmaker">comps against them</a></p>{% endif %}
   </div>
