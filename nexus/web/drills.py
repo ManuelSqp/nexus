@@ -530,6 +530,17 @@ def register(app, store, sr, view_profile) -> None:
     def lineup_maps() -> dict[str, list[str]]:
         return map_matches()
 
+    def lineup3d(pid: int, map_name: str) -> dict:
+        """4.83, for the match screen: the 3D map name for a map (None: no 3D view of it yet) and the player's lineups
+        there ({agent, ability key, id})."""
+        try:
+            name = next((m for m in lineup_maps() if m.lower() == (map_name or "").lower()), None)
+        except Exception:
+            name = None
+        have = [{"id": x["id"], "agent": x["agent"], "ability": x["ability"]} for x in lu.read(stats_dir(pid)) if x["map"] == name] if name else []
+        return {"map": name, "have": have}
+    app.extensions["nexus"]["lineup3d"] = lineup3d
+
     def start_of(p, name: str, mids: list[str]) -> list | None:
         """Where recording starts on a map: the start of an attackers' route onto a site, else a held angle."""
         sp, _pending = map_spots(p, name, mids, False)

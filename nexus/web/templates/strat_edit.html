@@ -113,6 +113,22 @@ kbd{background:var(--ink);border:1px solid var(--line);border-radius:4px;padding
   </aside>
 </div>
 </div>
+{% if needs %}{# 4.83: the lineups this strat needs, from the library #}
+<section class="card slu" id="lineups">
+  <h2 style="margin-top:0">Lineups for this strat <a class="small" href="{{ url_for('team_lineups', tid=t.id, map=s.map) }}">Lineups library</a></h2>
+  <p class="muted small" style="margin-top:-4px">Every ability your side has on the board (as saved), with the lineup from the library that fits it: same agent and ability, the site it lands on, the side, the callout in its name.</p>
+  {% for st in needs %}<div class="slu-step"><b>{{ st.step }}</b>
+    <ul>{% for u in st.uses %}<li class="{{ 'ok' if u.lineup else 'no' }}"><span class="who">{{ u.agent }}{% if u.player %} <span class="muted">({{ u.player }})</span>{% endif %} · {{ u.ability }}{% if u.near %} → {{ u.near }}{% endif %}</span>
+      {% if u.lineup %}<span>{% if u.lineup.url %}<a href="{{ u.lineup.clip.url if u.lineup.clip else u.lineup.url }}" target="_blank" rel="noopener">▶ {{ u.lineup.title }}</a>{% else %}{{ u.lineup.title }} <span class="muted">(no clip)</span>{% endif %}{% if u.more %} <span class="muted small">+{{ u.more }} more in the library</span>{% endif %}{% if u.lineup.notes %}<span class="muted small" style="display:block">{{ u.lineup.notes }}</span>{% endif %}</span>
+      {% elif u.idea %}<span><span class="muted">Not in the library.</span> Your team throws <b>{{ u.idea.title }}</b> in its replays: <a href="{{ url_for('team_lineups', tid=t.id, map=s.map, agent=u.agent) }}#suggested">add it</a><span class="muted small" style="display:block">{{ u.idea.notes }}</span></span>
+      {% else %}<span><span class="muted">No lineup in the library yet:</span> <a href="{{ url_for('team_lineups', tid=t.id, map=s.map, agent=u.agent) }}">add one</a></span>{% endif %}</li>{% endfor %}</ul>
+  </div>{% endfor %}
+</section>
+<style>.slu{margin-top:14px}.slu h2{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.slu-step{margin:8px 0}.slu ul{list-style:none;padding:0;margin:4px 0 0}.slu li{display:grid;grid-template-columns:minmax(180px,1fr) 2fr;gap:10px;padding:5px 0;border-top:1px solid var(--line);font-size:13.5px}
+.slu li.no .who::before{content:"• ";color:var(--amber)}.slu li.ok .who::before{content:"• ";color:var(--win)}
+@media (max-width:700px){.slu li{grid-template-columns:1fr}}.embed .slu{display:none}</style>
+{% endif %}
 <script type="application/json" id="strat-boot">{{ boot|safe }}</script>
 <script src="{{ url_for('static', filename='strat.js') }}?v={{ app_version }}"></script>
 <script>

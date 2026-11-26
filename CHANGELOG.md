@@ -4,6 +4,17 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.83.0
+- **Lineups for your strats:** the coach goes through every ability your side has on a strat board, step by step,
+  and puts the matching lineup from the team's lineups library next to it, with the clip. It matches the agent and
+  ability, the site it lands on, the side, and the callout in the lineup's name.
+  - **Strat page:** a *Lineups for this strat* card under the board, e.g. *Execute A: Sova (Manuel) · Recon Bolt →
+    A Main ▶ Dart A Main*. If the library has nothing for an ability, it names a lineup your team throws in its
+    replay files (*add it*), or asks you to add one.
+  - **Match screen:** under each strat, your own lineups first (your comp agent or your name on the agent token),
+    each with *practise in 3D* or *record in 3D* (the lineup trainer, 4.81); the rest are folded below.
+  - **Discord:** posting a strat step adds that step's lineups, each clip as a link.
+
 ## 4.82.0
 - **The week ahead:** every practice and match day of the next 7 days in one place.
   - **Sunday team report:** the *Next* field (only the next match) is now *The week ahead*, one line per day from
