@@ -337,6 +337,12 @@ def register(app, store, get_team, h: dict):
         members, _ = members_of(t)
         return summary_for(t, day), {m["pid"]: m["discord_id"] for m in members if m.get("discord_id")}
 
+    def map_fn(t):
+        """4.86: day -> (map, playoffs) from the Premier schedule (read once)."""
+        sched = schedule(t)
+        return lambda day: map_on(sched, day.isoformat())
+
+    app.extensions["nexus"]["match_map"] = map_fn
     app.extensions["nexus"]["avail_ping"] = ping_of
     app.extensions["nexus"]["avail_days"] = days_of
     app.extensions["nexus"]["avail_line"] = summary_line

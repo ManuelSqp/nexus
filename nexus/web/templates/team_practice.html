@@ -36,6 +36,7 @@
 .wk>div.today{border-color:var(--accent)}.wk b{display:block;font-size:13px}.wk .ev{display:block;margin-top:3px}
 .wk .lv-ok{color:var(--win)}.wk .lv-maybe{color:var(--amber)}.wk .lv-short{color:var(--red)}
 @media (max-width:760px){.wk{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.cal{margin:0 0 14px}.cal summary{cursor:pointer}
 </style>
 {% endblock %}
 {% block content %}
@@ -61,6 +62,24 @@
     {% if not d.practice and not d.match %}<span class="muted ev">–</span>{% endif %}
   </div>{% endfor %}</div>
 {% endif %}
+<details class="cal" id="calendar"{{ ' open' if request.args.get('cal') }}><summary class="small"><b>📅 In your calendar</b> <span class="muted">practices and match days, in Apple Calendar, Google, Outlook or any calendar app</span></summary>
+  {% if cal %}
+  <p class="small" style="margin:8px 0 4px">Subscribe once to this link: practice and match days show up, and changes come in by themselves (the apps check every few hours).</p>
+  <div class="row" style="gap:6px;flex-wrap:wrap"><input type="text" readonly value="{{ cal }}" aria-label="Calendar link" style="flex:1;min-width:260px;font-size:12.5px" onclick="this.select()">
+    <button type="button" class="btn sm" data-copy="{{ cal }}">Copy link</button>
+    <a class="btn sm ghost" href="{{ cal|replace('https://', 'webcal://')|replace('http://', 'webcal://') }}">Open in my calendar app</a></div>
+  <ul class="small muted" style="margin:8px 0 0;padding-left:18px">
+    <li><b>iPhone / iPad:</b> tap <i>Open in my calendar app</i>, or Settings › Apps › Calendar › Calendar Accounts › Add Account › Other › Add Subscribed Calendar, paste the link.</li>
+    <li><b>Mac:</b> Calendar › File › New Calendar Subscription, paste the link.</li>
+    <li><b>Google Calendar</b> (computer): Other calendars › + › From URL, paste the link. It shows on Android too.</li>
+    <li><b>Outlook:</b> Add calendar › Subscribe from web, paste the link. Others: look for <i>subscribe</i> or <i>add by URL</i>.</li>
+  </ul>
+  <div class="small muted" style="margin:6px 0 0">Anyone with the link sees the team's practice and match times (no names, nothing else).
+    {% if g.team_owner %}<form method="post" action="{{ url_for('team_calendar', tid=t.id) }}" style="display:inline" data-q="Make a new link? The old one stops working and everyone has to subscribe again." onsubmit="return confirm(this.dataset.q)"><input type="hidden" name="action" value="reset"><button class="btn sm ghost">New link</button></form>{% endif %}</div>
+  {% else %}
+  <form method="post" action="{{ url_for('team_calendar', tid=t.id) }}" style="margin-top:8px"><button class="btn sm">Make a calendar link</button></form>
+  {% endif %}
+</details>
 
 <div class="pdays">
 {% for d in plan.days %}
@@ -151,5 +170,13 @@
     });
   });
 })();
+
+document.addEventListener('click', async e => {               // 4.86: copy the calendar link
+  const b = e.target.closest('.cal [data-copy]'); if (!b) return;
+  const was = b.dataset.was || (b.dataset.was = b.textContent);
+  try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = window.vcT ? vcT('Copied') : 'Copied'; }
+  catch (err) { b.textContent = window.vcT ? vcT('Select and copy') : 'Select and copy'; }
+  setTimeout(() => { b.textContent = was; }, 1800);
+});
 </script>
 {% endblock %}

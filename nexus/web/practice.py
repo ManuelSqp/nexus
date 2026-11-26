@@ -5,9 +5,9 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
-from flask import flash, g, jsonify, redirect, render_template, request, url_for
+from flask import abort, flash, g, jsonify, redirect, render_template, request, url_for
 
 from ..stats import habits as hb
 from ..stats import practice as pr
@@ -187,6 +187,7 @@ def register(app, store, sr, get_team) -> None:
         except Exception:
             ahead = []
         return render_template("team_practice.html", t=t, tab="practice", premier_status=None, plan=plan, cfg=cfg_of(t), ahead=ahead,
+                               cal=cal_url(t),
                                weekday=pr.WEEKDAY, done=done, total=total, links=links(t, plan), pids=pids, today_iso=date.today().isoformat(),
                                discord=bool(t.discord_info.get("focus_url") or t.discord_info.get("prep_url")),
                                my_pids={p.id for p in store.profiles(g.user.id)})
@@ -411,6 +412,57 @@ def register(app, store, sr, get_team) -> None:
         return out
 
     app.extensions["nexus"]["week_ahead"] = week_of
+
+    # ------------------------------------------------------------------ 4.86: the team calendar (iCalendar feed)
+    CAL_DAYS_BACK, CAL_DAYS = 14, 84
+    MATCH_MINUTES = 90
+
+    def cal_token(t) -> str:
+        return str((t.sync_info.get("calendar") or {}).get("token") or "")
+
+    def cal_url(t) -> str:
+        tok = cal_token(t)
+        return url_for("team_calendar_feed", tid=t.id, token=tok, _external=True) if tok else ""
+
+    @app.get("/teams/<int:tid>/calendar/<token>.ics")
+    def team_calendar_feed(tid: int, token: str):
+        """No login (calendar apps can't): the secret token in the link is the key; a wrong one is a 404."""
+        import hmac
+        from ..stats import teamcal
+        t = store.team(tid)
+        if t is None or not cal_token(t) or not hmac.compare_digest(cal_token(t).encode(), (token or "").encode()):
+            abort(404)
+        ext = app.extensions["nexus"]
+        practice = cfg_of(t) if t.sync_info.get("practice") else None          # only what the team has set
+        bc = ext["brief_cfg"](t) if ext.get("brief_cfg") else {}
+        match = {"days": bc.get("days") or [], "time": bc.get("time") or "20:00", "minutes": MATCH_MINUTES} if bc.get("days") else None
+        try:
+            mo = ext["match_map"](t) if ext.get("match_map") else None
+        except Exception:
+            mo = None
+        start = date.today() - timedelta(days=CAL_DAYS_BACK)
+        evts = teamcal.events(start, CAL_DAYS_BACK + CAL_DAYS, practice, match, mo, t.name)
+        body = teamcal.ics(evts, f"{t.name} (Nexus)", f"t{t.id}", url=url_for("team_practice", tid=tid, _external=True))
+        r = app.response_class(body, mimetype="text/calendar")
+        r.headers["Content-Type"] = "text/calendar; charset=utf-8"
+        r.headers["Content-Disposition"] = f'inline; filename="team-{t.id}.ics"'
+        r.headers["Cache-Control"] = "private, max-age=900"
+        return r
+
+    @app.post("/teams/<int:tid>/calendar")
+    def team_calendar(tid: int):
+        """Make the calendar link (anyone in the team, once), or a new one (the owner: the old link stops working)."""
+        import secrets
+        reset = request.form.get("action") == "reset"
+        t = get_team(tid, manage=reset)
+        if cal_token(t) and not reset:
+            return redirect(url_for("team_practice", tid=tid) + "#calendar")
+        info = t.sync_info
+        info["calendar"] = {"token": secrets.token_urlsafe(24), "made": datetime.now().isoformat(timespec="seconds")}
+        store.update_team(tid, sync=info)
+        flash("New calendar link: the old one no longer works, so subscribe again with this one." if reset else
+              "Calendar link made: add it to your calendar app.", "ok")
+        return redirect(url_for("team_practice", tid=tid) + "#calendar")
 
     def post_report(t) -> None:
         from ..discord import channel, post as dpost

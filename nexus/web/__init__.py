@@ -43,7 +43,7 @@ HISTORY_PAGE = 10     # full matches per page (each uncached match costs one API
 STORED_PAGE = 20      # stored-archive rows per page (one API request per page)
 PLAYBOOK_EXAMPLE = (Path(__file__).parent / "playbook_example.yaml").read_text()
 PUBLIC_ENDPOINTS = {"login", "signup", "setup", "static", "shared_report", "shared_vod", "manifest", "service_worker", "offline",
-                    "i18n_catalog", "set_lang", "companion_login"}
+                    "i18n_catalog", "set_lang", "companion_login", "team_calendar_feed"}   # 4.86: calendar apps don't log in
 MAX_LOGIN_FAILS = 5
 LOCKOUT_S = 600
 MAX_CACHE_ENTRIES = 200                # match-list cache (one entry per player / queue / page)

@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.85.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.86.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -840,6 +840,12 @@ defuse baits them out.
 **Sessions as a chart (4.73).** A drill's card (and its result screen) draws your sessions: the median of each
 as a dot on a line (hover one for its day, the median and the reps won), your best session marked, and your goal on
 that drill as a dashed line with its day (✓ once reached).
+
+**Team calendar (4.86).** *Practice › In your calendar*: a private calendar link (iCalendar, the open standard)
+with the team's practice days (as set under the practice settings) and match days (as set for the brief, with the
+Premier week's map). Subscribe once in Apple Calendar, Google Calendar, Outlook or any other calendar app, and
+changes come in by themselves. The link works without a login (calendar apps can't log in): it holds a secret, and
+the owner can replace it with *New link* (`stats/teamcal.py`).
 
 **Match-day ping (4.85).** *Premier › Brief before each match › Match-day ping*: on the match days, from the time
 you set (12:00 by default) until the match, once a day to Discord: the time and map, who's playing (who can't, the
