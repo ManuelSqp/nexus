@@ -298,4 +298,18 @@ def register(app, store, get_team, h: dict):
         store.prune_availability((datetime.now().date() - timedelta(days=30)).isoformat())
         return jsonify(ok=True)
 
+    def days_of(t, days: list[date]) -> dict[str, dict]:
+        """4.82: the summaries of the given days that are match days, by ISO day (one pass for the week ahead)."""
+        wd = h["brief_cfg"](t).get("days") or DEFAULT_DAYS
+        sched = schedule(t)
+        ds = []
+        for day in days:
+            if day.weekday() in wd:
+                m, po = map_on(sched, day.isoformat())
+                ds.append({"day": day.isoformat(), "label": f"{WEEKDAY[day.weekday()]} {day.day:02d}.{day.month:02d}.",
+                           "map": m, "playoffs": po, "today": False})
+        return {s["day"]: s for s in summaries(t, ds)[0]} if ds else {}
+
+    app.extensions["nexus"]["avail_days"] = days_of
+    app.extensions["nexus"]["avail_line"] = summary_line
     return summary_for, next_summary

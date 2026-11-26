@@ -4,6 +4,18 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.82.0
+- **The week ahead:** every practice and match day of the next 7 days in one place.
+  - **Sunday team report:** the *Next* field (only the next match) is now *The week ahead*, one line per day from
+    Monday to Sunday. Practice days show their time to end (from *Practice › Settings*) and what the plan has on
+    them once the week's plan is made. Match days show the time, the map played that day (playoffs too), and who's
+    confirmed from availability, including who can't play and the sub. Below that come the boards drafted against
+    opponents for each map played.
+  - **Practice page:** a strip with today and the next 6 days, each with its practice and match (time, map,
+    confirmed out of 5).
+  - Match days come from the match-day brief; until they're set, Saturday and Sunday are used, as on the
+    availability page.
+
 ## 4.81.0
 - **Lineup trainer** (Practice › Aim on maps › *Lineups*):
   - **Record:** pick the map, agent, ability (C, Q, E, X) and a name; you start on the 3D map, walk where you throw

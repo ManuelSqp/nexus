@@ -1,7 +1,7 @@
 """4.80: the Sunday team report for Discord: the week in one post. Strats (the rounds you tagged in review evenings
 this week, the best and the struggling strats so far), the economy of the week's matches (the rounds where the buy
-didn't fit, stats/econreview.py), everyone's drills (stats/drills.team_week) and what's next (the next match day,
-the map and the boards drafted against opponents for it).
+didn't fit, stats/econreview.py), everyone's drills (stats/drills.team_week) and the week ahead (4.82: every practice and match day of the next 7
+days with times, the map, who's confirmed, and the boards drafted against opponents).
 
 Everything comes in already gathered (web/practice.py); this only decides what's worth a line."""
 from __future__ import annotations
@@ -94,9 +94,38 @@ def next_section(nxt: dict | None) -> list[str]:
     return out
 
 
+def week_section(days: list[dict], prep: dict[str, list[str]] | None = None) -> list[str]:
+    """4.82: the week ahead, one line per day with something on it. days: [{label, practice: {time, end, focus:
+    [titles]} | None, match: {time, map, playoffs, avail (str)} | None}]; prep: {map: [board names]} for the maps
+    played."""
+    out = []
+    for d in days:
+        parts = []
+        p = d.get("practice")
+        if p:
+            parts.append(f"🏋️ Practice {p['time']}" + (f"–{p['end']}" if p.get("end") else "") +
+                         (": " + ", ".join(p["focus"][:3]) if p.get("focus") else ""))
+        m = d.get("match")
+        if m:
+            what = "Playoffs" if m.get("playoffs") else "Match"
+            parts.append(f"🏆 {what} {m['time']}" + (f" on **{m['map']}**" if m.get("map") else "") +
+                         (f" · {m['avail'][:160]}" if m.get("avail") else ""))
+        if parts:
+            out.append(f"**{d['label']}** " + " · ".join(parts))
+    if not out:
+        return ["Nothing planned in the next 7 days: set the practice days under *Practice › Settings* and the match "
+                "days in the match-day brief."]
+    for m, names in (prep or {}).items():
+        if names:
+            out.append(f"Boards against opponents on {m}: " + ", ".join(names[:4]))
+        else:
+            out.append(f"No boards against opponents on {m} yet: scout them and press *Draft a plan in the strat book*.")
+    return out
+
+
 def embeds(team: str, week: str, strats: list[str], econ: list[str], drills: list[str], nxt: list[str]) -> list[dict]:
     from ..discord import TEAL, _cut
-    fields = [(n, v) for n, v in (("📒 Strats", strats), ("💰 Economy", econ), ("🎯 Drills", drills), ("🗓️ Next", nxt)) if v]
+    fields = [(n, v) for n, v in (("📒 Strats", strats), ("💰 Economy", econ), ("🎯 Drills", drills), ("🗓️ The week ahead", nxt)) if v]
     if not fields:
         fields = [("📒 This week", ["Nothing to report: no reviewed rounds, matches or drills this week."])]
     return [{"title": _cut(f"{team}: the week", 256), "color": TEAL,

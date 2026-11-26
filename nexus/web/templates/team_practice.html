@@ -31,6 +31,11 @@
 .pers{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
 .pers .card{margin:0;padding:14px 16px}.pers h3{margin:0 0 6px;display:flex;justify-content:space-between}.pers h3 a{font-size:12.5px;font-weight:500;color:var(--muted)}
 .pers li{font-size:13.5px;margin:4px 0}.pers ul{margin:0;padding-left:18px}
+.wk{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin:0 0 14px}
+.wk>div{border:1px solid var(--line);border-radius:10px;padding:7px 9px;font-size:12.5px;min-height:62px}
+.wk>div.today{border-color:var(--accent)}.wk b{display:block;font-size:13px}.wk .ev{display:block;margin-top:3px}
+.wk .lv-ok{color:var(--win)}.wk .lv-maybe{color:var(--amber)}.wk .lv-short{color:var(--red)}
+@media (max-width:760px){.wk{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 {% endblock %}
 {% block content %}
@@ -42,9 +47,20 @@
     <form method="post"><input type="hidden" name="action" value="remake"><button class="btn sm ghost" title="From the team's current habits, strats and lineups (ticks are reset)">Make it again</button></form>
     {% if discord %}<form method="post"><input type="hidden" name="action" value="post"><button class="btn sm">Post to Discord</button></form>{% endif %}
     {% if discord %}<form method="post"><input type="hidden" name="action" value="post_drills"><button class="btn sm ghost" title="Who drilled how much this week, and the biggest steps">Post this week's drills</button></form>
-    <form method="post"><input type="hidden" name="action" value="post_report"><button class="btn sm ghost" title="Strats, economy, drills and what's next, in one post">Post the team report</button></form>{% endif %}
+    <form method="post"><input type="hidden" name="action" value="post_report"><button class="btn sm ghost" title="Strats, economy, drills and the week ahead, in one post">Post the team report</button></form>{% endif %}
   </div>{% endif %}
 </div>
+
+{% if ahead %}
+<h2 class="small muted" style="margin:0 0 6px;font-weight:600">The week ahead</h2>
+<div class="wk" aria-label="The week ahead">{% for d in ahead %}
+  <div class="{{ 'today' if d.date == today_iso }}"><b>{{ d.label }}</b>
+    {% if d.practice %}<span class="ev">🏋️ Practice {{ d.practice.time }}{% if d.practice.end %}–{{ d.practice.end }}{% endif %}</span>{% endif %}
+    {% if d.match %}<span class="ev" title="{{ d.match.avail }}">🏆 {{ 'Playoffs' if d.match.playoffs else 'Match' }} {{ d.match.time }}{% if d.match.map %} · {{ d.match.map }}{% endif %}
+      <span class="lv-{{ d.match.level }}">{{ d.match.yes }}/5</span></span>{% endif %}
+    {% if not d.practice and not d.match %}<span class="muted ev">–</span>{% endif %}
+  </div>{% endfor %}</div>
+{% endif %}
 
 <div class="pdays">
 {% for d in plan.days %}
@@ -98,7 +114,7 @@
     <div class="row"><div class="field" style="margin:0"><label for="pt">Start</label><input id="pt" type="time" name="time" value="{{ cfg.time }}" style="width:auto"></div>
       <div class="field" style="margin:0"><label for="pm">Minutes per session</label><input id="pm" type="number" name="minutes" min="30" max="240" value="{{ cfg.minutes }}" style="width:100px"></div></div>
     <label class="choice" style="margin-top:12px"><input type="checkbox" name="post" value="1" {{ 'checked' if cfg.post }}><span><b>Remind on Discord</b><span class="muted small">60 minutes before each session, to the weekly-focus channel. Everyone with notifications on also gets one on their devices.</span></span></label>
-    <label class="choice" style="margin-top:8px"><input type="checkbox" name="team_report" value="1" {{ 'checked' if cfg.team_report }}><span><b>Sunday team report on Discord</b><span class="muted small">Sundays at 20:00, to the weekly-focus channel: the week in one post. Rounds tagged with strats in review evenings and how your strats do, the rounds where the buy didn't fit in the week's matches, everyone's drills, and the next match with the boards against opponents.</span></span></label>
+    <label class="choice" style="margin-top:8px"><input type="checkbox" name="team_report" value="1" {{ 'checked' if cfg.team_report }}><span><b>Sunday team report on Discord</b><span class="muted small">Sundays at 20:00, to the weekly-focus channel: the week in one post. Rounds tagged with strats in review evenings and how your strats do, the rounds where the buy didn't fit in the week's matches, everyone's drills, and the week ahead: every practice and match day with times, the map, who's confirmed and the boards against opponents.</span></span></label>
     <label class="choice" style="margin-top:8px"><input type="checkbox" name="drills_week" value="1" {{ 'checked' if cfg.drills_week }}><span><b>Weekly drills summary on Discord</b><span class="muted small">Sundays at 20:00, to the weekly-focus channel: who drilled how much (Aim on maps), each player's biggest step, the team's biggest step, and the map focus.</span></span></label>
     <button class="btn sm primary">Save and make the plan again</button>
   </form>
