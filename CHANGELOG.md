@@ -4,6 +4,19 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.81.0
+- **Lineup trainer** (Practice › Aim on maps › *Lineups*):
+  - **Record:** pick the map, agent, ability (C, Q, E, X) and a name; you start on the 3D map, walk where you throw
+    it from, aim (crouch if the lineup is crouched) and press your shoot key: where you stand and look is saved.
+    Press it again to save it over.
+  - **Practise:** all lineups of a map, or one. Each rep starts a few metres from a lineup, its spot a ring on the
+    ground; walk onto it, aim and throw (your shoot key). A rep is how many degrees your aim was off; more than
+    0.6 m off the spot is a miss. After each throw the right aim shows as a marker. The result lists each lineup;
+    sessions go into the charts, goals and your week in degrees like the other drills.
+  - **From your strat book:** the abilities your team's strats draw that you have no lineup for yet, with the
+    callout they land at, each with *record it*.
+- Your week on Aim on maps now shows degree drills (crosshair placement, lineups) in degrees (it showed seconds).
+
 ## 4.80.0
 - **Sunday team report on Discord.** A new switch under *Practice › Team practice*: Sundays at 20:00 (or *Post the
   team report* any time) the week goes to the weekly-focus channel in one post:

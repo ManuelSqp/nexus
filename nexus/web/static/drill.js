@@ -34,6 +34,9 @@
 // 4.77: crosshair placement ("place"): you're walked along the attackers' route onto the site (only your mouse to
 // think about); every hiding place shows a head the moment it comes into view, and where your crosshair was right
 // then counts (degrees off, above or below). A rep: the median of them (drillai.js placeError, placeSummary).
+// 4.81: lineups ("lineup"): practice: each rep starts a few metres from one of your saved lineups; walk to its spot,
+// aim and throw (your shoot key): how far you stood from the spot and how many degrees your aim was off. Record
+// (C.record): walk anywhere, aim, and your shoot key saves where you stand and look as the lineup.
 // The spots and routes come from the fights in all replays of the map (stats/drills.py spots()).
 (function () {
   'use strict';
@@ -53,11 +56,15 @@
   // moving like Valorant (m/s): running, walking, crouching; how fast you speed up and stop; above ACCURATE the
   // first shot goes wide (up to SPREAD degrees at full speed)
   const RUN = 6.75, WALK = 3.6, CROUCH = 2.4, ACCEL = 40, STOP = 55, ACCURATE = 1.75, SPREAD = 6;
-  const MOVING = MODE === 'attack' || MODE === 'clear' || MODE === 'entry' || MODE === 'retake';
+  const MOVING = MODE === 'attack' || MODE === 'clear' || MODE === 'entry' || MODE === 'retake' || MODE === 'lineup';
   const SPIKE = MODE === 'retake' || MODE === 'postplant';
   const PLACE = MODE === 'place';
   const PLACE_SPEED = 3.6, PLACE_SHOW = 1.4;   // walked at walking speed; a head stays this long (or until shot)
   const ROUTE = MODE === 'clear' || MODE === 'entry' || PLACE;     // the modes on an attackers' route
+  const LINEUP = MODE === 'lineup', RECORD = LINEUP && !!C.record;
+  const LU_POS = 0.6;                       // metres: further from the spot than this, the lineup is missed
+  const DEG = PLACE || LINEUP;              // reps in degrees, lower is better
+  const LU = (C.lineups || []).slice().sort(() => Math.random() - 0.5);
   const NFOES = O.foes || 2, DEFUSE = O.defuse || 7;
   const canvas = $('m3-canvas');
   let keys = KB.normalize(C.keys, C.defaults);
@@ -100,6 +107,7 @@
   // ------------------------------------------------------------------------------------------ where you stand
   function home() {                       // where a rep starts: [x, y, z, yaw]
     if (MODE === 'death') return D.me;
+    if (LINEUP) return RECORD || !LU.length ? C.start : lineupStart(curLU());
     if (MODE === 'attack') return SP._start || [...SP.start, SP.start_yaw];
     if (ROUTE) {
       const i = SP._from || 0, p = SP.route[i];
@@ -414,6 +422,45 @@
     for (const f of S.foes) if (!f.dead && f.swing !== 'done' && !seesMe(f)) swing(f, 0.25 + Math.random() * 0.45);
   }
 
+  // ---- 4.81: lineups
+  const curLU = () => LU[S.reps.length % LU.length];
+  const lookDir = (yaw, pitch) => [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)];
+  function lineupStart(l) {                 // a few metres behind the spot, looking somewhere near it
+    const st = l.stand, f = lookDir(l.yaw, 0);
+    for (const d of [7, 5, 3]) {
+      const x = st[0] - f[0] * d, z = st[2] - f[2] * d, y = floor(x, z, st[1]);
+      if (y !== null && Math.abs(y - st[1]) < 2 && !V().blocked(x, z, y) && clear([x, y + EYE, z], [st[0], st[1] + EYE, st[2]]))
+        return [x, y, z, yawTo([x, y, z], st) + (Math.random() - 0.5) * 1.2];
+    }
+    return [st[0], st[1], st[2], l.yaw + Math.PI * (Math.random() < 0.5 ? 0.5 : -0.5)];
+  }
+  function lineupThrow() {
+    if (RECORD) { saveLineup(); return; }
+    const l = curLU();
+    if (!l) return;
+    const pos = Math.hypot(S.me.x - l.stand[0], S.me.z - l.stand[2]);
+    const a = lookDir(S.yaw, S.pitch), b = lookDir(l.yaw, l.pitch);
+    const aim = Math.acos(Math.max(-1, Math.min(1, a[0] * b[0] + a[1] * b[1] + a[2] * b[2]))) * 180 / Math.PI;
+    S.luShow = l;
+    S.luErr = (S.luErr || []).concat([{name: l.name, pos, aim}]);
+    if (pos > LU_POS) { S.reps.push(null); endRep(null, `${pos.toFixed(1)} m ${T('off the spot')}`); return; }
+    const v = Math.round(aim * 10) / 10;
+    S.reps.push(v);
+    endRep(v);
+  }
+  async function saveLineup() {             // record: where you stand and look now
+    const body = {id: S.luId || '', map: C.map, name: C.record.name, agent: C.record.agent, ability: C.record.ability,
+                  stand: [S.me.x, S.me.y, S.me.z].map(v => Math.round(v * 100) / 100), yaw: S.yaw, pitch: S.pitch,
+                  crouch: !!S.me.crouch};
+    try {
+      const r = await fetch(C.lineups_api, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || r.status);
+      S.luId = d.id;
+      S.msg = `<b class="good">${esc(T('Saved'))}: ${esc(C.record.name)}</b> <span class="muted small">${esc(T('click again to save it over'))} · <a href="${esc(C.list)}">${esc(T('back to your lineups'))}</a></span>`;
+    } catch (e) { S.msg = `<b class="bad">${esc(T('Not saved'))}: ${esc(e.message)}</b>`; }
+  }
+
   // ------------------------------------------------------------------------------------------ loading
   async function load() {
     try {
@@ -454,6 +501,7 @@
 
   // ------------------------------------------------------------------------------------------ shooting
   function shoot() {
+    if (LINEUP && S.phase === 'run') { lineupThrow(); return; }      // 4.81: the throw
     if (S.phase !== 'run' || S.dead || S.defusing) return;
     const now = performance.now() / 1000;
     if (S.reload > now || now < S.next) return;
@@ -528,6 +576,11 @@
     const uset = chooseUtil();
     if (MODE === 'death') {
       S.foes = [foe(0, S.R.paths[D.killer], {key: D.killer, agent: D.killer_agent, weapon: D.weapon, replay: true})];
+    } else if (LINEUP) {                      // 4.81: what to find
+      S.luShow = null;
+      const l = !RECORD && curLU();
+      S.msg = RECORD ? `<b>${esc(C.record.name)}</b> · ${esc(C.record.agent)} ${esc(C.record.ability)} · ${esc(T('stand and aim, then your shoot key saves it'))}`
+        : l ? `<b>${esc(l.name)}</b> · ${esc(l.agent)} ${esc(l.ability)}${l.crouch ? ' · ' + esc(T('crouched')) : ''}` : '';
     } else if (MODE === 'hold') {
       const styles = (O.styles || ['wide']).filter(s => s !== 'two');
       const two = (O.styles || []).includes('two') && SP.peeks.length > 1 && (!styles.length || Math.random() < 0.35);
@@ -772,6 +825,7 @@
     else if (MODE === 'track') S.msg = `<b class="good">${Math.round(mine)} % ${esc(T('on his head'))}</b>`;
     else if (MODE === 'clear') S.msg = `<b class="good">${Math.round(mine)} % ${esc(T('crosshair placement'))}</b>`;
     else if (PLACE) S.msg = `<b class="${mine <= AI.ON_IT * 2 ? 'good' : 'bad'}">${mine.toFixed(1)}° ${esc(T('off their heads (median)'))}</b>`;
+    else if (LINEUP) S.msg = `<b class="${mine <= AI.ON_IT ? 'good' : 'bad'}">${mine.toFixed(1)}° ${esc(T('off the lineup'))}</b>`;
     else if (MODE === 'retake') S.msg = `<b class="good">${esc(T('Defused'))} · ${Math.max(0, S.spike.left).toFixed(1)} s ${esc(T('left on the spike'))}</b>`;
     else if (his !== null && his !== undefined) S.msg = mine < his ? `<b class="good">${esc(T('Faster than him'))} · ${mine.toFixed(2)} s</b>` : `<b class="bad">${esc(T('Slower than him'))} · ${mine.toFixed(2)} s</b>`;
     else S.msg = `<b class="good">${esc(label || '')} ${mine.toFixed(2)} s</b>`;
@@ -827,7 +881,7 @@
     else startRep();
   }
   function restart() {
-    S.reps = []; S.firsts = {head: 0, body: 0, legs: 0, miss: 0}; S.offs = []; S.saved = false; S.styles = {}; S.histHasMe = false; S.placed = [];
+    S.reps = []; S.firsts = {head: 0, body: 0, legs: 0, miss: 0}; S.offs = []; S.saved = false; S.styles = {}; S.histHasMe = false; S.placed = []; S.luErr = [];
     S.shots = []; S.deaths = 0; S.kills = 0; startRep();
   }
   function watch() {
@@ -1052,6 +1106,15 @@
     // where you stand); their smokes, walls and mollies are
     const list = utilList().filter(u => !u.team || AREA_UTIL.has(u.type));
     const out = NM.utilObjects(list, S.t, C.util_col).map(o => (o.block ? {...o, a: SOLID_A} : o));
+    if (LINEUP && !RECORD && (S.luShow || curLU())) {   // 4.81: the spot (a flat ring) and, after a throw, where to aim
+      const l = S.luShow || curLU(), y = floor(l.stand[0], l.stand[2], l.stand[1]) ?? l.stand[1];   // (the thrown one until the next rep)
+      out.push({x: l.stand[0], y: y + 0.03, z: l.stand[2], r: 0.45, sc: [1, 0.06, 1], col: [0.18, 0.86, 0.75], a: 0.85, seed: 0, cloudy: false});
+      if (S.luShow === l) {
+        const d = lookDir(l.yaw, l.pitch), e = [l.stand[0], l.stand[1] + (l.crouch ? EYE_CROUCH : EYE), l.stand[2]];
+        out.push({x: e[0] + d[0] * 12, y: e[1] + d[1] * 12, z: e[2] + d[2] * 12, r: 0.18, sc: [1, 1, 1],
+                  col: [1, 0.85, 0.2], a: 1, seed: 0, cloudy: false});
+      }
+    }
     if (SPIKE && SP && SP.plant) {           // the spike (blinking faster as it runs out)
       const P = SP.plant, y = floor(P[0], P[2], P[1]) ?? P[1], left = S.spike ? S.spike.left : SP.left;
       const on = Math.sin(performance.now() / 1000 * Math.PI * (left < 10 ? 8 : 3)) > -0.2;
@@ -1104,6 +1167,7 @@
   // ------------------------------------------------------------------------------------------ the page
   const fromTo = (a, b) => (a === b ? a : `${a} ${T('from')} ${b}`);
   function title() {                        // the spot's name (translated)
+    if (LINEUP) return C.title || T('Lineups');   // 4.81: no spot
     switch (MODE) {
       case 'hold': return `${T('Hold:')} ${fromTo(SP.az, SP.dz)}`;
       case 'attack': return `${T('Take:')} ${fromTo(SP.dz, SP.az)}`;
@@ -1146,7 +1210,7 @@
     const pct = MODE === 'track' || MODE === 'clear';
     $('dr-reps').innerHTML = Array.from({length: Math.min(opt.reps, 40)}, (_, i) => {
       const v = S.reps[i];
-      const good = v !== null && v !== undefined && (pct ? v >= 60 : PLACE ? v <= AI.ON_IT * 2 : MODE === 'death' ? (D.his === null || D.his === undefined || v < D.his) : MODE === 'hold' || MODE === 'postplant' ? v < react : true);
+      const good = v !== null && v !== undefined && (pct ? v >= 60 : PLACE ? v <= AI.ON_IT * 2 : LINEUP ? v <= AI.ON_IT : MODE === 'death' ? (D.his === null || D.his === undefined || v < D.his) : MODE === 'hold' || MODE === 'postplant' ? v < react : true);
       const cls = i < S.reps.length ? (v === null ? 'miss' : good ? 'beat' : 'slow') : (i === S.reps.length ? 'now' : '');
       return `<i class="${cls}" title="${esc(T('Rep'))} ${i + 1}"></i>`;
     }).join('');
@@ -1181,6 +1245,7 @@
     attack: 'Take the spot: move up and peek the defenders on their usual places. Stop before you shoot (counter-strafe): shots while moving go wide.',
     track: 'He strafes left and right. Stay on his head for 30 seconds.',
     clear: 'Walk the route onto the site. Have your crosshair on each hiding place, at head height, the moment it opens. Some have an enemy.',
+    lineup: 'Each rep starts a few metres from one of your lineups (its spot is the ring on the ground). Walk onto it, aim where the lineup aims, and throw with your shoot key: how far off you stood and how many degrees off your aim was. Off the spot by more than 0.6 m: missed.',
     place: 'You\'re walked along the attackers\' route onto the site: only your mouse to think about. A head shows on every hiding place the moment it comes into view, and where your crosshair was right then counts. Keep it at head height on the next angle, before you see anyone. Shoot them if you like; it doesn\'t change the score.',
     entry: 'You are first onto the site. Defenders wait on the places they hid in your replays, and one of them swings you when you get close. Take the site.',
     retake: 'The spike is down. Come back in on the defenders\' way, kill the attackers where they played the spike, and defuse before it goes off (hold your defuse key; half a defuse stays). They hold a crossfire and shift; when they hear the defuse, they peek the spike: tap it to bait them.',
@@ -1234,12 +1299,12 @@
     const el = $('dr-panel'), vals = S.reps.filter(v => v !== null);
     const pct = MODE === 'track' || MODE === 'clear';
     const his = MODE === 'death' ? D.his ?? null : MODE === 'hold' || MODE === 'postplant' ? react : null;
-    const good = v => (pct ? v >= 60 : PLACE ? v <= AI.ON_IT * 2 : his === null || v < his);
+    const good = v => (pct ? v >= 60 : PLACE ? v <= AI.ON_IT * 2 : LINEUP ? v <= AI.ON_IT : his === null || v < his);
     const beat = vals.filter(good).length;
     const best = vals.length ? (pct ? Math.max(...vals) : Math.min(...vals)) : null, med = median(vals);
-    const fmt = v => (v === null ? '–' : pct ? Math.round(v) + ' %' : PLACE ? (+v).toFixed(1) + '°' : v.toFixed(2) + ' s');
-    const top = pct ? 100 : PLACE ? Math.max(AI.ON_IT * 4, ...vals) * 1.15 : Math.max(his || 0, ...vals, 0.3) * 1.15;
-    const bars = S.reps.map((v, i) => `<div class="dr-bar"><span>${v === null ? T('miss') : pct ? Math.round(v) + '%' : PLACE ? v.toFixed(1) + '°' : v.toFixed(2)}</span>` +
+    const fmt = v => (v === null ? '–' : pct ? Math.round(v) + ' %' : DEG ? (+v).toFixed(1) + '°' : v.toFixed(2) + ' s');
+    const top = pct ? 100 : DEG ? Math.max(AI.ON_IT * 4, ...vals) * 1.15 : Math.max(his || 0, ...vals, 0.3) * 1.15;
+    const bars = S.reps.map((v, i) => `<div class="dr-bar"><span>${v === null ? T('miss') : pct ? Math.round(v) + '%' : DEG ? v.toFixed(1) + '°' : v.toFixed(2)}</span>` +
       `<i class="${v === null ? 'miss' : good(v) ? 'beat' : 'slow'}" style="height:${v === null ? 100 : Math.max(3, Math.round(v / top * 100))}%"></i><small>${i + 1}</small></div>`).join('');
     const off = avg(S.offs), mo = matchOff();
     const h = C.history || {}, meds = (h.medians || []).concat(med !== null && !S.histHasMe ? [med] : []);
@@ -1249,6 +1314,7 @@
       : MODE === 'track' ? `${esc(T('On his head'))} <span class="good">${fmt(best)}</span>`
       : MODE === 'clear' ? `${esc(T('Crosshair placement'))} <span class="good">${fmt(med)}</span>`
       : PLACE ? `${esc(T('Off their heads'))} <span class="good">${fmt(med)}</span>`
+      : LINEUP ? `${esc(T('Off your lineups'))} <span class="good">${fmt(med)}</span>`
       : MODE === 'entry' ? `${esc(T('Site taken'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
       : MODE === 'retake' ? `${esc(T('Retakes won'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
       : MODE === 'postplant' ? `${esc(T('Post-plants won'))} <span class="good">${vals.length} / ${S.reps.length}</span>`
@@ -1261,7 +1327,7 @@
       const rows = Object.entries(S.styles).map(([k, v]) => `<span>${esc(T(STYLE[k] || k))} <b>${median(v).toFixed(2)} s</b></span>`).join(' ');
       facts.push(`<div><b>${esc(T('By kind of peek'))}</b><p>${rows || '–'}</p></div>`);
     }
-    if (MOVING) {
+    if (MOVING && !LINEUP) {
       const sh = S.shots, st = sh.filter(s => s.sp <= ACCURATE);
       const stopT = avg(st.filter(s => s.still > 0).map(s => s.still * 1000));
       facts.push(`<div><b>${esc(T('Stopped when you shot'))}</b><p>${sh.length ? `${Math.round(st.length / sh.length * 100)} % ${esc(T('of your shots'))}${stopT !== null ? ` · ${esc(T('after'))} ${Math.round(stopT)} ms` : ''}` : '–'}</p></div>`);
@@ -1273,6 +1339,10 @@
     }
     if (MODE === 'retake') facts.push(`<div><b>${esc(T('Left on the spike'))}</b><p>${S.lefts.length ? S.lefts.map(v => v.toFixed(1) + ' s').join(' · ') : '–'} · ${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
     if (MODE === 'entry') facts.push(`<div><b>${esc(T('Kills and deaths'))}</b><p>${esc(T('kills'))} ${S.kills} · ${esc(T('deaths'))} ${S.deaths}</p></div>`);
+    if (LINEUP && S.luErr && S.luErr.length) {   // 4.81: each lineup: on the spot, how far off
+      facts.push(`<div class="dr-wide"><b>${esc(T('Your lineups'))}</b><p>${S.luErr.map(x => `${esc(x.name)}: ${x.pos > LU_POS
+        ? `<span class="bad">${x.pos.toFixed(1)} m ${esc(T('off the spot'))}</span>` : `${x.aim.toFixed(1)}°`}`).join(' · ')}</p></div>`);
+    }
     if (PLACE) {                             // 4.77: where it was: too low, too high, on it
       const sm = AI.placeSummary(S.placed || []);
       const ud = sm.up === null ? '–' : Math.abs(sm.up) < 0.5 ? T('at head height') : `${Math.abs(sm.up).toFixed(1)}° ${T(sm.up < 0 ? 'too low' : 'too high')}`;
@@ -1417,6 +1487,7 @@
       `${D.kwhere ? ' · ' + esc(T('from')) + ' <span translate="no">' + esc(D.kwhere) + '</span>' : ''}${D.first === 'killer' ? ' · ' + esc(T('he saw you first')) : ''}</small>`;
   } else {
     const what = MODE === 'hold' ? (O.styles || []).map(s => T(STYLE[s] || s)).join(', ') : MODE === 'track' ? 'ADAD'
+      : LINEUP ? (RECORD ? T('recording') : `${LU.length} ${T(LU.length === 1 ? 'lineup' : 'lineups')}`)
       : MODE === 'attack' ? `${Math.min(3, SP.defs.length)} ${T('defenders')}`
       : MODE === 'entry' ? `${Math.min(NFOES, SP.hides.length)} ${T('defenders')}`
       : MODE === 'retake' ? `${Math.min(NFOES, SP.posts.length)} ${T('attackers')}`

@@ -23,6 +23,7 @@ from .. import replayfile
 from ..stats import drillchart as dch
 from ..stats import drillgoals as dg
 from ..stats import drills as dr
+from ..stats import lineups as lu
 from ..stats import kits
 from ..stats import map3d as m3
 from .aim import _lock, _read, _write
@@ -33,6 +34,7 @@ MATCHES = {"10": 10, "30": 30, "all": 400}     # "From" on the page: the last th
 SPOT_MATCHES = 60                               # 4.52: the spots of a map come from its last this-many replays
 MODES = ("hold", "attack", "track", "clear", "entry", "retake", "postplant", "place")   # 4.77: place    # 4.54: entry, retake, post-plant
 GENERAL_ID = re.compile(r"^g-(" + "|".join(MODES) + r")-[0-9a-f]{10}$")
+LINEUP_ID = re.compile(r"^l-[0-9a-f]{10}$")          # 4.81: a map's lineup practice (stats/lineups.py drill_id)
 QUEUE_G = re.compile(r"^g-(" + "|".join(MODES) + r")-([0-9a-f]{10})@([A-Za-z' ]{2,24})$")   # 4.67: a general drill in a queue
 PEEKS = ("wide", "jiggle", "crouch", "jump", "two")
 DIFFS = {"easy": 0.9, "medium": 0.6, "hard": 0.42, "pro": 0.3}   # the enemies' reaction time (s)
@@ -241,9 +243,13 @@ def register(app, store, sr, view_profile) -> None:
         if not can_edit:
             abort(403)
         g_id = GENERAL_ID.match(drill_id)
-        if not g_id and find_drill(p, drill_id) is None:
+        l_id = LINEUP_ID.match(drill_id)
+        if not g_id and not l_id and find_drill(p, drill_id) is None:
             abort(404)
-        run = dr.clean_run(request.get_json(silent=True) or {})
+        body = request.get_json(silent=True) or {}
+        if l_id and isinstance(body, dict):
+            body["kind"] = "lineup"
+        run = dr.clean_run(body)
         if run is None:
             return jsonify(error="That's no run."), 400
         if g_id:
@@ -519,6 +525,142 @@ def register(app, store, sr, view_profile) -> None:
                 "agents": ext.get("agents_boot", dict)(),
                 **ext.get("motion_boot", lambda: {"anims": None, "guns": {}})()}
         return render_template("drill_view.html", p=p, active_pid=pid, d={"map": name, "where": title}, boot=boot)
+
+    # ---- 4.81: lineups (stats/lineups.py)
+    def lineup_maps() -> dict[str, list[str]]:
+        return map_matches()
+
+    def start_of(p, name: str, mids: list[str]) -> list | None:
+        """Where recording starts on a map: the start of an attackers' route onto a site, else a held angle."""
+        sp, _pending = map_spots(p, name, mids, False)
+        for s in sp.get("sites") or []:
+            r = s.get("route") or []
+            if r:
+                return [r[0][0], r[0][1], r[0][2], 0.0]
+        for a in sp.get("angles") or []:
+            if a.get("hold"):
+                return [*a["hold"], a.get("hold_yaw", 0.0)]
+        return None
+
+    def strat_ideas(p, have: list[dict]) -> list[dict]:
+        """The abilities your teams' strat books draw that you have no lineup for."""
+        from ..maps import MapRegistry
+        reg = MapRegistry(data_dir / "cache")
+        strats, near_of = [], {}
+        for t in store.all_teams():
+            if not any(m.get("pid") == p.id for m in t.member_list):
+                continue
+            for row in store.strats(t.id):
+                full = store.strat(row["id"]) or {}
+                strats.append({"name": row["name"], "map": row["map"], "data": full.get("data") or {}})
+
+        def near(map_name):
+            if map_name not in near_of:
+                try:
+                    mi = reg.get(name=map_name)
+                except Exception:
+                    mi = None
+                pts = [(c.label, *mi.to_uv(c.x, c.y)) for c in mi.callouts] if mi else []
+                near_of[map_name] = pts
+            pts = near_of[map_name]
+            return lambda x, y: (min(pts, key=lambda c: (c[1] - x / 1000) ** 2 + (c[2] - y / 1000) ** 2)[0] if pts else "")
+        out = []
+        for s in strats:
+            out += lu.from_strats([s], have, near(s["map"]))
+        return out[:30]
+
+    @app.get("/profiles/<int:pid>/aim/lineups")
+    def aim_lineups(pid: int):
+        p, can_edit = view_profile(pid)
+        xs = lu.read(stats_dir(pid))
+        by_map: dict[str, list] = {}
+        for x in xs:
+            by_map.setdefault(x["map"], []).append(x)
+        runs = dr.read_runs(stats_dir(pid))
+        best = {m: dr.summary(runs.get(lu.drill_id(m), []), "lineup").get("best") for m in by_map}
+        maps = sorted(lineup_maps())
+        return render_template("aim_lineups.html", p=p, active_pid=pid, can_edit=can_edit, by_map=by_map, best=best,
+                               maps=maps, agents=sorted(kits.KITS) or [], ideas=strat_ideas(p, xs) if can_edit else [],
+                               keys=lu.KEYS)
+
+    @app.get("/profiles/<int:pid>/aim/lineups/record")
+    def aim_lineup_record(pid: int):
+        """The record form (a map picked in a list) -> the map's page in record mode."""
+        a = request.args
+        return redirect(url_for("aim_lineup_play", pid=pid, map_name=a.get("map") or "x", record=1, agent=a.get("agent", ""),
+                                ability=a.get("ability", ""), name=a.get("name", "")))
+
+    @app.get("/profiles/<int:pid>/aim/lineups/<map_name>")
+    def aim_lineup_play(pid: int, map_name: str):
+        p, can_edit = view_profile(pid)
+        by = lineup_maps()
+        name = next((m for m in by if m.lower() == map_name.lower()), None)
+        if name is None:
+            abort(404)
+        a = request.args
+        record = None
+        if a.get("record") == "1":
+            if not can_edit:
+                abort(403)
+            record = {"name": (a.get("name") or "").strip()[:60] or "Lineup", "agent": (a.get("agent") or "")[:30],
+                      "ability": a.get("ability") if a.get("ability") in lu.KEYS else ""}
+        xs = [x for x in lu.read(stats_dir(pid)) if x["map"] == name]
+        ids = [i for i in (a.get("ids") or "").split(",") if i]
+        if ids:
+            xs = [x for x in xs if x["id"] in ids]
+        if not record and not xs:
+            abort(404)
+        start = start_of(p, name, by[name])
+        if start is None and (record or not xs):
+            abort(404)
+        did = lu.drill_id(name)
+        setup = _read(stats_dir(pid) / "trainer.json", {}).get("setup", {})
+        runs = dr.read_runs(stats_dir(pid)).get(did, [])
+        ext = app.extensions["nexus"]
+        try:
+            reps = max(1, min(40, int(a.get("reps") or max(5, len(xs)))))
+        except ValueError:
+            reps = max(5, len(xs))
+        title = f"Record a lineup: {record['name']}" if record else f"Lineups on {name}"
+        boot = {"map": name, "api": "/api/maps3d/", "pid": pid, "mode": "lineup", "spot": None, "title": title,
+                "drill": {"id": did, "map": name, "mode": "lineup", "where": "Lineups"},
+                "opts": {"reps": 99 if record else reps, "react": 0.3, "foes": 0},
+                "lineups": xs, "record": record, "start": start or [*xs[0]["stand"], xs[0]["yaw"]],
+                "lineups_api": url_for("aim_lineup_save", pid=pid),
+                "runs_api": url_for("aim_drill_runs", pid=pid, drill_id=did), "can_save": can_edit and not record,
+                "sens": setup.get("sens") or 0.4, "dpi": setup.get("dpi") or 800, "scale": setup.get("scale") or 1,
+                "keys": read_keys(data_dir, g.user.id), "actions": [[k, lbl] for k, (lbl, _d) in dr.ACTIONS.items()],
+                "keys_api": url_for("aim_keys"), "defaults": dr.default_keys(), "gun": dr.gun("Classic"),
+                "guns": {n: dr.gun(n) for n in dr.GUNS}, "hp": dr.HP, "history": dr.summary(runs, "lineup"),
+                "chart": dch.chart(runs, "lineup", goal_of(dg.read(stats_dir(pid)), did)),
+                "list": url_for("aim_lineups", pid=pid), "util_col": COLS, "queue": None, "next": None, "step": None,
+                "agents": ext.get("agents_boot", dict)(),
+                **ext.get("motion_boot", lambda: {"anims": None, "guns": {}})()}
+        return render_template("drill_view.html", p=p, active_pid=pid, d={"map": name, "where": title}, boot=boot)
+
+    @app.post("/api/profiles/<int:pid>/aim/lineups")
+    def aim_lineup_save(pid: int):
+        p, can_edit = view_profile(pid)
+        if not can_edit:
+            abort(403)
+        body = request.get_json(silent=True)
+        x = lu.clean(body, list(lineup_maps()))
+        if x is None:
+            return jsonify(error="That's no lineup."), 400
+        lid = str(body.get("id") or "")
+        with _lock:
+            lid = lu.save(stats_dir(pid), x, lid if lu.ID.match(lid) else "")
+        return jsonify(ok=True, id=lid)
+
+    @app.post("/profiles/<int:pid>/aim/lineups/<lid>/delete")
+    def aim_lineup_delete(pid: int, lid: str):
+        p, can_edit = view_profile(pid)
+        if not can_edit:
+            abort(403)
+        with _lock:
+            gone = lu.delete(stats_dir(pid), lid)
+        flash("Lineup deleted." if gone else "No such lineup.", "ok" if gone else "error")
+        return redirect(url_for("aim_lineups", pid=pid))
 
     @app.route("/api/aim/keys", methods=["GET", "POST"])
     def aim_keys():

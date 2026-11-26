@@ -59,7 +59,7 @@ def test_pages(app):  # noqa: F811 (fixture)
     assert r["ok"] and r["chart"].startswith("<svg") and "goal 0.50 s by" in r["chart"]
     src = (ROOT / "nexus/web/drills.py").read_text()
     assert 'a["chart"] = {k: c for k in sm if (c := dch.chart(' in src            # each spot's card
-    assert src.count('"chart": dch.chart(') == 2                                    # both drill pages
+    assert src.count('"chart": dch.chart(') == 3                                    # both drill pages and lineups (4.81)
     js = (ROOT / "nexus/web/static/aim_maps.js").read_text()
     assert "(s.chart || {})[tab] ? `<div class=\"am-chart\">${s.chart[tab]}</div>`" in js
     dj = (ROOT / "nexus/web/static/drill.js").read_text()

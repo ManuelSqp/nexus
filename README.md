@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.80.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.81.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -839,6 +839,13 @@ defuse baits them out.
 **Sessions as a chart (4.73).** A drill's card (and its result screen) draws your sessions: the median of each
 as a dot on a line (hover one for its day, the median and the reps won), your best session marked, and your goal on
 that drill as a dashed line with its day (✓ once reached).
+
+**Lineups (4.81).** *Aim on maps › Lineups*: record a lineup in the 3D map (pick the map, agent, ability and a
+name, walk where you throw it from, aim, press your shoot key: where you stand and look is saved), then practise
+them: each rep starts a few metres away, the spot is a ring on the ground, you walk onto it, aim and throw. What
+counts is how many degrees your aim was off (more than 0.6 m off the spot: missed); after each throw the right aim
+shows. The abilities your team's strat book draws that you have no lineup for yet are listed to record
+(`stats/lineups.py`).
 
 **Crosshair placement (4.77).** A drill on the sites: you're walked along the attackers' route (only your mouse to
 think about), and every hiding place defenders used shows a head the moment it comes into view. What counts is where
