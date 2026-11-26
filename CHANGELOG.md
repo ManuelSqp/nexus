@@ -4,6 +4,18 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.79.0
+- **Prep against an opponent in the strat book.** On a scouted team's page (Premier › Opponents) each map has
+  *Draft a plan in the strat book*. It adds two boards to your strat book for that map:
+  - **vs TAG: their setup** (your attack): their defenders drawn as enemies where they stand at the first fight
+    (their agents on that map), the site with the fewest of them marked, and a call ("They stand 2 A · 1 B · 1 Mid.
+    Hit B (the fewest of them). They lose retakes on A: plant A and play post-plant. …").
+  - **vs TAG: their hit** (your defense): their five where they go on full buys (stacked in one zone, or spread
+    and hitting their main site), the main site marked with its share, and a call ("They hit B 86 % of plants,
+    fast (stacked B). Stack B, rotate from the other site on contact.").
+  Their scouting lines go into the notes. Edit them like any strat; pressing it again doesn't double them.
+- **The match-day brief** lists the boards drafted for the map under *Against your opponents*.
+
 ## 4.78.0
 - **Opponent scouting: how they play their rounds.** A scouted team's page (Premier › Opponents) gets *How they
   play their rounds* on each map, split by their buy (pistol, eco, force, full buy):

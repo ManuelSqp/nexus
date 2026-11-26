@@ -44,6 +44,8 @@
       <div><span>Attack rounds</span><b>{{ b.ours.attack|pct if b.ours.attack is not none else '–' }}</b></div>
       <div><span>Defense rounds</span><b>{{ b.ours.defense|pct if b.ours.defense is not none else '–' }}</b></div>
     </div></div>
+  {% if b.prep %}<div class="bk"><h2>Against your opponents</h2>{# 4.79 #}
+    {% for p in b.prep %}<div class="plan {{ p.side }}"><b>{{ '⚔' if p.side == 'attack' else '🛡' }} <a href="{{ p.url }}">{{ p.name }}</a></b><div class="small muted">drafted {{ p.made }} from their scouting</div></div>{% endfor %}</div>{% endif %}
   {% if b.plans %}<div class="bk"><h2>Game plans</h2>
     {% for p in b.plans %}<div class="plan {{ p.side }}"><b>{{ '⚔' if p.side == 'attack' else '🛡' }} {{ p.title }}</b><div class="small">{{ p.idea }}</div></div>{% endfor %}
     <p class="small" style="margin:8px 0 0"><a href="{{ url_for('team_plans', tid=t.id, map=b.map) }}">All steps per player →</a></p></div>{% endif %}
