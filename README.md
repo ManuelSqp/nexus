@@ -1,6 +1,6 @@
 # Nexus
 
-**Version 4.79.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
+**Version 4.80.0** · what changed in each version: [CHANGELOG.md](CHANGELOG.md) · the running version is shown
 next to the logo in the web app, in *Settings*, at the top of every report, and in `nexus --version`.
 
 Local Valorant coach for **your team (IGL / macro)** and **you individually**,
@@ -161,6 +161,12 @@ marked *our comp* for the map (who wasn't played, who instead), where each kill 
 callout), each player's utility in the round (C, Q, E, X, when Riot's data has the casts), and *Strat this round*:
 pick the strat you ran and see its drawn abilities against what each agent used. A scrim in *Practice › Scrims*
 whose match is in your games (same day and map) links to it: *Review it round by round*.
+
+**Sunday team report (4.80):** *Practice › Team practice* has *Sunday team report on Discord* (Sundays at 20:00,
+to the weekly-focus channel, or *Post the team report* any time): the week in one post. The rounds tagged with
+strats in review evenings and how they went, your best and your struggling strats so far, the rounds where the buy
+didn't fit in the week's matches, everyone's drills, and the next match day with its map and the boards against
+opponents (`stats/teamreport.py`).
 
 **Economy review (4.76):** per round your team's money (loadout plus credits left, per player) against what it
 bought, and the rounds where the buy didn't fit: half the team bought and half saved, an eco or force with money for
