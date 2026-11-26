@@ -43,7 +43,7 @@ def test_sections():
     assert n == ["Next match: **Thu 03.12. 20:00** on **Ascent**", "Boards against opponents: vs RV: their hit"]
     assert "Draft a plan in the strat book" in trp.next_section({"map": "Ascent"})[1]
     emb = trp.embeds("Squad", "2026-W48", s, e, d, n)[0]
-    assert emb["title"] == "Squad: the week" and [f["name"] for f in emb["fields"]] == ["📒 Strats", "💰 Economy", "🎯 Drills", "🗓️ Next"]
+    assert emb["title"] == "Squad: the week" and [f["name"] for f in emb["fields"]] == ["📒 Strats", "💰 Economy", "🎯 Drills", "🗓️ The week ahead"]
     assert trp.embeds("S", "w", [], [], [], [])[0]["fields"][0]["value"].startswith("Nothing to report")
 
 
@@ -67,7 +67,7 @@ def test_post_and_tick(app, monkeypatch):  # noqa: F811 (fixture)
         c.post(f"/api/teams/{tid}/review-evening/{ev}", json={"action": "strat", "round": r["n"], "strat": sid_})
     rep = app.extensions["nexus"]["team_report"](store.team(tid))
     assert rep["strats"][0].startswith(f"2 rounds tagged this week, {sum(r['won'] for r in att)} won: A split")
-    assert rep["econ"] and rep["drills"] and rep["next"][0].startswith("Next match: **")
+    assert rep["econ"] and rep["drills"] and "🏆 Match" in "\n".join(rep["next"])      # 4.82: the week ahead
     sent = []
     monkeypatch.setattr(discord, "post", lambda url, content="", embeds=None, **kw: sent.append((url, embeds)))
     tick = next(f for f in app.extensions["nexus"]["ticks"] if f.__name__ == "tick_report")

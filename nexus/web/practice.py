@@ -182,7 +182,11 @@ def register(app, store, sr, get_team) -> None:
             write(t.id, plan)
         done, total = pr.progress(plan)
         pids = {store.profile(m["pid"]).name: m["pid"] for m in t.member_list if store.profile(m["pid"])}
-        return render_template("team_practice.html", t=t, tab="practice", premier_status=None, plan=plan, cfg=cfg_of(t),
+        try:
+            ahead = week_of(t, start=0)                              # 4.82: today and the 6 days after
+        except Exception:
+            ahead = []
+        return render_template("team_practice.html", t=t, tab="practice", premier_status=None, plan=plan, cfg=cfg_of(t), ahead=ahead,
                                weekday=pr.WEEKDAY, done=done, total=total, links=links(t, plan), pids=pids, today_iso=date.today().isoformat(),
                                discord=bool(t.discord_info.get("focus_url") or t.discord_info.get("prep_url")),
                                my_pids={p.id for p in store.profiles(g.user.id)})
@@ -352,26 +356,61 @@ def register(app, store, sr, get_team) -> None:
         er = ext.get("econ_review")
         econ = [{"label": m["label"], "econ": er(t, m["id"])} for m in matches] if er else []
         econ = [m for m in econ if m["econ"]]
-        # what's next: the next match day, the week's map, the boards drafted against opponents on it
-        nxt: dict = {}
-        bc = ext["brief_cfg"](t) if ext.get("brief_cfg") else {}
-        from .availability import DEFAULT_DAYS
-        days = bc.get("days") or DEFAULT_DAYS
-        for k in range(1, 8):
-            d = now + timedelta(days=k)
-            if d.weekday() in days:
-                nxt["day"] = d.strftime("%a %d.%m.") + f" {bc.get('time') or '20:00'}"
-                break
-        wm = ext.get("week_map")
-        try:
-            nxt["map"] = wm(t) if wm else None
-        except Exception:
-            nxt["map"] = None
+        # 4.82: the week ahead: every practice and match day of the next 7 days, the boards against opponents
+        days = week_of(t, now)
         ps = ext.get("prep_strats")
-        if nxt.get("map") and ps:
-            nxt["prep"] = [x["name"] for x in ps(t.id, nxt["map"])]
+        prep: dict[str, list[str]] = {}
+        for d in days:
+            m = (d.get("match") or {}).get("map")
+            if m and m not in prep and ps:
+                prep[m] = [x["name"] for x in ps(t.id, m)]
         return {"strats": trp.strat_section(week_rounds, rates, strats), "econ": trp.econ_section(econ),
-                "drills": trp.drills_section(drills_of(t)), "next": trp.next_section(nxt)}
+                "drills": trp.drills_section(drills_of(t)), "next": trp.week_section(days, prep), "days": days}
+
+    def week_of(t, now: datetime | None = None, start: int = 1) -> list[dict]:
+        """4.82: the next 7 days (from tomorrow; on Sunday that's Monday to Sunday): [{date, label, weekday, practice:
+        {time, end, minutes, focus} | None, match: {time, map, playoffs, avail, level} | None}]. A practice's focus is
+        the plan's items for that day (if the week's plan is made yet), without the warm-up and "Play together"."""
+        from datetime import timedelta
+        ext = app.extensions["nexus"]
+        now = now or datetime.now()
+        pc = cfg_of(t)
+        pdays = set(pc.get("days") or pr.DEFAULT_DAYS)
+        ptime, pmin = pc.get("time") or "19:00", int(pc.get("minutes") or 90)
+        bc = ext["brief_cfg"](t) if ext.get("brief_cfg") else {}
+        mtime = bc.get("time") or "20:00"
+        dates = [(now + timedelta(days=k)).date() for k in range(start, start + 7)]
+        try:
+            avail = ext["avail_days"](t, dates) if ext.get("avail_days") else {}
+        except Exception:
+            avail = {}
+        line = ext.get("avail_line")
+        plans: dict[str, dict | None] = {}
+        out = []
+        for d in dates:
+            row = {"date": d.isoformat(), "label": f"{pr.WEEKDAY[d.weekday()]} {d.day:02d}.{d.month:02d}.",
+                   "weekday": d.weekday(), "practice": None, "match": None}
+            if d.weekday() in pdays:
+                wk = week_id(datetime.combine(d, datetime.min.time()))
+                if wk not in plans:
+                    plans[wk] = read(t.id, wk)
+                pd = next((x for x in (plans[wk] or {}).get("days", []) if x["date"] == row["date"]), None)
+                focus = [it["title"] for it in (pd or {}).get("items", []) if it.get("kind") not in ("warmup", "play")]
+                try:
+                    h, mi = map(int, ptime.split(":"))
+                    e = h * 60 + mi + pmin
+                    end = f"{e // 60 % 24:02d}:{e % 60:02d}"
+                except ValueError:
+                    end = ""
+                row["practice"] = {"time": (pd or {}).get("time") or ptime, "end": end, "minutes": pmin, "focus": focus}
+            s = avail.get(row["date"])
+            if s is not None:
+                row["match"] = {"time": mtime, "map": s.get("map"), "playoffs": bool(s.get("playoffs")),
+                                "avail": line(s) if line else "", "level": s.get("level"), "yes": len(s.get("yes") or [])}
+            out.append(row)
+        return out
+
+    app.extensions["nexus"]["week_ahead"] = week_of
 
     def post_report(t) -> None:
         from ..discord import channel, post as dpost
