@@ -235,6 +235,12 @@ def register(app, store, sr, get_team) -> None:
         if f.get("action") == "remake":
             make(t, week_id())
             flash("Practice plan made again from the team's current numbers.", "ok")
+        elif f.get("action") == "post_report":                # 4.80: the week in one post
+            try:
+                post_report(t)
+                flash("Posted the team report to Discord.", "ok")
+            except Exception as e:
+                flash(f"Not posted: {e}", "error")
         elif f.get("action") == "post_drills":                # 4.67: the team's drill week
             try:
                 post_drills(t)
@@ -263,7 +269,7 @@ def register(app, store, sr, get_team) -> None:
                 minutes = 90
             info = t.sync_info
             info["practice"] = {"days": days or pr.DEFAULT_DAYS, "time": time, "minutes": minutes, "post": f.get("post") == "1",
-                                "drills_week": f.get("drills_week") == "1"}
+                                "drills_week": f.get("drills_week") == "1", "team_report": f.get("team_report") == "1"}
             store.update_team(tid, sync=info)
             make(store.team(tid), week_id())
             flash("Practice days saved; this week's plan was made again.", "ok")
@@ -311,6 +317,92 @@ def register(app, store, sr, get_team) -> None:
         return done
 
     app.extensions["nexus"].setdefault("ticks", []).append(tick_drills)
+
+    # ---- 4.80: the Sunday team report (stats/teamreport.py)
+    def report_of(t, now: datetime | None = None) -> dict:
+        """The week's pieces for the report: strats, economy, drills, what's next."""
+        from datetime import timedelta
+
+        from ..stats import teamreport as trp
+        ext = app.extensions["nexus"]
+        now = now or datetime.now()
+        start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        evs = ext["evenings"](t.id) if ext.get("evenings") else []
+        week_evs = [e for e in evs if e.get("created", 0) >= start.timestamp()]
+        week_rounds = []
+        for e in week_evs:
+            rounds = {r.get("n"): r for r in e.get("rounds") or []}
+            for n, sid in (e.get("strats") or {}).items():
+                r = rounds.get(int(n)) if str(n).isdigit() else None
+                if r is not None and isinstance(sid, int):
+                    week_rounds.append({"strat": sid, "won": bool(r.get("won"))})
+        strats = store.strats(t.id)
+        rates = ext["strat_rates"](t.id, strats) if ext.get("strat_rates") else {}
+        # the week's matches: Premier reviews and reviewed matches, once each
+        seen, matches = set(), []
+        pj = ext.get("premier")
+        for r in (pj.reviews(t.id) if pj else []):
+            if (r.get("started_at") or "") >= start.strftime("%Y-%m-%d") and r.get("match_id") not in seen:
+                seen.add(r["match_id"])
+                matches.append({"id": r["match_id"], "label": f"{r.get('map', '?')} vs {r.get('opponent') or '?'}"})
+        for e in week_evs:
+            if e.get("match_id") and e["match_id"] not in seen:
+                seen.add(e["match_id"])
+                matches.append({"id": e["match_id"], "label": f"{e.get('map', '?')} vs {e.get('opponent') or '?'}"})
+        er = ext.get("econ_review")
+        econ = [{"label": m["label"], "econ": er(t, m["id"])} for m in matches] if er else []
+        econ = [m for m in econ if m["econ"]]
+        # what's next: the next match day, the week's map, the boards drafted against opponents on it
+        nxt: dict = {}
+        bc = ext["brief_cfg"](t) if ext.get("brief_cfg") else {}
+        from .availability import DEFAULT_DAYS
+        days = bc.get("days") or DEFAULT_DAYS
+        for k in range(1, 8):
+            d = now + timedelta(days=k)
+            if d.weekday() in days:
+                nxt["day"] = d.strftime("%a %d.%m.") + f" {bc.get('time') or '20:00'}"
+                break
+        wm = ext.get("week_map")
+        try:
+            nxt["map"] = wm(t) if wm else None
+        except Exception:
+            nxt["map"] = None
+        ps = ext.get("prep_strats")
+        if nxt.get("map") and ps:
+            nxt["prep"] = [x["name"] for x in ps(t.id, nxt["map"])]
+        return {"strats": trp.strat_section(week_rounds, rates, strats), "econ": trp.econ_section(econ),
+                "drills": trp.drills_section(drills_of(t)), "next": trp.next_section(nxt)}
+
+    def post_report(t) -> None:
+        from ..discord import channel, post as dpost
+        from ..stats import teamreport as trp
+        url = channel(t.discord_info, "focus")
+        if not url:
+            raise RuntimeError("Add a Discord webhook under Team settings first.")
+        r = report_of(t)
+        dpost(url, "", trp.embeds(t.name, week_id(), r["strats"], r["econ"], r["drills"], r["next"]))
+
+    def tick_report(now: datetime | None = None) -> list[int]:
+        """4.80: Sundays from 20:00, once a week: the team report to Discord (if on)."""
+        now = now or datetime.now()
+        if now.weekday() != 6 or now.hour < 20:
+            return []
+        done = []
+        for t in store.all_teams():
+            if not cfg_of(t).get("team_report") or t.sync_info.get("team_report_sent") == week_id():
+                continue
+            info = t.sync_info
+            info["team_report_sent"] = week_id()
+            store.update_team(t.id, sync=info)
+            try:
+                post_report(t)
+                done.append(t.id)
+            except Exception:
+                pass
+        return done
+
+    app.extensions["nexus"]["ticks"].append(tick_report)
+    app.extensions["nexus"]["team_report"] = report_of
     app.extensions["nexus"]["drills_week"] = drills_of
 
     def tick() -> list[int]:

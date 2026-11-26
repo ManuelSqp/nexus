@@ -249,6 +249,7 @@ def register(app, store, sr, helpers: dict) -> PremierJobs:
     app.extensions["nexus"]["premier"] = pj
     app.extensions["nexus"]["week_map"] = lambda t: week_map(t)[0]
     app.extensions["nexus"]["next_avail"] = next_avail
+    app.extensions["nexus"]["brief_cfg"] = brief_cfg                 # 4.80: match days and time, for the team report
     app.extensions["nexus"]["match_window"] = lambda t: match_window(t)
     app.extensions["nexus"]["minutes_to_match"] = lambda t: minutes_to_match(t)
 

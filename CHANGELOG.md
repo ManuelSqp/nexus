@@ -4,6 +4,18 @@ The running version is shown next to the logo in the web app, in *Settings*, at 
 every report, and with `nexus --version` (`valcoach --version` up to 4.4). Update: `git pull`, `pip install -e .`,
 `sudo systemctl restart nexus` (or `docker compose up -d --build`). `data/` and `config.toml` aren't touched.
 
+## 4.80.0
+- **Sunday team report on Discord.** A new switch under *Practice › Team practice*: Sundays at 20:00 (or *Post the
+  team report* any time) the week goes to the weekly-focus channel in one post:
+  - **📒 Strats:** the rounds tagged with strats in this week's review evenings and how many you won, your best
+    strat so far (5 rounds or more) and the ones struggling (35 % or less, with how often the utility went in as
+    drawn).
+  - **💰 Economy:** the rounds where the buy didn't fit in the week's matches (Premier reviews and reviewed
+    matches), counted and with their rounds ("2× a lost force that broke the next round (1 lost): Ascent vs RV R4; …").
+  - **🎯 Drills:** sessions per player, the biggest step, goals reached and who didn't drill (the full drill week
+    stays its own post).
+  - **🗓️ Next:** the next match day and time, the week's map and the boards drafted against opponents for it.
+
 ## 4.79.0
 - **Prep against an opponent in the strat book.** On a scouted team's page (Premier › Opponents) each map has
   *Draft a plan in the strat book*. It adds two boards to your strat book for that map:
